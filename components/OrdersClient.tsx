@@ -581,20 +581,20 @@ export default function OrdersClient() {
 
         {/* Top Controls: Date Picker & Filters */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 shadow-2xs">
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-[6px] bg-white border border-slate-200 text-xs font-semibold text-slate-700 shadow-2xs h-[30px]">
             <Calendar size={14} className="text-slate-400" />
             <span>{selectedDate}</span>
             <div className="flex items-center gap-1 ml-2 pl-2 border-l border-slate-200">
-              <button onClick={() => { }} className="text-slate-400 hover:text-slate-700">
+              <button onClick={() => { }} className="text-slate-400 hover:text-slate-700 h-[22px] w-[22px] rounded-[4px] flex items-center justify-center">
                 <ChevronLeft size={14} />
               </button>
-              <button onClick={() => { }} className="text-slate-400 hover:text-slate-700">
+              <button onClick={() => { }} className="text-slate-400 hover:text-slate-700 h-[22px] w-[22px] rounded-[4px] flex items-center justify-center">
                 <ChevronRight size={14} />
               </button>
             </div>
           </div>
 
-          <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer">
+          <button className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer">
             <Filter size={14} />
             <span>Filters</span>
           </button>
@@ -683,7 +683,7 @@ export default function OrdersClient() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setActiveTab('slot')}
-            className={`px-5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'slot'
+            className={`px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold transition-all cursor-pointer ${activeTab === 'slot'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
               }`}
@@ -692,7 +692,7 @@ export default function OrdersClient() {
           </button>
           <button
             onClick={() => setActiveTab('list')}
-            className={`px-5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'list'
+            className={`px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold transition-all cursor-pointer ${activeTab === 'list'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
               }`}
@@ -703,7 +703,7 @@ export default function OrdersClient() {
 
         <button
           onClick={() => handleOpenAddOrderModal('9:00 AM - 12:00 PM')}
-          className="flex items-center justify-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
+          className="flex items-center justify-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-gradient-to-br from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
         >
           <Plus size={16} />
           <span>Add New Order</span>
@@ -724,20 +724,18 @@ export default function OrdersClient() {
                 {/* Slot Column Header */}
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <span className="font-extrabold text-sm text-slate-800">{slotTime}</span>
-                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">
-                    {slotOrders.length} Orders
-                  </span>
-                </div>
-
-                {/* + Add Order Button inside Slot */}
-                <div className="p-3 border-b border-slate-100">
-                  <button
-                    onClick={() => handleOpenAddOrderModal(slotTime)}
-                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50/50 text-xs font-bold transition-all cursor-pointer"
-                  >
-                    <Plus size={15} />
-                    <span>+ Add Order</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">
+                      {slotOrders.length} Orders
+                    </span>
+                    <button
+                      onClick={() => handleOpenAddOrderModal(slotTime)}
+                      className="flex items-center justify-center h-[30px] w-[30px] rounded-[6px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all cursor-pointer shadow-xs"
+                      title={`Add Order for ${slotTime}`}
+                    >
+                      <Plus size={15} />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Order Cards List inside Slot */}
@@ -964,7 +962,7 @@ export default function OrdersClient() {
               <button
                 type="button"
                 onClick={() => setIsAddOrderModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -972,16 +970,16 @@ export default function OrdersClient() {
                 type="button"
                 onClick={handleCreateOrderSubmit}
                 disabled={isSubmitting || !selectedCustomer || orderItems.length === 0}
-                className="flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
                 <span>Create Order</span>
               </button>
               <button
                 onClick={() => setIsAddOrderModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer ml-1"
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-[6px] h-[30px] w-[30px] flex items-center justify-center hover:bg-slate-100 transition-colors cursor-pointer ml-1"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
           </div>
@@ -995,18 +993,23 @@ export default function OrdersClient() {
 
                 {/* 1. Time Slot Selector */}
                 <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-3">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Order Time Slot *
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Order Time Slot *
+                    </label>
+                    <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
+                      Slot Locked
+                    </span>
+                  </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     {SLOT_TIMES.map((slot) => (
                       <button
                         key={slot}
                         type="button"
-                        onClick={() => setOrderSlot(slot)}
-                        className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${orderSlot === slot
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs ring-2 ring-indigo-600/20'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        disabled={true}
+                        className={`px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold border transition-all ${orderSlot === slot
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
                           }`}
                       >
                         {slot}
@@ -1025,7 +1028,7 @@ export default function OrdersClient() {
                     <button
                       type="button"
                       onClick={() => setIsAddCustomerModalOpen(true)}
-                      className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-100"
+                      className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer bg-indigo-50 px-[8px] py-[4px] h-[30px] rounded-[6px] border border-indigo-100"
                     >
                       <UserPlus size={14} />
                       <span>+ Add Customer</span>
@@ -1133,7 +1136,7 @@ export default function OrdersClient() {
                     <button
                       type="button"
                       onClick={handleOpenItemSelector}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                     >
                       <Plus size={15} />
                       <span>+ Add Products</span>
@@ -1317,7 +1320,7 @@ export default function OrdersClient() {
                             key={mode}
                             type="button"
                             onClick={() => setPaymentMode(mode)}
-                            className={`py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${paymentMode === mode
+                            className={`px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold border transition-all cursor-pointer ${paymentMode === mode
                               ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                               : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                               }`}
@@ -1359,7 +1362,7 @@ export default function OrdersClient() {
                       type="button"
                       onClick={handleCreateOrderSubmit}
                       disabled={isSubmitting || !selectedCustomer || orderItems.length === 0}
-                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50"
+                      className="w-full flex items-center justify-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-gradient-to-br from-indigo-600 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50"
                     >
                       {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                       <span>Create Order</span>
@@ -1368,7 +1371,7 @@ export default function OrdersClient() {
                     <button
                       type="button"
                       onClick={() => setIsAddOrderModalOpen(false)}
-                      className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+                      className="w-full px-[8px] py-[4px] h-[30px] rounded-[6px] bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -1447,14 +1450,14 @@ export default function OrdersClient() {
                 <button
                   type="button"
                   onClick={() => setIsAddItemSelectorOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  className="px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold text-slate-600 hover:bg-slate-100"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleConfirmSelectedItems}
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
+                  className="px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
                 >
                   Confirm Selected Items
                 </button>
@@ -1528,14 +1531,14 @@ export default function OrdersClient() {
                 <button
                   type="button"
                   onClick={() => setIsAddCustomerModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  className="px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold text-slate-600 hover:bg-slate-100"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
+                  className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
                 >
                   {isSubmitting && <Loader2 size={14} className="animate-spin" />}
                   <span>Save</span>
@@ -1565,13 +1568,13 @@ export default function OrdersClient() {
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-              <button onClick={() => setDeletingOrder(null)} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50">
+              <button onClick={() => setDeletingOrder(null)} className="px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50">
                 Cancel
               </button>
               <button
                 onClick={handleConfirmDeleteOrder}
                 disabled={isDeleting}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-xs disabled:opacity-50"
+                className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-xs disabled:opacity-50"
               >
                 {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 <span>Delete</span>

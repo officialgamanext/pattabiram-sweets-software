@@ -451,26 +451,26 @@ export default function OrderDetailClient({ orderId }: Props) {
           {/* Manage Payment primary CTA */}
           <button
             onClick={() => setIsPaymentModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+            className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
           >
             <Wallet size={14} />
             Manage Payment
           </button>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-white border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
           >
             <Printer size={14} /> Print
           </button>
           <button
             onClick={() => { setPendingStatus(order.orderStatus); setIsStatusEditOpen(true); }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-white border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
           >
             <Pencil size={14} /> Edit Status
           </button>
           <button
             onClick={() => setIsDeleteOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-red-50 border border-red-200 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
           >
             <Trash2 size={14} /> Delete
           </button>
@@ -624,7 +624,7 @@ export default function OrderDetailClient({ orderId }: Props) {
               </div>
               <button
                 onClick={() => setIsPaymentModalOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                className="flex items-center gap-1.5 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
               >
                 <Plus size={13} /> Add Payment
               </button>
@@ -838,7 +838,7 @@ export default function OrderDetailClient({ orderId }: Props) {
               {/* Manage payment CTA inside card */}
               <button
                 onClick={() => setIsPaymentModalOpen(true)}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
+                className="w-full flex items-center justify-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
               >
                 <Wallet size={13} /> Manage Payment
               </button>
@@ -857,7 +857,7 @@ export default function OrderDetailClient({ orderId }: Props) {
               </div>
               <button
                 onClick={() => { setPendingStatus(order.orderStatus); setIsStatusEditOpen(true); }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50/50 text-xs font-bold transition-all cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50/50 text-xs font-bold transition-all cursor-pointer"
               >
                 <Pencil size={13} /> Update Status
               </button>
@@ -891,7 +891,7 @@ export default function OrderDetailClient({ orderId }: Props) {
                   setEditingPayment(null);
                   setDeletingPaymentId(null);
                 }}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-[6px] h-[30px] w-[30px] flex items-center justify-center hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -945,7 +945,7 @@ export default function OrderDetailClient({ orderId }: Props) {
                     </p>
                     <button
                       onClick={() => setEditingPayment(null)}
-                      className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                      className="text-xs font-semibold text-slate-500 hover:text-slate-700 px-[8px] py-[4px] h-[30px] rounded-[6px]"
                     >
                       Cancel Edit
                     </button>
@@ -1091,7 +1091,7 @@ export default function OrderDetailClient({ orderId }: Props) {
                       type="button"
                       onClick={handleAddPayment}
                       disabled={isSavingPayment || !payAmount || parseFloat(payAmount) <= 0}
-                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                      className="w-full flex items-center justify-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
                     >
                       {isSavingPayment ? <Loader2 size={14} className="animate-spin" /> : <BadgeCheck size={15} />}
                       Confirm Payment
@@ -1208,13 +1208,13 @@ export default function OrderDetailClient({ orderId }: Props) {
               buttonClassName="w-full"
             />
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
-              <button onClick={() => setIsStatusEditOpen(false)} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer">
+              <button onClick={() => setIsStatusEditOpen(false)} className="px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer">
                 Cancel
               </button>
               <button
                 onClick={handleStatusUpdate}
                 disabled={isUpdatingStatus}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
               >
                 {isUpdatingStatus ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
                 Save Status
@@ -1240,13 +1240,13 @@ export default function OrderDetailClient({ orderId }: Props) {
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-              <button onClick={() => setIsDeleteOpen(false)} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
+              <button onClick={() => setIsDeleteOpen(false)} className="px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
                 Cancel
               </button>
               <button
                 onClick={handleDeleteOrder}
                 disabled={isDeleting}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-xs disabled:opacity-50 cursor-pointer transition-colors"
+                className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-xs disabled:opacity-50 cursor-pointer transition-colors"
               >
                 {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 Delete Order

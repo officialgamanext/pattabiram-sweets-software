@@ -14,6 +14,7 @@ import {
   Factory,
   ArrowRight,
 } from 'lucide-react';
+import CustomSelect from '@/components/CustomSelect';
 
 // ─── Sales Overview Chart Component ─────────────────────────────────────────
 function SalesOverviewChart() {
@@ -267,15 +268,16 @@ export default function DashboardClient() {
         <div className="col-span-1 md:col-span-2 lg:col-span-5 bg-white rounded-xl sm:rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm sm:text-base font-bold text-slate-900">Sales Overview</h2>
-            <select
+            <CustomSelect
+              options={[
+                { value: 'Monthly', label: 'Monthly' },
+                { value: 'Weekly', label: 'Weekly' },
+                { value: 'Yearly', label: 'Yearly' },
+              ]}
               value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1 font-medium text-slate-600 bg-white focus:outline-none focus:border-indigo-500 cursor-pointer"
-            >
-              <option>Monthly</option>
-              <option>Weekly</option>
-              <option>Yearly</option>
-            </select>
+              onChange={setPeriod}
+              size="sm"
+            />
           </div>
 
           <div className="flex items-center gap-4 mb-4 text-xs font-medium">

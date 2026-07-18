@@ -1,23 +1,35 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Plus,
   Search,
-  Filter,
   Download,
   Eye,
   Pencil,
   Trash2,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   X,
   Store as StoreIcon,
+  Loader2,
+  Filter,
 } from 'lucide-react';
+import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
+import { db } from '@/lib/firebase';
+import {
+  collection,
+  onSnapshot,
+  addDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp,
+  query,
+  orderBy,
+} from 'firebase/firestore';
 
-interface StoreItem {
+export interface StoreItem {
   id: string;
   code: string;
   name: string;
@@ -28,11 +40,11 @@ interface StoreItem {
   state: string;
   pincode: string;
   status: 'Active' | 'Inactive';
+  createdAt?: any;
 }
 
-const initialStores: StoreItem[] = [
+const initialDefaultStores: Omit<StoreItem, 'id'>[] = [
   {
-    id: '1',
     code: 'STR-001',
     name: 'Main Store',
     type: 'Retail Store',
@@ -44,7 +56,6 @@ const initialStores: StoreItem[] = [
     status: 'Active',
   },
   {
-    id: '2',
     code: 'STR-002',
     name: 'City Center Store',
     type: 'Retail Store',
@@ -56,7 +67,6 @@ const initialStores: StoreItem[] = [
     status: 'Active',
   },
   {
-    id: '3',
     code: 'STR-003',
     name: 'West Zone Store',
     type: 'Wholesale Store',
@@ -68,7 +78,6 @@ const initialStores: StoreItem[] = [
     status: 'Active',
   },
   {
-    id: '4',
     code: 'STR-004',
     name: 'South Zone Store',
     type: 'Wholesale Store',
@@ -80,7 +89,6 @@ const initialStores: StoreItem[] = [
     status: 'Inactive',
   },
   {
-    id: '5',
     code: 'STR-005',
     name: 'North Zone Store',
     type: 'Retail Store',
@@ -92,7 +100,6 @@ const initialStores: StoreItem[] = [
     status: 'Active',
   },
   {
-    id: '6',
     code: 'STR-006',
     name: 'East Zone Store',
     type: 'Retail Store',
@@ -106,10 +113,12 @@ const initialStores: StoreItem[] = [
 ];
 
 export default function StoreClient() {
-  const [stores, setStores] = useState<StoreItem[]>(initialStores);
+  const [stores, setStores] = useState<StoreItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Inactive'>('All');
-  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [itemsPerPage, setItemsPerPage] = useState('10');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [viewStore, setViewStore] = useState<StoreItem | null>(null);
 
@@ -125,6 +134,41 @@ export default function StoreClient() {
     status: 'Active' as 'Active' | 'Inactive',
   });
 
+  // Real-time Firebase Firestore synchronization
+  useEffect(() => {
+    const storesCollectionRef = collection(db, 'stores');
+    const q = query(storesCollectionRef, orderBy('code', 'asc'));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const fetchedStores: StoreItem[] = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<StoreItem, 'id'>),
+        }));
+
+        // Seed initial stores if collection is empty
+        if (fetchedStores.length === 0 && snapshot.metadata.fromCache === false) {
+          initialDefaultStores.forEach(async (defaultStore) => {
+            await addDoc(storesCollectionRef, {
+              ...defaultStore,
+              createdAt: serverTimestamp(),
+            });
+          });
+        }
+
+        setStores(fetchedStores);
+        setIsLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching stores from Firestore:', error);
+        setIsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
   // Filtered stores
   const filteredStores = stores.filter((store) => {
     const matchesSearch =
@@ -139,36 +183,75 @@ export default function StoreClient() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleAddStore = (e: React.FormEvent) => {
+  // Handle Add Store to Firebase
+  const handleAddStore = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStore.name) return;
 
-    const newCode = `STR-00${stores.length + 1}`;
-    const item: StoreItem = {
-      id: Date.now().toString(),
-      code: newCode,
-      ...newStore,
-    };
+    try {
+      setIsSubmitting(true);
+      const nextNumber = stores.length + 1;
+      const nextCode = `STR-${String(nextNumber).padStart(3, '0')}`;
 
-    setStores([item, ...stores]);
-    setIsAddModalOpen(false);
-    setNewStore({
-      name: '',
-      type: 'Retail Store',
-      phone: '',
-      email: '',
-      city: '',
-      state: 'Tamil Nadu',
-      pincode: '',
-      status: 'Active',
-    });
-  };
+      await addDoc(collection(db, 'stores'), {
+        code: nextCode,
+        ...newStore,
+        createdAt: serverTimestamp(),
+      });
 
-  const handleDeleteStore = (id: string) => {
-    if (confirm('Are you sure you want to delete this store?')) {
-      setStores(stores.filter((s) => s.id !== id));
+      setIsAddModalOpen(false);
+      setNewStore({
+        name: '',
+        type: 'Retail Store',
+        phone: '',
+        email: '',
+        city: '',
+        state: 'Tamil Nadu',
+        pincode: '',
+        status: 'Active',
+      });
+    } catch (err) {
+      console.error('Failed to add store to Firestore:', err);
+      alert('Failed to add store. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
+  // Handle Delete Store from Firebase
+  const handleDeleteStore = async (id: string, name: string) => {
+    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+      try {
+        await deleteDoc(doc(db, 'stores', id));
+      } catch (err) {
+        console.error('Failed to delete store:', err);
+        alert('Failed to delete store.');
+      }
+    }
+  };
+
+  // Custom Dropdown options
+  const statusFilterOptions: CustomSelectOption[] = [
+    { value: 'All', label: 'All Statuses' },
+    { value: 'Active', label: 'Active Only', badge: 'Active' },
+    { value: 'Inactive', label: 'Inactive Only', badge: 'Inactive' },
+  ];
+
+  const storeTypeOptions: CustomSelectOption[] = [
+    { value: 'Retail Store', label: 'Retail Store' },
+    { value: 'Wholesale Store', label: 'Wholesale Store' },
+  ];
+
+  const storeStatusModalOptions: CustomSelectOption[] = [
+    { value: 'Active', label: 'Active' },
+    { value: 'Inactive', label: 'Inactive' },
+  ];
+
+  const paginationPageOptions: CustomSelectOption[] = [
+    { value: '10', label: '10 / page' },
+    { value: '25', label: '25 / page' },
+    { value: '50', label: '50 / page' },
+  ];
 
   return (
     <div className="w-full flex flex-col gap-6">
@@ -186,7 +269,7 @@ export default function StoreClient() {
 
         <button
           onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition-all hover:shadow cursor-pointer w-full sm:w-auto"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white text-sm font-semibold shadow-sm transition-all hover:shadow cursor-pointer w-full sm:w-auto"
         >
           <Plus size={16} />
           <span>Add Store</span>
@@ -204,59 +287,45 @@ export default function StoreClient() {
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
 
         {/* Top Controls: Search, Filter, Export */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-3">
-          {/* Search Input */}
-          <div className="relative w-full sm:w-72">
-            <input
-              type="text"
-              placeholder="Search stores..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-3.5 pr-9 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50"
-            />
-            <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="text-xs text-slate-500 font-medium">
+            {isLoading ? (
+              <span className="flex items-center gap-2 text-indigo-600">
+                <Loader2 size={14} className="animate-spin" />
+                Connecting to Firebase...
+              </span>
+            ) : (
+              <span>Total Stores: <strong className="text-slate-800">{stores.length}</strong></span>
+            )}
           </div>
 
-          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
-            {/* Filter Dropdown Toggle */}
-            <div className="relative">
-              <button
-                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                <Filter size={14} />
-                <span>Filters</span>
-                {statusFilter !== 'All' && (
-                  <span className="w-2 h-2 rounded-full bg-indigo-600" />
-                )}
-              </button>
-
-              {showFilterDropdown && (
-                <div className="absolute right-0 mt-2 w-44 bg-white border border-slate-200 rounded-xl shadow-lg z-20 py-1.5">
-                  <p className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Filter by Status</p>
-                  {(['All', 'Active', 'Inactive'] as const).map((status) => (
-                    <button
-                      key={status}
-                      onClick={() => {
-                        setStatusFilter(status);
-                        setShowFilterDropdown(false);
-                      }}
-                      className={`w-full text-left px-3 py-1.5 text-xs font-medium flex items-center justify-between hover:bg-slate-50 ${
-                        statusFilter === status ? 'text-indigo-600 font-semibold bg-indigo-50/50' : 'text-slate-600'
-                      }`}
-                    >
-                      {status}
-                      {statusFilter === status && <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
-                    </button>
-                  ))}
-                </div>
-              )}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+            {/* Search Input */}
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                placeholder="Search stores..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-3.5 pr-9 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50"
+              />
+              <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
+
+            {/* Custom Status Filter Dropdown */}
+            <CustomSelect
+              options={statusFilterOptions}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              icon={<Filter size={14} />}
+              size="md"
+              className="w-full sm:w-auto"
+            />
 
             {/* Export Button */}
             <button
               onClick={() => alert('Exporting store data...')}
-              className="p-2 text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+              className="p-2.5 text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
               title="Export CSV"
             >
               <Download size={16} />
@@ -282,7 +351,16 @@ export default function StoreClient() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-              {filteredStores.length === 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 size={18} className="animate-spin text-indigo-600" />
+                      <span>Loading stores from Firebase...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredStores.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-12 text-center text-slate-400">
                     No stores found matching your criteria.
@@ -327,7 +405,7 @@ export default function StoreClient() {
                           <Pencil size={15} />
                         </button>
                         <button
-                          onClick={() => handleDeleteStore(store.id)}
+                          onClick={() => handleDeleteStore(store.id, store.name)}
                           className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                           title="Delete Store"
                         >
@@ -345,7 +423,7 @@ export default function StoreClient() {
         {/* Pagination Footer */}
         <div className="p-4 sm:p-5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <p>
-            Showing 1 to {filteredStores.length} of {filteredStores.length} stores
+            Showing 1 to {filteredStores.length} of {stores.length} stores
           </p>
 
           <div className="flex items-center gap-3">
@@ -371,10 +449,13 @@ export default function StoreClient() {
               </button>
             </div>
 
-            <div className="flex items-center gap-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 bg-white cursor-pointer">
-              <span>10 / page</span>
-              <ChevronDown size={12} className="text-slate-400" />
-            </div>
+            {/* Custom Select for items per page */}
+            <CustomSelect
+              options={paginationPageOptions}
+              value={itemsPerPage}
+              onChange={setItemsPerPage}
+              size="sm"
+            />
           </div>
         </div>
 
@@ -383,7 +464,7 @@ export default function StoreClient() {
       {/* ── Add Store Modal ────────────────────────────────────────── */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
@@ -415,25 +496,23 @@ export default function StoreClient() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Store Type</label>
-                  <select
+                  <CustomSelect
+                    options={storeTypeOptions}
                     value={newStore.type}
-                    onChange={(e) => setNewStore({ ...newStore, type: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-white"
-                  >
-                    <option>Retail Store</option>
-                    <option>Wholesale Store</option>
-                  </select>
+                    onChange={(val) => setNewStore({ ...newStore, type: val })}
+                    className="w-full"
+                    buttonClassName="w-full"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
-                  <select
+                  <CustomSelect
+                    options={storeStatusModalOptions}
                     value={newStore.status}
-                    onChange={(e) => setNewStore({ ...newStore, status: e.target.value as 'Active' | 'Inactive' })}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-white"
-                  >
-                    <option>Active</option>
-                    <option>Inactive</option>
-                  </select>
+                    onChange={(val) => setNewStore({ ...newStore, status: val as 'Active' | 'Inactive' })}
+                    className="w-full"
+                    buttonClassName="w-full"
+                  />
                 </div>
               </div>
 
@@ -503,9 +582,11 @@ export default function StoreClient() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer"
+                  disabled={isSubmitting}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  Save Store
+                  {isSubmitting && <Loader2 size={14} className="animate-spin" />}
+                  <span>Save to Firebase</span>
                 </button>
               </div>
             </form>

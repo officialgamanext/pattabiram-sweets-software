@@ -33,6 +33,7 @@ const navItems = [
   { label: 'Manufacturing Unit', href: '/manufacturing', icon: <Factory size={20} /> },
   { label: 'Packing Unit', href: '/packing', icon: <Package size={20} /> },
   { label: "Wholesaler's", href: '/wholesalers', icon: <Users size={20} /> },
+  { label: 'Customers', href: '/customers', icon: <UserCheck size={20} /> },
   { label: 'Price List', href: '/price-list', icon: <ClipboardList size={20} /> },
   { label: 'Items', href: '/items', icon: <Tag size={20} /> },
   { label: 'Inventory', href: '/inventory', icon: <Boxes size={20} /> },

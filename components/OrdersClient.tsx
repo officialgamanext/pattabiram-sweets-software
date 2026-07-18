@@ -145,6 +145,41 @@ const ALL_ORDER_STATUSES: OrderStatus[] = [
   'Pending',
 ];
 
+export function getOrderStatusBadgeStyle(status: string) {
+  switch (status) {
+    case 'Order Created':
+      return { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' };
+    case 'Moved to Manufacturing':
+      return { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200' };
+    case 'Manufacturing Started':
+      return { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200' };
+    case 'Manufacturing Completed':
+      return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' };
+    case 'Moved to Packing':
+      return { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-200' };
+    case 'Packing Started':
+      return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' };
+    case 'Packing Completed':
+      return { bg: 'bg-fuchsia-50', text: 'text-fuchsia-700', border: 'border-fuchsia-200' };
+    case 'Moved to Store':
+      return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' };
+    case 'Received at Store':
+      return { bg: 'bg-yellow-50', text: 'text-yellow-800', border: 'border-yellow-200' };
+    case 'Awaiting for Delivery':
+      return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' };
+    case 'Delivered':
+      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' };
+    case 'Confirmed':
+      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' };
+    case 'Processing':
+      return { bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-sky-200' };
+    case 'Pending':
+      return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' };
+    default:
+      return { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' };
+  }
+}
+
 export default function OrdersClient() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'slot' | 'list'>('slot');
@@ -425,6 +460,12 @@ export default function OrdersClient() {
       return;
     }
 
+    const recv = parseFloat(receivedAmount) || 0;
+    if (recv > grandTotal) {
+      alert(`Received amount (₹${recv}) cannot exceed the order total of ₹${grandTotal.toFixed(2)}.`);
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       const now = new Date();
@@ -560,6 +601,83 @@ export default function OrdersClient() {
         </div>
       </div>
 
+      {/* ── 2. TOP METRICS & SUMMARY CARDS BAR ───────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
+        {/* Total Orders Card */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
+            <ShoppingBag size={20} />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-400 font-semibold">Total Orders</p>
+            <h3 className="text-lg font-extrabold text-slate-900">{totalOrdersCount}</h3>
+            <p className="text-[10px] text-emerald-600 font-bold">+12.5% vs yesterday</p>
+          </div>
+        </div>
+
+        {/* Total Amount Card */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center flex-shrink-0">
+            <IndianRupee size={20} />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-400 font-semibold">Total Amount</p>
+            <h3 className="text-sm font-extrabold text-slate-900">
+              ₹ {totalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </h3>
+            <p className="text-[10px] text-emerald-600 font-bold">+18.3% vs yesterday</p>
+          </div>
+        </div>
+
+        {/* Confirmed Orders */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+            <CheckCircle2 size={20} />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-400 font-semibold">Confirmed Orders</p>
+            <h3 className="text-lg font-extrabold text-slate-900">{confirmedCount}</h3>
+            <p className="text-[10px] text-slate-400">38.5% of total</p>
+          </div>
+        </div>
+
+        {/* Pending Orders */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
+            <Clock size={20} />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-400 font-semibold">Pending Orders</p>
+            <h3 className="text-lg font-extrabold text-slate-900">{pendingCount}</h3>
+            <p className="text-[10px] text-slate-400">26.9% of total</p>
+          </div>
+        </div>
+
+        {/* Processing Orders */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+            <PackageCheck size={20} />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-400 font-semibold">Processing Orders</p>
+            <h3 className="text-lg font-extrabold text-slate-900">{processingCount}</h3>
+            <p className="text-[10px] text-slate-400">23.1% of total</p>
+          </div>
+        </div>
+
+        {/* Delivered Orders */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
+            <Truck size={20} />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-400 font-semibold">Delivered Orders</p>
+            <h3 className="text-lg font-extrabold text-slate-900">{deliveredCount}</h3>
+            <p className="text-[10px] text-slate-400">11.5% of total</p>
+          </div>
+        </div>
+      </div>
+
       {/* ── 2. Navigation Sub-Tabs (Orders by Slot vs Orders List) ── */}
       <div className="flex items-center justify-between border-b border-slate-200 pb-2">
         <div className="flex items-center gap-2">
@@ -642,22 +760,33 @@ export default function OrdersClient() {
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold text-slate-900 truncate max-w-[160px]">
+                        <div className="flex items-center justify-between gap-1">
+                          <h4 className="text-xs font-bold text-slate-900 truncate max-w-[110px]" title={order.customerName}>
                             {order.customerName}
                           </h4>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${order.orderStatus === 'Delivered'
-                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                              : order.orderStatus === 'Confirmed'
-                                ? 'bg-indigo-50 text-indigo-600 border border-indigo-100'
-                                : order.orderStatus === 'Processing'
-                                  ? 'bg-sky-50 text-sky-600 border border-sky-100'
-                                  : 'bg-amber-50 text-amber-600 border border-amber-100'
+                          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                            <span
+                              className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                                order.paymentStatus === 'Completed'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : order.paymentStatus === 'Partial'
+                                    ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200'
                               }`}
-                          >
-                            {order.orderStatus}
-                          </span>
+                            >
+                              {order.paymentStatus}
+                            </span>
+                            {(() => {
+                              const osStyle = getOrderStatusBadgeStyle(order.orderStatus);
+                              return (
+                                <span
+                                  className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${osStyle.bg} ${osStyle.text} ${osStyle.border}`}
+                                >
+                                  {order.orderStatus}
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
 
                         <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-50">
@@ -765,12 +894,26 @@ export default function OrdersClient() {
                       <td className="py-3.5 px-4 text-slate-600 font-bold">{order.totalItems || order.items?.length} Items</td>
                       <td className="py-3.5 px-4 font-extrabold text-slate-900">₹ {order.totalAmount}</td>
                       <td className="py-3.5 px-4">
-                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${order.paymentStatus === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
-                          }`}>
+                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                          order.paymentStatus === 'Completed'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : order.paymentStatus === 'Partial'
+                              ? 'bg-sky-50 text-sky-700 border-sky-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
                           {order.paymentStatus}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 font-semibold text-slate-800">{order.orderStatus}</td>
+                      <td className="py-3.5 px-4">
+                        {(() => {
+                          const osStyle = getOrderStatusBadgeStyle(order.orderStatus);
+                          return (
+                            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${osStyle.bg} ${osStyle.text} ${osStyle.border}`}>
+                              {order.orderStatus}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button
@@ -795,83 +938,6 @@ export default function OrdersClient() {
           </div>
         </div>
       )}
-
-      {/* ── 5. BOTTOM METRICS & SUMMARY CARDS BAR (As shown in image) ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
-        {/* Total Orders Card */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
-            <ShoppingBag size={20} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-semibold">Total Orders</p>
-            <h3 className="text-lg font-extrabold text-slate-900">{totalOrdersCount}</h3>
-            <p className="text-[10px] text-emerald-600 font-bold">+12.5% vs yesterday</p>
-          </div>
-        </div>
-
-        {/* Total Amount Card */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center flex-shrink-0">
-            <IndianRupee size={20} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-semibold">Total Amount</p>
-            <h3 className="text-sm font-extrabold text-slate-900">
-              ₹ {totalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-            </h3>
-            <p className="text-[10px] text-emerald-600 font-bold">+18.3% vs yesterday</p>
-          </div>
-        </div>
-
-        {/* Confirmed Orders */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
-            <CheckCircle2 size={20} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-semibold">Confirmed Orders</p>
-            <h3 className="text-lg font-extrabold text-slate-900">{confirmedCount}</h3>
-            <p className="text-[10px] text-slate-400">38.5% of total</p>
-          </div>
-        </div>
-
-        {/* Pending Orders */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
-            <Clock size={20} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-semibold">Pending Orders</p>
-            <h3 className="text-lg font-extrabold text-slate-900">{pendingCount}</h3>
-            <p className="text-[10px] text-slate-400">26.9% of total</p>
-          </div>
-        </div>
-
-        {/* Processing Orders */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-            <PackageCheck size={20} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-semibold">Processing Orders</p>
-            <h3 className="text-lg font-extrabold text-slate-900">{processingCount}</h3>
-            <p className="text-[10px] text-slate-400">23.1% of total</p>
-          </div>
-        </div>
-
-        {/* Delivered Orders */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
-            <Truck size={20} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-semibold">Delivered Orders</p>
-            <h3 className="text-lg font-extrabold text-slate-900">{deliveredCount}</h3>
-            <p className="text-[10px] text-slate-400">11.5% of total</p>
-          </div>
-        </div>
-      </div>
 
       {/* ── 6. FULL SCREEN MODAL: CREATE ORDER (Clean POS Page Workspace) */}
       {isAddOrderModalOpen && (
@@ -1214,14 +1280,32 @@ export default function OrdersClient() {
                   {/* Payment Details */}
                   <div className="space-y-3.5 pt-1">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Received Amount (₹)</label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs font-bold text-slate-700">Received Amount (₹)</label>
+                        {parseFloat(receivedAmount) > grandTotal && (
+                          <span className="text-[10px] font-bold text-red-600">Exceeds total!</span>
+                        )}
+                      </div>
                       <input
                         type="number"
                         step="0.01"
+                        max={grandTotal}
                         placeholder="0.00"
                         value={receivedAmount}
-                        onChange={(e) => setReceivedAmount(e.target.value)}
-                        className="w-full px-3.5 py-2.5 text-sm font-bold text-indigo-600 border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const num = parseFloat(val) || 0;
+                          if (num > grandTotal && grandTotal > 0) {
+                            setReceivedAmount(String(grandTotal));
+                          } else {
+                            setReceivedAmount(val);
+                          }
+                        }}
+                        className={`w-full px-3.5 py-2.5 text-sm font-bold border rounded-xl focus:outline-none bg-slate-50/50 ${
+                          parseFloat(receivedAmount) > grandTotal
+                            ? 'text-red-600 border-red-300 focus:border-red-500'
+                            : 'text-indigo-600 border-slate-200 focus:border-indigo-500'
+                        }`}
                       />
                     </div>
 

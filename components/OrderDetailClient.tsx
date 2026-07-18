@@ -30,6 +30,8 @@ import {
   IndianRupee,
   History,
   BadgeCheck,
+  Banknote,
+  Smartphone,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import {
@@ -43,15 +45,14 @@ import type { OrderRecord, OrderStatus, PaymentStatus } from './OrdersClient';
 import CustomSelect from '@/components/CustomSelect';
 
 // ── Types ────────────────────────────────────────────────────────
-interface PaymentEntry {
+export interface PaymentEntry {
   id: string;
   amount: number;
   mode: 'Cash' | 'Card' | 'UPI';
   note: string;
-  paidAt: string; // ISO date string
+  paidAt: string; // ISO date string or formatted date
 }
 
-// Extend OrderRecord locally to carry payments array
 interface OrderWithPayments extends OrderRecord {
   payments?: PaymentEntry[];
 }
@@ -90,24 +91,76 @@ const STATUS_TIMELINE: { status: OrderStatus; icon: React.ReactNode }[] = [
 
 // ── Helpers ──────────────────────────────────────────────────────
 function getStatusColor(status: string) {
-  if (status === 'Delivered')   return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' };
-  if (status === 'Confirmed')   return { bg: 'bg-indigo-50',  text: 'text-indigo-700',  border: 'border-indigo-200',  dot: 'bg-indigo-500' };
-  if (status === 'Processing' || status.includes('Started'))
-                                return { bg: 'bg-sky-50',     text: 'text-sky-700',     border: 'border-sky-200',     dot: 'bg-sky-500' };
-  if (status === 'Awaiting for Delivery')
-                                return { bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200',  dot: 'bg-orange-500' };
-  if (status.includes('Packing'))
-                                return { bg: 'bg-violet-50',  text: 'text-violet-700',  border: 'border-violet-200',  dot: 'bg-violet-500' };
-  if (status.includes('Manufacturing'))
-                                return { bg: 'bg-teal-50',    text: 'text-teal-700',    border: 'border-teal-200',    dot: 'bg-teal-500' };
-  if (status.includes('Store')) return { bg: 'bg-amber-50',  text: 'text-amber-700',   border: 'border-amber-200',   dot: 'bg-amber-500' };
-  return                               { bg: 'bg-slate-50',  text: 'text-slate-700',   border: 'border-slate-200',   dot: 'bg-slate-400' };
+  switch (status) {
+    case 'Order Created':
+      return { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', dot: 'bg-indigo-500' };
+    case 'Moved to Manufacturing':
+      return { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200', dot: 'bg-cyan-500' };
+    case 'Manufacturing Started':
+      return { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', dot: 'bg-teal-500' };
+    case 'Manufacturing Completed':
+      return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' };
+    case 'Moved to Packing':
+      return { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-200', dot: 'bg-violet-500' };
+    case 'Packing Started':
+      return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', dot: 'bg-purple-500' };
+    case 'Packing Completed':
+      return { bg: 'bg-fuchsia-50', text: 'text-fuchsia-700', border: 'border-fuchsia-200', dot: 'bg-fuchsia-500' };
+    case 'Moved to Store':
+      return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500' };
+    case 'Received at Store':
+      return { bg: 'bg-yellow-50', text: 'text-yellow-800', border: 'border-yellow-200', dot: 'bg-yellow-500' };
+    case 'Awaiting for Delivery':
+      return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', dot: 'bg-orange-500' };
+    case 'Delivered':
+      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', dot: 'bg-green-600' };
+    case 'Confirmed':
+      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500' };
+    case 'Processing':
+      return { bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-sky-200', dot: 'bg-sky-500' };
+    case 'Pending':
+      return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', dot: 'bg-rose-500' };
+    default:
+      return { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200', dot: 'bg-slate-400' };
+  }
 }
 
-function getPaymentColor(ps: string) {
-  if (ps === 'Completed') return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' };
-  if (ps === 'Partial')   return { bg: 'bg-sky-50',     text: 'text-sky-700',     border: 'border-sky-200' };
-  return                         { bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200' };
+function getPaymentStatusBadge(ps: PaymentStatus) {
+  if (ps === 'Completed') {
+    return {
+      bg: 'bg-emerald-50',
+      text: 'text-emerald-700',
+      border: 'border-emerald-200',
+      dot: 'bg-emerald-500',
+      icon: <CheckCircle2 size={12} className="text-emerald-600" />,
+      label: 'Completed',
+    };
+  }
+  if (ps === 'Partial') {
+    return {
+      bg: 'bg-sky-50',
+      text: 'text-sky-700',
+      border: 'border-sky-200',
+      dot: 'bg-sky-500',
+      icon: <Clock size={12} className="text-sky-600" />,
+      label: 'Partial Payment',
+    };
+  }
+  return {
+    bg: 'bg-amber-50',
+    text: 'text-amber-700',
+    border: 'border-amber-200',
+    dot: 'bg-amber-500',
+    icon: <AlertTriangle size={12} className="text-amber-600" />,
+    label: 'Pending',
+  };
+}
+
+function getModeIcon(mode: string) {
+  if (mode === 'Cash') return <Banknote size={15} className="text-emerald-600" />;
+  if (mode === 'Card') return <CreditCard size={15} className="text-indigo-600" />;
+  if (mode === 'UPI') return <Smartphone size={15} className="text-purple-600" />;
+  return <IndianRupee size={15} className="text-slate-600" />;
 }
 
 function computePaymentStatus(received: number, total: number): PaymentStatus {
@@ -117,7 +170,7 @@ function computePaymentStatus(received: number, total: number): PaymentStatus {
 }
 
 function fmtCurrency(n: number) {
-  return '₹ ' + n.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+  return '₹ ' + (n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 }
 
 function fmtDate(iso: string) {
@@ -129,7 +182,28 @@ function fmtDate(iso: string) {
   } catch { return iso; }
 }
 
-const MODE_ICONS: Record<string, string> = { Cash: '💵', Card: '💳', UPI: '📲' };
+/**
+ * Returns effective payment list.
+ * If order.payments is set, use it.
+ * If order.payments is not set but receivedAmount > 0, synthesize the initial payment entry.
+ */
+function getEffectivePayments(order: OrderWithPayments): PaymentEntry[] {
+  if (order.payments && Array.isArray(order.payments) && order.payments.length > 0) {
+    return order.payments;
+  }
+  if ((order.receivedAmount || 0) > 0) {
+    return [
+      {
+        id: 'initial-payment',
+        amount: order.receivedAmount,
+        mode: order.paymentMode || 'UPI',
+        note: 'Initial payment at order creation',
+        paidAt: order.orderTime || new Date().toISOString(),
+      },
+    ];
+  }
+  return [];
+}
 
 // ── Component ─────────────────────────────────────────────────────
 interface Props { orderId: string }
@@ -145,16 +219,25 @@ export default function OrderDetailClient({ orderId }: Props) {
   const [pendingStatus, setPendingStatus] = useState<OrderStatus>('Order Created');
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  // ── Delete modal
+  // ── Delete order modal
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // ── Manage Payment modal
+  // ── Manage Payment modal & forms
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [payAmount, setPayAmount] = useState('');
   const [payMode, setPayMode] = useState<'Cash' | 'Card' | 'UPI'>('Cash');
   const [payNote, setPayNote] = useState('');
   const [isSavingPayment, setIsSavingPayment] = useState(false);
+
+  // ── Edit Payment Entry state
+  const [editingPayment, setEditingPayment] = useState<PaymentEntry | null>(null);
+  const [editPayAmount, setEditPayAmount] = useState('');
+  const [editPayMode, setEditPayMode] = useState<'Cash' | 'Card' | 'UPI'>('Cash');
+  const [editPayNote, setEditPayNote] = useState('');
+
+  // ── Delete Payment Confirm state
+  const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
 
   // ── Firebase listener
   useEffect(() => {
@@ -170,7 +253,7 @@ export default function OrderDetailClient({ orderId }: Props) {
     return () => unsub();
   }, [orderId]);
 
-  // ── Handlers ─────────────────────────────────────────────────
+  // ── Order Status Update ──────────────────────────────────────────
   const handleStatusUpdate = async () => {
     if (!order) return;
     try {
@@ -184,7 +267,8 @@ export default function OrderDetailClient({ orderId }: Props) {
     finally { setIsUpdatingStatus(false); }
   };
 
-  const handleDelete = async () => {
+  // ── Order Delete ────────────────────────────────────────────────
+  const handleDeleteOrder = async () => {
     if (!order) return;
     try {
       setIsDeleting(true);
@@ -193,14 +277,34 @@ export default function OrderDetailClient({ orderId }: Props) {
     } catch (e) { console.error(e); setIsDeleting(false); }
   };
 
+  // ── Helper to save payments array and update total & status ─────
+  const savePaymentsToFirebase = async (updatedList: PaymentEntry[]) => {
+    if (!order) return;
+    const totalReceived = updatedList.reduce((s, p) => s + p.amount, 0);
+    const newPaymentStatus = computePaymentStatus(totalReceived, order.totalAmount || 0);
+
+    await updateDoc(doc(db, 'orders', order.id), {
+      payments: updatedList,
+      receivedAmount: totalReceived,
+      paymentStatus: newPaymentStatus,
+      updatedAt: serverTimestamp(),
+    });
+  };
+
+  // ── Add New Payment ─────────────────────────────────────────────
   const handleAddPayment = async () => {
     if (!order) return;
     const amount = parseFloat(payAmount);
     if (!amount || amount <= 0) return;
 
+    const remainingBalance = (order.totalAmount || 0) - displayReceived;
+    if (amount > remainingBalance + 0.001) {
+      alert(`Payment amount (₹${amount.toFixed(2)}) cannot exceed the remaining balance due of ₹${Math.max(0, remainingBalance).toFixed(2)}.`);
+      return;
+    }
+
     try {
       setIsSavingPayment(true);
-
       const newEntry: PaymentEntry = {
         id: `pay-${Date.now()}`,
         amount,
@@ -209,25 +313,75 @@ export default function OrderDetailClient({ orderId }: Props) {
         paidAt: new Date().toISOString(),
       };
 
-      const existing = order.payments || [];
-      const updatedPayments = [...existing, newEntry];
-      const totalReceived = updatedPayments.reduce((s, p) => s + p.amount, 0);
-      const newPaymentStatus = computePaymentStatus(totalReceived, order.totalAmount || 0);
+      const currentList = getEffectivePayments(order);
+      const updatedList = [...currentList, newEntry];
 
-      await updateDoc(doc(db, 'orders', order.id), {
-        payments: updatedPayments,
-        receivedAmount: totalReceived,
-        paymentStatus: newPaymentStatus,
-        updatedAt: serverTimestamp(),
-      });
+      await savePaymentsToFirebase(updatedList);
 
-      // Reset form
       setPayAmount('');
       setPayNote('');
       setPayMode('Cash');
-      setIsPaymentModalOpen(false);
     } catch (e) {
-      console.error('Failed to save payment:', e);
+      console.error('Failed to add payment:', e);
+    } finally {
+      setIsSavingPayment(false);
+    }
+  };
+
+  // ── Start Edit Payment ──────────────────────────────────────────
+  const startEditPayment = (pay: PaymentEntry) => {
+    setEditingPayment(pay);
+    setEditPayAmount(String(pay.amount));
+    setEditPayMode(pay.mode);
+    setEditPayNote(pay.note || '');
+  };
+
+  // ── Save Edited Payment ─────────────────────────────────────────
+  const handleSaveEditedPayment = async () => {
+    if (!order || !editingPayment) return;
+    const amount = parseFloat(editPayAmount);
+    if (!amount || amount <= 0) return;
+
+    const currentList = getEffectivePayments(order);
+    const otherPaymentsTotal = currentList
+      .filter((p) => p.id !== editingPayment.id)
+      .reduce((s, p) => s + p.amount, 0);
+
+    const maxAllowed = (order.totalAmount || 0) - otherPaymentsTotal;
+    if (amount > maxAllowed + 0.001) {
+      alert(`Payment amount (₹${amount.toFixed(2)}) cannot exceed the maximum allowed balance of ₹${Math.max(0, maxAllowed).toFixed(2)}.`);
+      return;
+    }
+
+    try {
+      setIsSavingPayment(true);
+      const updatedList = currentList.map((p) =>
+        p.id === editingPayment.id
+          ? { ...p, amount, mode: editPayMode, note: editPayNote.trim() }
+          : p
+      );
+
+      await savePaymentsToFirebase(updatedList);
+      setEditingPayment(null);
+    } catch (e) {
+      console.error('Failed to edit payment:', e);
+    } finally {
+      setIsSavingPayment(false);
+    }
+  };
+
+  // ── Delete Payment ──────────────────────────────────────────────
+  const handleDeletePayment = async (payId: string) => {
+    if (!order) return;
+    try {
+      setIsSavingPayment(true);
+      const currentList = getEffectivePayments(order);
+      const updatedList = currentList.filter((p) => p.id !== payId);
+
+      await savePaymentsToFirebase(updatedList);
+      setDeletingPaymentId(null);
+    } catch (e) {
+      console.error('Failed to delete payment:', e);
     } finally {
       setIsSavingPayment(false);
     }
@@ -268,12 +422,10 @@ export default function OrderDetailClient({ orderId }: Props) {
 
   // ── Derived values ───────────────────────────────────────────
   const sc             = getStatusColor(order.orderStatus);
-  const pc             = getPaymentColor(order.paymentStatus);
+  const psBadge        = getPaymentStatusBadge(order.paymentStatus);
   const currentStepIdx = STATUS_TIMELINE.findIndex(t => t.status === order.orderStatus);
-  const payments       = order.payments || [];
-  const totalReceived  = payments.reduce((s, p) => s + p.amount, 0);
-  // fallback: if no payments array yet, use legacy receivedAmount field
-  const displayReceived = payments.length > 0 ? totalReceived : (order.receivedAmount || 0);
+  const payments       = getEffectivePayments(order);
+  const displayReceived = payments.reduce((s, p) => s + p.amount, 0);
   const balanceDue     = (order.totalAmount || 0) - displayReceived;
   const paidPct        = order.totalAmount > 0 ? Math.min(100, Math.round((displayReceived / order.totalAmount) * 100)) : 0;
 
@@ -296,7 +448,7 @@ export default function OrderDetailClient({ orderId }: Props) {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* ★ Manage Payment — primary CTA */}
+          {/* Manage Payment primary CTA */}
           <button
             onClick={() => setIsPaymentModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
@@ -428,10 +580,16 @@ export default function OrderDetailClient({ orderId }: Props) {
                       <td className="py-3.5 px-4">
                         <div className="space-y-1">
                           {item.manufacturingDescription && (
-                            <p className="text-[10px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md">🏭 {item.manufacturingDescription}</p>
+                            <p className="text-[10px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                              <Factory size={11} className="text-teal-600 flex-shrink-0" />
+                              <span>{item.manufacturingDescription}</span>
+                            </p>
                           )}
                           {item.packingDescription && (
-                            <p className="text-[10px] text-violet-700 bg-violet-50 px-2 py-0.5 rounded-md">📦 {item.packingDescription}</p>
+                            <p className="text-[10px] text-violet-700 bg-violet-50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                              <Package size={11} className="text-violet-600 flex-shrink-0" />
+                              <span>{item.packingDescription}</span>
+                            </p>
                           )}
                           {!item.manufacturingDescription && !item.packingDescription && (
                             <span className="text-[10px] text-slate-300">—</span>
@@ -452,7 +610,7 @@ export default function OrderDetailClient({ orderId }: Props) {
             </div>
           </div>
 
-          {/* Payment History */}
+          {/* Payment History Card */}
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-2.5">
@@ -491,8 +649,8 @@ export default function OrderDetailClient({ orderId }: Props) {
                 {payments.map((pay, idx) => (
                   <div key={pay.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50/50 transition-colors">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-base flex-shrink-0">
-                        {MODE_ICONS[pay.mode] || '💰'}
+                      <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0">
+                        {getModeIcon(pay.mode)}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
@@ -505,7 +663,32 @@ export default function OrderDetailClient({ orderId }: Props) {
                         {pay.note && <p className="text-[10px] text-slate-500 italic mt-0.5">"{pay.note}"</p>}
                       </div>
                     </div>
-                    <span className="text-sm font-extrabold text-emerald-600">{fmtCurrency(pay.amount)}</span>
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-extrabold text-emerald-600">{fmtCurrency(pay.amount)}</span>
+                      <div className="flex items-center gap-1 border-l border-slate-100 pl-2">
+                        <button
+                          onClick={() => {
+                            setIsPaymentModalOpen(true);
+                            startEditPayment(pay);
+                          }}
+                          className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
+                          title="Edit Payment"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsPaymentModalOpen(true);
+                            setDeletingPaymentId(pay.id);
+                          }}
+                          className="p-1 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Delete Payment"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ))}
 
@@ -598,8 +781,9 @@ export default function OrderDetailClient({ orderId }: Props) {
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
             <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
               <h2 className="text-sm font-extrabold text-slate-900">Payment Summary</h2>
-              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${pc.bg} ${pc.text} ${pc.border}`}>
-                {order.paymentStatus}
+              <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${psBadge.bg} ${psBadge.text} ${psBadge.border} flex items-center gap-1.5`}>
+                {psBadge.icon}
+                <span>{psBadge.label}</span>
               </span>
             </div>
             <div className="p-5 space-y-4">
@@ -688,10 +872,10 @@ export default function OrderDetailClient({ orderId }: Props) {
       ══════════════════════════════════════════════════════════ */}
       {isPaymentModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 overflow-hidden max-h-[90vh] flex flex-col">
 
             {/* Modal header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-white">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-white flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
                   <Wallet size={17} />
@@ -701,12 +885,19 @@ export default function OrderDetailClient({ orderId }: Props) {
                   <p className="text-xs text-slate-500 mt-0.5">Order {order.code} • {order.customerName}</p>
                 </div>
               </div>
-              <button onClick={() => setIsPaymentModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer">
+              <button
+                onClick={() => {
+                  setIsPaymentModalOpen(false);
+                  setEditingPayment(null);
+                  setDeletingPaymentId(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="p-6 space-y-5">
+            <div className="p-6 space-y-5 overflow-y-auto flex-1">
 
               {/* Summary strip */}
               <div className="grid grid-cols-3 gap-3">
@@ -728,13 +919,16 @@ export default function OrderDetailClient({ orderId }: Props) {
                 </div>
               </div>
 
-              {/* Progress bar */}
-              <div>
-                <div className="flex justify-between text-[11px] font-semibold text-slate-500 mb-1.5">
-                  <span>Payment Progress</span>
-                  <span className="text-emerald-600 font-bold">{paidPct}%</span>
+              {/* Status Badge & Progress bar */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-500">Payment Status</span>
+                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${psBadge.bg} ${psBadge.text} ${psBadge.border} flex items-center gap-1.5`}>
+                    {psBadge.icon}
+                    <span>{psBadge.label}</span>
+                  </span>
                 </div>
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all duration-500"
                     style={{ width: `${paidPct}%` }}
@@ -742,73 +936,171 @@ export default function OrderDetailClient({ orderId }: Props) {
                 </div>
               </div>
 
-              {/* ── Add new payment form ── */}
-              {order.paymentStatus !== 'Completed' && (
-                <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-4">
-                  <p className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <Plus size={13} /> Add New Payment
-                  </p>
+              {/* ── EDIT EXISTING PAYMENT FORM ── */}
+              {editingPayment ? (
+                <div className="bg-indigo-50/70 rounded-2xl border border-indigo-200 p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Pencil size={13} className="text-indigo-600" /> Edit Payment Entry
+                    </p>
+                    <button
+                      onClick={() => setEditingPayment(null)}
+                      className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                    >
+                      Cancel Edit
+                    </button>
+                  </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-                      Amount (₹) <span className="text-red-500">*</span>
-                    </label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Amount (₹) *</label>
                     <div className="relative">
                       <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">₹</span>
                       <input
                         type="number"
                         step="0.01"
                         min="0.01"
-                        placeholder={`Max: ${(balanceDue > 0 ? balanceDue : order.totalAmount || 0).toFixed(2)}`}
-                        value={payAmount}
-                        onChange={e => setPayAmount(e.target.value)}
-                        className="w-full pl-8 pr-4 py-2.5 text-sm font-bold text-emerald-700 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white"
+                        value={editPayAmount}
+                        onChange={e => setEditPayAmount(e.target.value)}
+                        className="w-full pl-8 pr-4 py-2 text-sm font-bold text-slate-900 border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-white"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Payment Mode</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Payment Mode</label>
                     <div className="grid grid-cols-3 gap-2">
                       {(['Cash', 'UPI', 'Card'] as const).map(mode => (
                         <button
                           key={mode}
                           type="button"
-                          onClick={() => setPayMode(mode)}
-                          className={`py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${payMode === mode
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          onClick={() => setEditPayMode(mode)}
+                          className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${editPayMode === mode
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                             : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
                         >
-                          <span>{MODE_ICONS[mode]}</span> {mode}
+                          {getModeIcon(mode)} {mode}
                         </button>
                       ))}
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Note (Optional)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Note (Optional)</label>
                     <input
                       type="text"
-                      placeholder="e.g. Advance payment, Final settlement..."
-                      value={payNote}
-                      onChange={e => setPayNote(e.target.value)}
-                      className="w-full px-3.5 py-2.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white"
+                      placeholder="Reason or note..."
+                      value={editPayNote}
+                      onChange={e => setEditPayNote(e.target.value)}
+                      className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-white"
                     />
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleAddPayment}
-                    disabled={isSavingPayment || !payAmount || parseFloat(payAmount) <= 0}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {isSavingPayment ? <Loader2 size={14} className="animate-spin" /> : <BadgeCheck size={15} />}
-                    Confirm Payment
-                  </button>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleSaveEditedPayment}
+                      disabled={isSavingPayment || !editPayAmount || parseFloat(editPayAmount) <= 0}
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingPayment ? <Loader2 size={14} className="animate-spin" /> : <BadgeCheck size={14} />}
+                      Update Payment
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingPayment(null)}
+                      className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                /* ── ADD NEW PAYMENT FORM ── */
+                order.paymentStatus !== 'Completed' && (
+                  <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-4">
+                    <p className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Plus size={13} /> Add New Payment
+                    </p>
+
+                    <div>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <label className="block text-xs font-semibold text-slate-600">
+                          Amount (₹) <span className="text-red-500">*</span>
+                        </label>
+                        <span className="text-[10px] font-bold text-slate-400">
+                          Max: ₹{Math.max(0, balanceDue).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">₹</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          max={Math.max(0, balanceDue)}
+                          placeholder={`Max: ${Math.max(0, balanceDue).toFixed(2)}`}
+                          value={payAmount}
+                          onChange={e => {
+                            const val = e.target.value;
+                            const num = parseFloat(val) || 0;
+                            if (num > balanceDue && balanceDue > 0) {
+                              setPayAmount(String(balanceDue));
+                            } else {
+                              setPayAmount(val);
+                            }
+                          }}
+                          className={`w-full pl-8 pr-4 py-2.5 text-sm font-bold border rounded-xl focus:outline-none bg-white ${
+                            parseFloat(payAmount) > balanceDue
+                              ? 'text-red-600 border-red-300 focus:border-red-500'
+                              : 'text-emerald-700 border-slate-200 focus:border-emerald-500'
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Payment Mode</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(['Cash', 'UPI', 'Card'] as const).map(mode => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setPayMode(mode)}
+                            className={`py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${payMode === mode
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                          >
+                            {getModeIcon(mode)} {mode}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Note (Optional)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Advance payment, Final settlement..."
+                        value={payNote}
+                        onChange={e => setPayNote(e.target.value)}
+                        className="w-full px-3.5 py-2.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleAddPayment}
+                      disabled={isSavingPayment || !payAmount || parseFloat(payAmount) <= 0}
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingPayment ? <Loader2 size={14} className="animate-spin" /> : <BadgeCheck size={15} />}
+                      Confirm Payment
+                    </button>
+                  </div>
+                )
               )}
 
-              {order.paymentStatus === 'Completed' && (
+              {order.paymentStatus === 'Completed' && !editingPayment && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3">
                   <CheckCircle2 size={18} className="text-emerald-600 flex-shrink-0" />
                   <div>
@@ -818,27 +1110,78 @@ export default function OrderDetailClient({ orderId }: Props) {
                 </div>
               )}
 
-              {/* Payment history inside modal */}
-              {payments.length > 0 && (
-                <div>
-                  <p className="text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Transaction History</p>
-                  <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-48 overflow-y-auto">
+              {/* Payment History List inside Modal */}
+              <div>
+                <p className="text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Transaction History</p>
+                {payments.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic p-3 text-center border border-dashed rounded-xl">No transactions yet.</p>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-56 overflow-y-auto">
                     {payments.map((pay, idx) => (
-                      <div key={pay.id} className="flex items-center justify-between px-4 py-3">
+                      <div key={pay.id} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors">
                         <div className="flex items-center gap-3">
-                          <span className="text-base">{MODE_ICONS[pay.mode]}</span>
+                          <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
+                            {getModeIcon(pay.mode)}
+                          </div>
                           <div>
-                            <p className="text-xs font-bold text-slate-900">#{idx + 1} · {pay.mode}</p>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-slate-900">Payment #{idx + 1}</span>
+                              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.2 rounded-full border border-emerald-100">
+                                {pay.mode}
+                              </span>
+                            </div>
                             <p className="text-[10px] text-slate-400">{fmtDate(pay.paidAt)}</p>
                             {pay.note && <p className="text-[10px] text-slate-500 italic">"{pay.note}"</p>}
                           </div>
                         </div>
-                        <span className="text-sm font-extrabold text-emerald-600">{fmtCurrency(pay.amount)}</span>
+
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-extrabold text-emerald-600">{fmtCurrency(pay.amount)}</span>
+
+                          {deletingPaymentId === pay.id ? (
+                            <div className="flex items-center gap-1 bg-red-50 p-1 rounded-lg border border-red-100">
+                              <span className="text-[10px] text-red-600 font-bold px-1">Delete?</span>
+                              <button
+                                onClick={() => handleDeletePayment(pay.id)}
+                                disabled={isSavingPayment}
+                                className="p-1 bg-red-600 text-white rounded hover:bg-red-700"
+                                title="Confirm delete"
+                              >
+                                {isSavingPayment ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                              </button>
+                              <button
+                                onClick={() => setDeletingPaymentId(null)}
+                                className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300"
+                                title="Cancel"
+                              >
+                                <X size={11} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => startEditPayment(pay)}
+                                className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
+                                title="Edit payment"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                onClick={() => setDeletingPaymentId(pay.id)}
+                                className="p-1 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                title="Delete payment"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+
             </div>
           </div>
         </div>
@@ -901,7 +1244,7 @@ export default function OrderDetailClient({ orderId }: Props) {
                 Cancel
               </button>
               <button
-                onClick={handleDelete}
+                onClick={handleDeleteOrder}
                 disabled={isDeleting}
                 className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-xs disabled:opacity-50 cursor-pointer transition-colors"
               >

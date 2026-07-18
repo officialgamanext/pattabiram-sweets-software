@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Sora } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 
-const inter = Inter({
+const sora = Sora({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-sora",
   display: "swap",
 });
 
@@ -20,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={sora.variable}>
       <body className="min-h-screen bg-slate-100/80 font-sans antialiased text-slate-900">
         <div className="min-h-screen">
           <div className="bg-white rounded-xl lg:rounded-2xl border border-slate-200/80 shadow-xl overflow-hidden">

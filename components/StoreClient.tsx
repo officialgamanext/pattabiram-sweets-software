@@ -285,12 +285,12 @@ export default function StoreClient() {
             {isLoading ? (
               <span className="flex items-center gap-2 text-indigo-600">
                 <Loader2 size={14} className="animate-spin" />
-                Connecting to Firebase Firestore...
+                Loading stores...
               </span>
             ) : firebaseError ? (
-              <span className="text-red-500 font-semibold">Firebase error: {firebaseError}</span>
+              <span className="text-red-500 font-semibold">Error: {firebaseError}</span>
             ) : (
-              <span>Live Firebase Stores: <strong className="text-slate-800">{stores.length}</strong></span>
+              <span>Total Stores: <strong className="text-slate-800">{stores.length}</strong></span>
             )}
           </div>
 
@@ -351,7 +351,7 @@ export default function StoreClient() {
                   <td colSpan={10} className="py-12 text-center text-slate-400">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 size={18} className="animate-spin text-indigo-600" />
-                      <span>Loading stores live from Firebase...</span>
+                      <span>Loading stores...</span>
                     </div>
                   </td>
                 </tr>
@@ -360,8 +360,8 @@ export default function StoreClient() {
                   <td colSpan={10} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2 py-4">
                       <StoreIcon size={32} className="text-slate-300" />
-                      <p className="font-semibold text-slate-600">No stores found in Firebase</p>
-                      <p className="text-xs text-slate-400">Click &quot;+ Add Store&quot; above to create a store dynamically in Firebase.</p>
+                      <p className="font-semibold text-slate-600">No stores found</p>
+                      <p className="text-xs text-slate-400">Click &quot;+ Add Store&quot; above to create a new store.</p>
                     </div>
                   </td>
                 </tr>
@@ -575,7 +575,7 @@ export default function StoreClient() {
                   className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting && <Loader2 size={14} className="animate-spin" />}
-                  <span>Save to Firebase</span>
+                  <span>Save</span>
                 </button>
               </div>
             </form>
@@ -724,7 +724,7 @@ export default function StoreClient() {
               <div className="flex-1">
                 <h3 className="text-base font-bold text-slate-900">Delete Store</h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  Are you sure you want to delete <strong className="text-slate-800">{deletingStore.name}</strong> ({deletingStore.code})? This action will permanently remove the record from Firebase Firestore.
+                  Are you sure you want to delete <strong className="text-slate-800">{deletingStore.name}</strong> ({deletingStore.code})? This action cannot be undone.
                 </p>
               </div>
             </div>

@@ -1,12 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 :root {
-  --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sora: 'Sora', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 body {
-  font-family: var(--font-inter);
+  font-family: 'Sora', var(--font-sora), -apple-system, BlinkMacSystemFont, sans-serif;
   background-color: #f1f5f9;
   color: #0f172a;
   -webkit-font-smoothing: antialiased;

@@ -26,7 +26,6 @@ import {
   doc,
   serverTimestamp,
   query,
-  orderBy,
 } from 'firebase/firestore';
 
 export interface StoreItem {
@@ -43,79 +42,11 @@ export interface StoreItem {
   createdAt?: any;
 }
 
-const initialDefaultStores: Omit<StoreItem, 'id'>[] = [
-  {
-    code: 'STR-001',
-    name: 'Main Store',
-    type: 'Retail Store',
-    phone: '+91 98765 43210',
-    email: 'mainstore@example.com',
-    city: 'Coimbatore',
-    state: 'Tamil Nadu',
-    pincode: '641001',
-    status: 'Active',
-  },
-  {
-    code: 'STR-002',
-    name: 'City Center Store',
-    type: 'Retail Store',
-    phone: '+91 98765 43211',
-    email: 'citycenter@example.com',
-    city: 'Chennai',
-    state: 'Tamil Nadu',
-    pincode: '600001',
-    status: 'Active',
-  },
-  {
-    code: 'STR-003',
-    name: 'West Zone Store',
-    type: 'Wholesale Store',
-    phone: '+91 98765 43212',
-    email: 'westzone@example.com',
-    city: 'Bangalore',
-    state: 'Karnataka',
-    pincode: '560001',
-    status: 'Active',
-  },
-  {
-    code: 'STR-004',
-    name: 'South Zone Store',
-    type: 'Wholesale Store',
-    phone: '+91 98765 43213',
-    email: 'southzone@example.com',
-    city: 'Madurai',
-    state: 'Tamil Nadu',
-    pincode: '625001',
-    status: 'Inactive',
-  },
-  {
-    code: 'STR-005',
-    name: 'North Zone Store',
-    type: 'Retail Store',
-    phone: '+91 98765 43214',
-    email: 'northzone@example.com',
-    city: 'Salem',
-    state: 'Tamil Nadu',
-    pincode: '636001',
-    status: 'Active',
-  },
-  {
-    code: 'STR-006',
-    name: 'East Zone Store',
-    type: 'Retail Store',
-    phone: '+91 98765 43215',
-    email: 'eastzone@example.com',
-    city: 'Trichy',
-    state: 'Tamil Nadu',
-    pincode: '620001',
-    status: 'Active',
-  },
-];
-
 export default function StoreClient() {
   const [stores, setStores] = useState<StoreItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [firebaseError, setFirebaseError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [itemsPerPage, setItemsPerPage] = useState('10');
@@ -134,10 +65,10 @@ export default function StoreClient() {
     status: 'Active' as 'Active' | 'Inactive',
   });
 
-  // Real-time Firebase Firestore synchronization
+  // Real-time Firebase Firestore listener
   useEffect(() => {
     const storesCollectionRef = collection(db, 'stores');
-    const q = query(storesCollectionRef, orderBy('code', 'asc'));
+    const q = query(storesCollectionRef);
 
     const unsubscribe = onSnapshot(
       q,
@@ -147,21 +78,16 @@ export default function StoreClient() {
           ...(docSnap.data() as Omit<StoreItem, 'id'>),
         }));
 
-        // Seed initial stores if collection is empty
-        if (fetchedStores.length === 0 && snapshot.metadata.fromCache === false) {
-          initialDefaultStores.forEach(async (defaultStore) => {
-            await addDoc(storesCollectionRef, {
-              ...defaultStore,
-              createdAt: serverTimestamp(),
-            });
-          });
-        }
+        // Sort by code locally
+        fetchedStores.sort((a, b) => (a.code || '').localeCompare(b.code || ''));
 
         setStores(fetchedStores);
         setIsLoading(false);
+        setFirebaseError(null);
       },
       (error) => {
         console.error('Error fetching stores from Firestore:', error);
+        setFirebaseError(error.message || 'Failed to connect to Firebase');
         setIsLoading(false);
       }
     );
@@ -183,7 +109,7 @@ export default function StoreClient() {
     return matchesSearch && matchesStatus;
   });
 
-  // Handle Add Store to Firebase
+  // Handle Add Store directly to Firebase
   const handleAddStore = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStore.name) return;
@@ -210,22 +136,22 @@ export default function StoreClient() {
         pincode: '',
         status: 'Active',
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to add store to Firestore:', err);
-      alert('Failed to add store. Please try again.');
+      alert(`Firebase Error: ${err?.message || 'Failed to add store'}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Handle Delete Store from Firebase
+  // Handle Delete Store directly from Firebase
   const handleDeleteStore = async (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+    if (confirm(`Are you sure you want to delete "${name}" from Firebase?`)) {
       try {
         await deleteDoc(doc(db, 'stores', id));
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to delete store:', err);
-        alert('Failed to delete store.');
+        alert(`Firebase Error: ${err?.message || 'Failed to delete store'}`);
       }
     }
   };
@@ -276,7 +202,7 @@ export default function StoreClient() {
         </button>
       </div>
 
-      {/* ── 2. View Tab (Stores List only) ─────────────────────────── */}
+      {/* ── 2. View Tab ───────────────────────────────────────────── */}
       <div className="flex items-center gap-3">
         <button className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold shadow-xs">
           Stores List
@@ -292,10 +218,12 @@ export default function StoreClient() {
             {isLoading ? (
               <span className="flex items-center gap-2 text-indigo-600">
                 <Loader2 size={14} className="animate-spin" />
-                Connecting to Firebase...
+                Connecting to Firebase Firestore...
               </span>
+            ) : firebaseError ? (
+              <span className="text-red-500 font-semibold">Firebase error: {firebaseError}</span>
             ) : (
-              <span>Total Stores: <strong className="text-slate-800">{stores.length}</strong></span>
+              <span>Live Firebase Stores: <strong className="text-slate-800">{stores.length}</strong></span>
             )}
           </div>
 
@@ -356,14 +284,18 @@ export default function StoreClient() {
                   <td colSpan={10} className="py-12 text-center text-slate-400">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 size={18} className="animate-spin text-indigo-600" />
-                      <span>Loading stores from Firebase...</span>
+                      <span>Loading stores live from Firebase...</span>
                     </div>
                   </td>
                 </tr>
               ) : filteredStores.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-12 text-center text-slate-400">
-                    No stores found matching your criteria.
+                    <div className="flex flex-col items-center justify-center gap-2 py-4">
+                      <StoreIcon size={32} className="text-slate-300" />
+                      <p className="font-semibold text-slate-600">No stores found in Firebase</p>
+                      <p className="text-xs text-slate-400">Click &quot;+ Add Store&quot; above to create a store dynamically in Firebase.</p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -434,16 +366,6 @@ export default function StoreClient() {
               <button className="w-8 h-8 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center shadow-xs">
                 1
               </button>
-              <button className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium flex items-center justify-center cursor-pointer">
-                2
-              </button>
-              <button className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium flex items-center justify-center cursor-pointer">
-                3
-              </button>
-              <span className="px-1 text-slate-300">...</span>
-              <button className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium flex items-center justify-center cursor-pointer">
-                5
-              </button>
               <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 cursor-pointer">
                 <ChevronRight size={14} />
               </button>
@@ -470,7 +392,7 @@ export default function StoreClient() {
                 <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                   <StoreIcon size={20} />
                 </div>
-                <h3 className="text-lg font-bold text-slate-900">Add New Store</h3>
+                <h3 className="text-lg font-bold text-slate-900">Add New Store to Firebase</h3>
               </div>
               <button
                 onClick={() => setIsAddModalOpen(false)}

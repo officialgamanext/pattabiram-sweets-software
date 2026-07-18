@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import {
   Plus,
   Search,
@@ -145,6 +146,7 @@ const ALL_ORDER_STATUSES: OrderStatus[] = [
 ];
 
 export default function OrdersClient() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'slot' | 'list'>('slot');
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [customersMaster, setCustomersMaster] = useState<CustomerOption[]>([]);
@@ -164,7 +166,8 @@ export default function OrdersClient() {
   const [isAddOrderModalOpen, setIsAddOrderModalOpen] = useState(false);
   const [isAddItemSelectorOpen, setIsAddItemSelectorOpen] = useState(false);
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
-  const [viewingOrder, setViewingOrder] = useState<OrderRecord | null>(null);
+  // Navigation to order detail page
+  const navigateToOrder = (orderId: string) => router.push(`/orders/${orderId}`);
   const [deletingOrder, setDeletingOrder] = useState<OrderRecord | null>(null);
   const [updatingStatusOrder, setUpdatingStatusOrder] = useState<OrderRecord | null>(null);
 
@@ -629,7 +632,8 @@ export default function OrdersClient() {
                     slotOrders.map((order) => (
                       <div
                         key={order.id}
-                        className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs hover:shadow-xs transition-all space-y-2.5 relative group"
+                        onClick={() => navigateToOrder(order.id)}
+                        className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs hover:shadow-sm hover:border-indigo-200 transition-all space-y-2.5 relative group cursor-pointer"
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-xs text-indigo-600 font-mono">{order.code}</span>
@@ -668,14 +672,14 @@ export default function OrdersClient() {
 
                           <div className="flex items-center gap-1">
                             <button
-                              onClick={() => setViewingOrder(order)}
+                              onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
                               className="p-1 text-slate-400 hover:text-indigo-600 rounded-md"
                               title="View Order Details"
                             >
                               <Eye size={14} />
                             </button>
                             <button
-                              onClick={() => setDeletingOrder(order)}
+                              onClick={(e) => { e.stopPropagation(); setDeletingOrder(order); }}
                               className="p-1 text-slate-400 hover:text-red-600 rounded-md"
                               title="Delete Order"
                             >
@@ -750,7 +754,11 @@ export default function OrdersClient() {
                   </tr>
                 ) : (
                   orders.map((order) => (
-                    <tr key={order.id} className="hover:bg-slate-50/60">
+                    <tr
+                      key={order.id}
+                      onClick={() => navigateToOrder(order.id)}
+                      className="hover:bg-indigo-50/30 cursor-pointer transition-colors"
+                    >
                       <td className="py-3.5 px-4 sm:px-6 font-bold text-indigo-600">{order.code}</td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">{order.customerName}</td>
                       <td className="py-3.5 px-4 text-slate-600">{order.slot}</td>
@@ -765,10 +773,16 @@ export default function OrdersClient() {
                       <td className="py-3.5 px-4 font-semibold text-slate-800">{order.orderStatus}</td>
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => setViewingOrder(order)} className="p-1 text-slate-400 hover:text-indigo-600">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
+                            className="p-1 text-slate-400 hover:text-indigo-600"
+                          >
                             <Eye size={15} />
                           </button>
-                          <button onClick={() => setDeletingOrder(order)} className="p-1 text-slate-400 hover:text-red-600">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeletingOrder(order); }}
+                            className="p-1 text-slate-400 hover:text-red-600"
+                          >
                             <Trash2 size={15} />
                           </button>
                         </div>
@@ -1448,67 +1462,7 @@ export default function OrdersClient() {
         </div>
       )}
 
-      {/* ── 9. VIEW ORDER DETAILS MODAL ────────────────────────────── */}
-      {viewingOrder && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-100">
-                  {viewingOrder.code}
-                </span>
-                <h3 className="text-base font-bold text-slate-900">{viewingOrder.customerName}</h3>
-              </div>
-              <button onClick={() => setViewingOrder(null)} className="text-slate-400 hover:text-slate-600 p-1">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-              <div>
-                <p className="text-slate-400 text-[11px]">Time Slot:</p>
-                <p className="font-bold text-slate-800">{viewingOrder.slot}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-[11px]">Payment Mode:</p>
-                <p className="font-bold text-slate-800">{viewingOrder.paymentMode} ({viewingOrder.paymentStatus})</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-[11px]">Total Amount:</p>
-                <p className="font-extrabold text-indigo-600 text-sm">₹ {viewingOrder.totalAmount}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-[11px]">Order Status:</p>
-                <p className="font-bold text-emerald-600">{viewingOrder.orderStatus}</p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-bold text-slate-700">Ordered Products:</p>
-              <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 text-xs">
-                {viewingOrder.items?.map((item, idx) => (
-                  <div key={idx} className="p-2.5 flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-slate-900">{item.itemName}</p>
-                      <p className="text-[10px] text-slate-400">{item.quantity} {item.unit} x ₹{item.unitPrice}</p>
-                    </div>
-                    <span className="font-extrabold text-slate-900">₹ {item.lineTotal}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => setViewingOrder(null)}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── 9. ORDER DETAILS → redirected to /orders/[id] page ────── */}
 
       {/* ── 10. CUSTOM DELETE CONFIRMATION MODAL ────────────────────── */}
       {deletingOrder && (

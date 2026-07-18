@@ -40,6 +40,9 @@ const navItems = [
   { label: 'Employees', href: '/employees', icon: <UserCheck size={20} /> },
   { label: 'Payroll', href: '/payroll', icon: <CreditCard size={20} /> },
   { label: 'Settings', href: '/settings', icon: <Settings size={20} /> },
+  { label: 'Manufacturing Portal', href: '/manufacturing-portal', icon: <Factory size={20} /> },
+  { label: 'Packing Portal', href: '/packing-portal', icon: <Package size={20} /> },
+  { label: 'Employee Portal', href: '/employee-portal', icon: <UserCheck size={20} /> },
   { label: 'Support', href: '/support', icon: <Headphones size={20} /> },
 ];
 

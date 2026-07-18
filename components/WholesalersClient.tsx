@@ -16,6 +16,7 @@ import {
   Filter,
   AlertTriangle,
   Users,
+  Tag,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
 import { db } from '@/lib/firebase';
@@ -41,12 +42,21 @@ export interface WholesalerItem {
   city: string;
   address: string;
   gstin?: string;
+  priceListId?: string;
+  priceListName?: string;
   status: 'Active' | 'Inactive';
   createdAt?: any;
 }
 
+export interface PriceListDropdownItem {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export default function WholesalersClient() {
   const [wholesalers, setWholesalers] = useState<WholesalerItem[]>([]);
+  const [priceLists, setPriceLists] = useState<PriceListDropdownItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -71,13 +81,15 @@ export default function WholesalersClient() {
     city: '',
     address: '',
     gstin: '',
+    priceListId: '',
+    priceListName: '',
     status: 'Active' as 'Active' | 'Inactive',
   };
 
   const [newWholesaler, setNewWholesaler] = useState(emptyForm);
   const [editFormData, setEditFormData] = useState(emptyForm);
 
-  // Real-time Firebase Firestore listener
+  // 1. Subscribe to Wholesalers collection
   useEffect(() => {
     const wholesalersRef = collection(db, 'wholesalers');
     const q = query(wholesalersRef);
@@ -90,9 +102,7 @@ export default function WholesalersClient() {
           ...(docSnap.data() as Omit<WholesalerItem, 'id'>),
         }));
 
-        // Sort by code locally
         fetched.sort((a, b) => (a.code || '').localeCompare(b.code || ''));
-
         setWholesalers(fetched);
         setIsLoading(false);
         setFirebaseError(null);
@@ -107,6 +117,24 @@ export default function WholesalersClient() {
     return () => unsubscribe();
   }, []);
 
+  // 2. Subscribe to Price Lists collection for dropdown selection
+  useEffect(() => {
+    const unsub = onSnapshot(
+      query(collection(db, 'price_lists')),
+      (snapshot) => {
+        const fetched: PriceListDropdownItem[] = snapshot.docs.map((d) => ({
+          id: d.id,
+          code: d.data().code || 'PRC-000',
+          name: d.data().name || 'Standard Price List',
+        }));
+        fetched.sort((a, b) => a.code.localeCompare(b.code));
+        setPriceLists(fetched);
+      }
+    );
+
+    return () => unsub();
+  }, []);
+
   // Filtered list
   const filteredWholesalers = wholesalers.filter((item) => {
     const term = searchTerm.toLowerCase();
@@ -117,6 +145,7 @@ export default function WholesalersClient() {
       item.personalMobile.toLowerCase().includes(term) ||
       item.businessMobile.toLowerCase().includes(term) ||
       item.city.toLowerCase().includes(term) ||
+      (item.priceListName && item.priceListName.toLowerCase().includes(term)) ||
       (item.gstin && item.gstin.toLowerCase().includes(term));
 
     const matchesStatus =
@@ -135,9 +164,15 @@ export default function WholesalersClient() {
       const nextNumber = wholesalers.length + 1;
       const nextCode = `WHL-${String(nextNumber).padStart(3, '0')}`;
 
+      // Default price list if none selected
+      const finalPriceListName = newWholesaler.priceListName || (priceLists[0]?.name || 'Standard Price List');
+      const finalPriceListId = newWholesaler.priceListId || (priceLists[0]?.id || '');
+
       await addDoc(collection(db, 'wholesalers'), {
         code: nextCode,
         ...newWholesaler,
+        priceListId: finalPriceListId,
+        priceListName: finalPriceListName,
         createdAt: serverTimestamp(),
       });
 
@@ -163,6 +198,8 @@ export default function WholesalersClient() {
       city: item.city,
       address: item.address,
       gstin: item.gstin || '',
+      priceListId: item.priceListId || '',
+      priceListName: item.priceListName || '',
       status: item.status,
     });
   };
@@ -184,6 +221,8 @@ export default function WholesalersClient() {
         city: editFormData.city,
         address: editFormData.address,
         gstin: editFormData.gstin,
+        priceListId: editFormData.priceListId,
+        priceListName: editFormData.priceListName,
         status: editFormData.status,
         updatedAt: serverTimestamp(),
       });
@@ -213,7 +252,14 @@ export default function WholesalersClient() {
     }
   };
 
-  // Custom Dropdown Options
+  // Price List Options for CustomSelect
+  const priceListSelectOptions: CustomSelectOption[] = priceLists.length > 0
+    ? priceLists.map((p) => ({
+        value: p.name,
+        label: `${p.code} - ${p.name}`,
+      }))
+    : [{ value: 'Standard Price List', label: 'Standard Price List' }];
+
   const statusFilterOptions: CustomSelectOption[] = [
     { value: 'All', label: 'All Statuses' },
     { value: 'Active', label: 'Active Only', badge: 'Active' },
@@ -315,12 +361,13 @@ export default function WholesalersClient() {
 
         {/* Table View */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
+          <table className="w-full text-left border-collapse min-w-[1050px]">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                 <th className="py-3.5 px-4 sm:px-6">Code</th>
                 <th className="py-3.5 px-4">Wholesaler Name</th>
                 <th className="py-3.5 px-4">Business Name</th>
+                <th className="py-3.5 px-4">Price List</th>
                 <th className="py-3.5 px-4">Personal Mobile</th>
                 <th className="py-3.5 px-4">Business Mobile</th>
                 <th className="py-3.5 px-4">City</th>
@@ -332,7 +379,7 @@ export default function WholesalersClient() {
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 size={18} className="animate-spin text-indigo-600" />
                       <span>Loading wholesalers...</span>
@@ -341,7 +388,7 @@ export default function WholesalersClient() {
                 </tr>
               ) : filteredWholesalers.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2 py-4">
                       <Users size={32} className="text-slate-300" />
                       <p className="font-semibold text-slate-600">No wholesalers found</p>
@@ -355,6 +402,12 @@ export default function WholesalersClient() {
                     <td className="py-4 px-4 sm:px-6 font-bold text-indigo-600">{item.code}</td>
                     <td className="py-4 px-4 font-semibold text-slate-900">{item.name}</td>
                     <td className="py-4 px-4 font-medium text-slate-800">{item.businessName}</td>
+                    <td className="py-4 px-4">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-semibold text-[11px] border border-indigo-100">
+                        <Tag size={12} className="text-indigo-500" />
+                        {item.priceListName || 'Standard Price List'}
+                      </span>
+                    </td>
                     <td className="py-4 px-4 text-slate-600 whitespace-nowrap">{item.personalMobile}</td>
                     <td className="py-4 px-4 text-slate-600 whitespace-nowrap">{item.businessMobile}</td>
                     <td className="py-4 px-4 text-slate-700">{item.city}</td>
@@ -500,6 +553,26 @@ export default function WholesalersClient() {
                     className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
                   />
                 </div>
+              </div>
+
+              {/* Price List Selection Dropdown */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Assigned Price List *</label>
+                <CustomSelect
+                  options={priceListSelectOptions}
+                  value={newWholesaler.priceListName || (priceLists[0]?.name || 'Standard Price List')}
+                  onChange={(val) => {
+                    const match = priceLists.find((p) => p.name === val);
+                    setNewWholesaler({
+                      ...newWholesaler,
+                      priceListName: val,
+                      priceListId: match?.id || '',
+                    });
+                  }}
+                  icon={<Tag size={14} />}
+                  className="w-full"
+                  buttonClassName="w-full"
+                />
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -652,6 +725,26 @@ export default function WholesalersClient() {
                 </div>
               </div>
 
+              {/* Price List Selection Dropdown */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Assigned Price List *</label>
+                <CustomSelect
+                  options={priceListSelectOptions}
+                  value={editFormData.priceListName || (priceLists[0]?.name || 'Standard Price List')}
+                  onChange={(val) => {
+                    const match = priceLists.find((p) => p.name === val);
+                    setEditFormData({
+                      ...editFormData,
+                      priceListName: val,
+                      priceListId: match?.id || '',
+                    });
+                  }}
+                  icon={<Tag size={14} />}
+                  className="w-full"
+                  buttonClassName="w-full"
+                />
+              </div>
+
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Email (Optional)</label>
@@ -792,6 +885,13 @@ export default function WholesalersClient() {
                 <span className="font-bold text-slate-900">{viewWholesaler.businessName}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-400">Assigned Price List:</span>
+                <span className="font-bold text-indigo-600 flex items-center gap-1">
+                  <Tag size={12} />
+                  {viewWholesaler.priceListName || 'Standard Price List'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-400">Personal Mobile:</span>
                 <span className="font-semibold text-slate-800">{viewWholesaler.personalMobile}</span>
               </div>
@@ -811,9 +911,9 @@ export default function WholesalersClient() {
                 <span className="text-slate-400">GSTIN:</span>
                 <span className="font-mono font-semibold text-slate-800">{viewWholesaler.gstin || 'N/A'}</span>
               </div>
-              <div className="flex flex-col gap-1 py-1 border-b border-slate-50">
+              <div className="flex justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-400">Address:</span>
-                <span className="font-semibold text-slate-800 leading-relaxed">{viewWholesaler.address}</span>
+                <span className="font-medium text-slate-700 text-right max-w-[200px]">{viewWholesaler.address}</span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-slate-400">Status:</span>

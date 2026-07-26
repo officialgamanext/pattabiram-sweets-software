@@ -81,6 +81,8 @@ export interface OrderItemLine {
   lineTotal: number;
   manufacturingDescription?: string;
   packingDescription?: string;
+  mfgStatus?: 'Pending' | 'Manufacturing Started' | 'Moved to Packing';
+  pckStatus?: 'Pending' | 'Packing Started' | 'Moved to Store';
 }
 
 export interface OrderRecord {

@@ -40,6 +40,7 @@ import {
   orderBy
 } from 'firebase/firestore';
 import CustomSelect from '@/components/CustomSelect';
+import { uploadToImageKit } from '@/lib/imageCompressor';
 
 export interface EmployeeRecord {
   id: string;
@@ -127,6 +128,7 @@ export default function EmployeesClient() {
   const [formAddress, setFormAddress] = useState('');
   const [formDepartment, setFormDepartment] = useState('Production');
   const [formPhotoUrl, setFormPhotoUrl] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   
   // Camera capture state
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -295,22 +297,42 @@ export default function EmployeesClient() {
       return;
     }
 
-    const empPayload = {
-      empId: editingEmp ? editingEmp.empId : `EMP-${1000 + employees.length + 1}`,
-      name: formName.trim(),
-      mobile: formMobile.trim(),
-      salary: parseFloat(formSalary) || 0,
-      paymentMode: formMode,
-      acceptedLeaves: parseInt(formLeaves) || 0,
-      latitude: parseFloat(formLat) || 13.1189,
-      longitude: parseFloat(formLng) || 80.0967,
-      address: formAddress.trim(),
-      photoUrl: formPhotoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-      department: formDepartment,
-      status: 'active' as const,
-    };
+    setIsSaving(true);
+    let finalPhotoUrl = formPhotoUrl;
 
     try {
+      // If photo is base64 data URL (from camera capture or file upload), save to ImageKit first!
+      if (formPhotoUrl && formPhotoUrl.startsWith('data:image/')) {
+        const cleanName = formName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const fileName = `employee_${cleanName}_${Date.now()}.jpg`;
+
+        try {
+          finalPhotoUrl = await uploadToImageKit(formPhotoUrl, fileName);
+          console.log('Successfully uploaded employee photo to ImageKit:', finalPhotoUrl);
+        } catch (imgKitErr: any) {
+          console.warn('ImageKit upload warning, using local image data:', imgKitErr);
+        }
+      }
+
+      if (!finalPhotoUrl) {
+        finalPhotoUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80';
+      }
+
+      const empPayload = {
+        empId: editingEmp ? editingEmp.empId : `EMP-${1000 + employees.length + 1}`,
+        name: formName.trim(),
+        mobile: formMobile.trim(),
+        salary: parseFloat(formSalary) || 0,
+        paymentMode: formMode,
+        acceptedLeaves: parseInt(formLeaves) || 0,
+        latitude: parseFloat(formLat) || 13.1189,
+        longitude: parseFloat(formLng) || 80.0967,
+        address: formAddress.trim(),
+        photoUrl: finalPhotoUrl,
+        department: formDepartment,
+        status: 'active' as const,
+      };
+
       if (editingEmp) {
         try {
           await updateDoc(doc(db, 'employees', editingEmp.id), empPayload);
@@ -338,6 +360,8 @@ export default function EmployeesClient() {
       handleCloseModal();
     } catch (err: any) {
       alert('Error saving employee record: ' + err.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -893,9 +917,22 @@ export default function EmployeesClient() {
 
                 <button
                   type="submit"
-                  className="px-6 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                  disabled={isSaving}
+                  className={`px-6 py-2 rounded-xl text-white text-xs font-semibold shadow-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                    isSaving
+                      ? 'bg-indigo-400 cursor-not-allowed'
+                      : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
                 >
-                  <Check size={16} /> Save Employee
+                  {isSaving ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" /> Uploading Photo & Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Check size={16} /> Save Employee
+                    </>
+                  )}
                 </button>
               </div>
 

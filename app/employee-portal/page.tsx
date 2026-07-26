@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import EmployeePortalClient from '@/components/EmployeePortalClient';
 
 export const metadata = {
@@ -6,5 +7,10 @@ export const metadata = {
 };
 
 export default function EmployeePortalPage() {
-  return <EmployeePortalClient />;
+  return (
+    <Suspense fallback={<div className="p-12 text-center font-semibold text-slate-500">Loading Employee Portal...</div>}>
+      <EmployeePortalClient />
+    </Suspense>
+  );
 }
+

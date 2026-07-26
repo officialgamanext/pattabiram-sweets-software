@@ -32,6 +32,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
+import CustomDatePicker from '@/components/CustomDatePicker';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -91,6 +92,7 @@ export interface OrderRecord {
   customerType?: 'Customer' | 'Wholesaler';
   slot: SlotTime;
   orderTime: string;
+  orderDate?: string;
   items: OrderItemLine[];
   totalItems: number;
   totalAmount: number;
@@ -192,10 +194,96 @@ export default function OrdersClient() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [firebaseError, setFirebaseError] = useState<string | null>(null);
 
+  const getTodayDateStr = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('All');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
   const [itemsPerPage, setItemsPerPage] = useState('10');
-  const [selectedDate, setSelectedDate] = useState('29 May 2025');
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
+
+  const getOrderDateStr = (order: OrderRecord): string => {
+    if (order.orderDate && /^\d{4}-\d{2}-\d{2}$/.test(order.orderDate)) {
+      return order.orderDate;
+    }
+
+    if (order.createdAt) {
+      let d: Date | null = null;
+      if (typeof order.createdAt.toDate === 'function') {
+        d = order.createdAt.toDate();
+      } else if (order.createdAt.seconds) {
+        d = new Date(order.createdAt.seconds * 1000);
+      } else if (typeof order.createdAt === 'string' || typeof order.createdAt === 'number') {
+        d = new Date(order.createdAt);
+      }
+      if (d && !isNaN(d.getTime())) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+    }
+
+    if (order.orderDate) {
+      const parsed = new Date(order.orderDate);
+      if (!isNaN(parsed.getTime())) {
+        const year = parsed.getFullYear();
+        const month = String(parsed.getMonth() + 1).padStart(2, '0');
+        const day = String(parsed.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+    }
+
+    if (order.code && order.code.startsWith('#ORD-')) {
+      const parts = order.code.split('-');
+      if (parts.length >= 2 && parts[1].length === 6) {
+        const yy = parts[1].slice(0, 2);
+        const mm = parts[1].slice(2, 4);
+        const dd = parts[1].slice(4, 6);
+        return `20${yy}-${mm}-${dd}`;
+      }
+    }
+
+    return getTodayDateStr();
+  };
+
+  const handlePrevDate = () => {
+    const baseDate = selectedDate && selectedDate !== 'All' ? new Date(selectedDate + 'T00:00:00') : new Date();
+    if (isNaN(baseDate.getTime())) return;
+    baseDate.setDate(baseDate.getDate() - 1);
+    const y = baseDate.getFullYear();
+    const m = String(baseDate.getMonth() + 1).padStart(2, '0');
+    const d = String(baseDate.getDate()).padStart(2, '0');
+    setSelectedDate(`${y}-${m}-${d}`);
+  };
+
+  const handleNextDate = () => {
+    const baseDate = selectedDate && selectedDate !== 'All' ? new Date(selectedDate + 'T00:00:00') : new Date();
+    if (isNaN(baseDate.getTime())) return;
+    baseDate.setDate(baseDate.getDate() + 1);
+    const y = baseDate.getFullYear();
+    const m = String(baseDate.getMonth() + 1).padStart(2, '0');
+    const d = String(baseDate.getDate()).padStart(2, '0');
+    setSelectedDate(`${y}-${m}-${d}`);
+  };
+
+  const formatDisplayDate = (dateStr: string) => {
+    if (!dateStr || dateStr === 'All') return 'All Dates';
+    const todayStr = getTodayDateStr();
+    const d = new Date(dateStr + 'T00:00:00');
+    if (isNaN(d.getTime())) return dateStr;
+    const formatted = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    if (dateStr === todayStr) {
+      return `Today (${formatted})`;
+    }
+    return formatted;
+  };
 
   // Modals state
   const [isAddOrderModalOpen, setIsAddOrderModalOpen] = useState(false);
@@ -483,6 +571,7 @@ export default function OrdersClient() {
         customerType: selectedCustomer.type,
         slot: orderSlot,
         orderTime: timeStr,
+        orderDate: selectedDate && selectedDate !== 'All' ? selectedDate : getTodayDateStr(),
         items: orderItems,
         totalItems: orderItems.length,
         totalAmount: grandTotal,
@@ -552,52 +641,181 @@ export default function OrdersClient() {
     );
   });
 
-  // Calculate Order Statistics for Summary Bar at bottom
-  const totalOrdersCount = orders.length;
-  const totalAmountSum = orders.reduce((acc, o) => acc + (o.totalAmount || 0), 0);
-  const confirmedCount = orders.filter((o) => o.orderStatus === 'Confirmed' || o.orderStatus === 'Order Created').length;
-  const pendingCount = orders.filter((o) => o.orderStatus === 'Pending' || o.paymentStatus === 'Pending').length;
-  const processingCount = orders.filter((o) => o.orderStatus === 'Processing' || o.orderStatus.includes('Started')).length;
-  const deliveredCount = orders.filter((o) => o.orderStatus === 'Delivered').length;
+  // Filter orders by selectedDate, orderStatusFilter, paymentStatusFilter, and searchTerm
+  const filteredOrders = orders.filter((order) => {
+    // 1. Date Filter (default today's date)
+    if (selectedDate && selectedDate !== 'All') {
+      const orderDate = getOrderDateStr(order);
+      if (orderDate !== selectedDate) {
+        return false;
+      }
+    }
 
-  const statusFilterOptions: CustomSelectOption[] = [
-    { value: 'All', label: 'All Statuses' },
+    // 2. Order Status Filter (default 'All')
+    if (orderStatusFilter !== 'All') {
+      if (order.orderStatus !== orderStatusFilter) {
+        return false;
+      }
+    }
+
+    // 3. Payment Status Filter (default 'All')
+    if (paymentStatusFilter !== 'All') {
+      if (order.paymentStatus !== paymentStatusFilter) {
+        return false;
+      }
+    }
+
+    // 4. Search Filter
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      const codeMatch = (order.code || '').toLowerCase().includes(term);
+      const custMatch = (order.customerName || '').toLowerCase().includes(term);
+      const mobMatch = (order.customerMobile || '').toLowerCase().includes(term);
+      if (!codeMatch && !custMatch && !mobMatch) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  // Calculate Order Statistics for Summary Bar from filtered orders
+  const totalOrdersCount = filteredOrders.length;
+  const totalAmountSum = filteredOrders.reduce((acc, o) => acc + (o.totalAmount || 0), 0);
+  const confirmedCount = filteredOrders.filter((o) => o.orderStatus === 'Confirmed' || o.orderStatus === 'Order Created').length;
+  const pendingCount = filteredOrders.filter((o) => o.orderStatus === 'Pending' || o.paymentStatus === 'Pending').length;
+  const processingCount = filteredOrders.filter((o) => o.orderStatus === 'Processing' || o.orderStatus.includes('Started')).length;
+  const deliveredCount = filteredOrders.filter((o) => o.orderStatus === 'Delivered').length;
+
+  const orderStatusOptions: CustomSelectOption[] = [
+    { value: 'All', label: 'All Order Statuses' },
     ...ALL_ORDER_STATUSES.map((s) => ({ value: s, label: s })),
+  ];
+
+  const paymentStatusOptions: CustomSelectOption[] = [
+    { value: 'All', label: 'All Payment Statuses' },
+    { value: 'Pending', label: 'Pending' },
+    { value: 'Partial', label: 'Partial' },
+    { value: 'Completed', label: 'Completed' },
   ];
 
   return (
     <div className="w-full flex flex-col gap-6 font-sans pb-10">
 
       {/* ── 1. Page Header & Top Sub-Tabs ──────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Orders</h1>
-          <nav className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
-            <Link href="/" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
-            <span>&gt;</span>
-            <span className="text-slate-800 font-medium">Orders</span>
-          </nav>
-        </div>
-
-        {/* Top Controls: Date Picker & Filters */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-[6px] bg-white border border-slate-200 text-xs font-semibold text-slate-700 shadow-2xs h-[30px]">
-            <Calendar size={14} className="text-slate-400" />
-            <span>{selectedDate}</span>
-            <div className="flex items-center gap-1 ml-2 pl-2 border-l border-slate-200">
-              <button onClick={() => { }} className="text-slate-400 hover:text-slate-700 h-[22px] w-[22px] rounded-[4px] flex items-center justify-center">
-                <ChevronLeft size={14} />
-              </button>
-              <button onClick={() => { }} className="text-slate-400 hover:text-slate-700 h-[22px] w-[22px] rounded-[4px] flex items-center justify-center">
-                <ChevronRight size={14} />
-              </button>
-            </div>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Orders</h1>
+            <nav className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
+              <Link href="/" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
+              <span>&gt;</span>
+              <span className="text-slate-800 font-medium">Orders</span>
+            </nav>
           </div>
 
-          <button className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer">
-            <Filter size={14} />
-            <span>Filters</span>
+          <button
+            onClick={() => handleOpenAddOrderModal('9:00 AM - 12:00 PM')}
+            className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer self-start sm:self-auto"
+          >
+            <Plus size={16} />
+            <span>Add New Order</span>
           </button>
+        </div>
+
+        {/* ── Filter Toolbar (Date, Order Status, Payment Status, Search) ── */}
+        <div className="bg-white rounded-2xl p-3.5 border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+          {/* Left: Custom Date Picker Control */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <CustomDatePicker
+              value={selectedDate}
+              onChange={setSelectedDate}
+              allowAll={true}
+              size="md"
+            />
+
+            <button
+              type="button"
+              onClick={() => setSelectedDate(getTodayDateStr())}
+              className={`px-3 py-1.5 h-[36px] rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                selectedDate === getTodayDateStr()
+                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200 shadow-2xs'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              Today
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedDate('All')}
+              className={`px-3 py-1.5 h-[36px] rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                selectedDate === 'All'
+                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200 shadow-2xs'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              All Dates
+            </button>
+          </div>
+
+          {/* Right: Order Status & Payment Status Filters */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Order Status Filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold text-slate-400 uppercase hidden xl:inline">Order Status:</span>
+              <CustomSelect
+                options={orderStatusOptions}
+                value={orderStatusFilter}
+                onChange={setOrderStatusFilter}
+                icon={<Filter size={13} />}
+                size="sm"
+                buttonClassName="h-[36px] border-slate-200 rounded-xl"
+              />
+            </div>
+
+            {/* Payment Status Filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold text-slate-400 uppercase hidden xl:inline">Payment:</span>
+              <CustomSelect
+                options={paymentStatusOptions}
+                value={paymentStatusFilter}
+                onChange={setPaymentStatusFilter}
+                icon={<Tag size={13} />}
+                size="sm"
+                buttonClassName="h-[36px] border-slate-200 rounded-xl"
+              />
+            </div>
+
+            {/* Search Input */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search orders..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-3.5 pr-8 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 h-[36px] bg-slate-50/50 w-36 sm:w-48"
+              />
+              <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+
+            {/* Reset Filters Button */}
+            {(selectedDate !== getTodayDateStr() || orderStatusFilter !== 'All' || paymentStatusFilter !== 'All' || searchTerm !== '') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDate(getTodayDateStr());
+                  setOrderStatusFilter('All');
+                  setPaymentStatusFilter('All');
+                  setSearchTerm('');
+                }}
+                className="px-2.5 py-1.5 h-[36px] rounded-xl text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 transition-colors cursor-pointer"
+                title="Reset all filters to defaults"
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -611,7 +829,7 @@ export default function OrdersClient() {
           <div>
             <p className="text-[11px] text-slate-400 font-semibold">Total Orders</p>
             <h3 className="text-lg font-extrabold text-slate-900">{totalOrdersCount}</h3>
-            <p className="text-[10px] text-emerald-600 font-bold">+12.5% vs yesterday</p>
+            <p className="text-[10px] text-emerald-600 font-bold">Filtered count</p>
           </div>
         </div>
 
@@ -625,7 +843,7 @@ export default function OrdersClient() {
             <h3 className="text-sm font-extrabold text-slate-900">
               ₹ {totalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </h3>
-            <p className="text-[10px] text-emerald-600 font-bold">+18.3% vs yesterday</p>
+            <p className="text-[10px] text-emerald-600 font-bold">Filtered total</p>
           </div>
         </div>
 
@@ -637,7 +855,7 @@ export default function OrdersClient() {
           <div>
             <p className="text-[11px] text-slate-400 font-semibold">Confirmed Orders</p>
             <h3 className="text-lg font-extrabold text-slate-900">{confirmedCount}</h3>
-            <p className="text-[10px] text-slate-400">38.5% of total</p>
+            <p className="text-[10px] text-slate-400">Created/Confirmed</p>
           </div>
         </div>
 
@@ -649,7 +867,7 @@ export default function OrdersClient() {
           <div>
             <p className="text-[11px] text-slate-400 font-semibold">Pending Orders</p>
             <h3 className="text-lg font-extrabold text-slate-900">{pendingCount}</h3>
-            <p className="text-[10px] text-slate-400">26.9% of total</p>
+            <p className="text-[10px] text-slate-400">Status/Payment</p>
           </div>
         </div>
 
@@ -661,7 +879,7 @@ export default function OrdersClient() {
           <div>
             <p className="text-[11px] text-slate-400 font-semibold">Processing Orders</p>
             <h3 className="text-lg font-extrabold text-slate-900">{processingCount}</h3>
-            <p className="text-[10px] text-slate-400">23.1% of total</p>
+            <p className="text-[10px] text-slate-400">In workflow</p>
           </div>
         </div>
 
@@ -673,48 +891,42 @@ export default function OrdersClient() {
           <div>
             <p className="text-[11px] text-slate-400 font-semibold">Delivered Orders</p>
             <h3 className="text-lg font-extrabold text-slate-900">{deliveredCount}</h3>
-            <p className="text-[10px] text-slate-400">11.5% of total</p>
+            <p className="text-[10px] text-slate-400">Completed</p>
           </div>
         </div>
       </div>
 
-      {/* ── 2. Navigation Sub-Tabs (Orders by Slot vs Orders List) ── */}
+      {/* ── 3. Navigation Sub-Tabs (Orders by Slot vs Orders List) ── */}
       <div className="flex items-center justify-between border-b border-slate-200 pb-2">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setActiveTab('slot')}
-            className={`px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold transition-all cursor-pointer ${activeTab === 'slot'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-              }`}
+            className={`px-[12px] py-[6px] rounded-[8px] text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'slot'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
           >
-            Orders by Slot
+            Orders by Slot ({filteredOrders.length})
           </button>
           <button
             onClick={() => setActiveTab('list')}
-            className={`px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold transition-all cursor-pointer ${activeTab === 'list'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-              }`}
+            className={`px-[12px] py-[6px] rounded-[8px] text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'list'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
           >
-            Orders List ({orders.length})
+            Orders List ({filteredOrders.length})
           </button>
         </div>
-
-        <button
-          onClick={() => handleOpenAddOrderModal('9:00 AM - 12:00 PM')}
-          className="flex items-center justify-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-gradient-to-br from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
-        >
-          <Plus size={16} />
-          <span>Add New Order</span>
-        </button>
       </div>
 
-      {/* ── 3. SLOT VIEW (Grid of 4 Time Slots as shown in image) ───── */}
+      {/* ── 4. SLOT VIEW (Grid of 4 Time Slots - WITHOUT visible scrollbar) ───── */}
       {activeTab === 'slot' && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {SLOT_TIMES.map((slotTime) => {
-            const slotOrders = orders.filter((o) => o.slot === slotTime);
+            const slotOrders = filteredOrders.filter((o) => o.slot === slotTime);
 
             return (
               <div
@@ -738,11 +950,14 @@ export default function OrdersClient() {
                   </div>
                 </div>
 
-                {/* Order Cards List inside Slot */}
-                <div className="p-3 space-y-3 flex-1 max-h-[550px] overflow-y-auto">
+                {/* Order Cards List inside Slot - NO SCROLLBAR */}
+                <div
+                  className="p-3 space-y-3 flex-1 max-h-[550px] overflow-y-auto no-scrollbar"
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                >
                   {slotOrders.length === 0 ? (
-                    <div className="py-10 text-center text-slate-400 text-xs">
-                      No orders in this slot yet.
+                    <div className="py-10 text-center text-slate-400 text-xs font-medium">
+                      No orders in this slot for the selected filters.
                     </div>
                   ) : (
                     slotOrders.map((order) => (
@@ -823,7 +1038,7 @@ export default function OrdersClient() {
                 <div className="p-3 text-center border-t border-slate-100 bg-slate-50/30">
                   <button
                     onClick={() => setActiveTab('list')}
-                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
                   >
                     View all {slotOrders.length} orders →
                   </button>
@@ -834,28 +1049,13 @@ export default function OrdersClient() {
         </div>
       )}
 
-      {/* ── 4. LIST VIEW TAB ────────────────────────────────────────── */}
+      {/* ── 5. LIST VIEW TAB ────────────────────────────────────────── */}
       {activeTab === 'list' && (
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-          <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="relative w-full sm:w-64">
-              <input
-                type="text"
-                placeholder="Search orders..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-3.5 pr-9 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
-              />
-              <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            </div>
-
-            <CustomSelect
-              options={statusFilterOptions}
-              value={statusFilter}
-              onChange={setStatusFilter}
-              icon={<Filter size={14} />}
-              size="md"
-            />
+          <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
+            <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+              Showing {filteredOrders.length} of {orders.length} total orders
+            </span>
           </div>
 
           <div className="overflow-x-auto">
@@ -873,14 +1073,14 @@ export default function OrdersClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-                {orders.length === 0 ? (
+                {filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
-                      No orders created yet.
+                    <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
+                      No orders found matching the selected date and status filters.
                     </td>
                   </tr>
                 ) : (
-                  orders.map((order) => (
+                  filteredOrders.map((order) => (
                     <tr
                       key={order.id}
                       onClick={() => navigateToOrder(order.id)}

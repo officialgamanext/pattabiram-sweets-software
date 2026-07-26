@@ -306,7 +306,7 @@ export default function ItemsClient() {
       const itemRef = doc(db, 'items', editingItem.id);
       await updateDoc(itemRef, {
         name: editItemForm.name,
-        price: parseFloat(editItemItemFormPrice(editItemForm.price)) || 0,
+        price: parseFloat(editItemForm.price) || 0,
         category: editItemForm.category,
         unit: editItemForm.unit,
         manufacturingUnitName: editItemForm.manufacturingUnitName,

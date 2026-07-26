@@ -22,6 +22,8 @@ import {
   Zap,
 } from 'lucide-react';
 
+import CustomSelect from '@/components/CustomSelect';
+
 const CONTACT_INFO = {
   mobile: '6281288314',
   formattedMobile: '+91 62812 88314',
@@ -347,15 +349,17 @@ export default function SupportClient() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5">Priority Level</label>
-                    <select
+                    <CustomSelect
+                      options={[
+                        { value: 'Normal', label: 'Normal Priority' },
+                        { value: 'High', label: 'High Priority' },
+                        { value: 'Urgent', label: 'Urgent / Downtime' },
+                      ]}
                       value={formPriority}
-                      onChange={(e) => setFormPriority(e.target.value as any)}
-                      className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold text-slate-700"
-                    >
-                      <option value="Normal">Normal Priority</option>
-                      <option value="High">High Priority</option>
-                      <option value="Urgent">Urgent / Downtime</option>
-                    </select>
+                      onChange={(val) => setFormPriority(val as any)}
+                      className="w-full"
+                      buttonClassName="w-full"
+                    />
                   </div>
                 </div>
 

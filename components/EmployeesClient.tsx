@@ -25,7 +25,9 @@ import {
   UserCheck,
   Award,
   Upload,
-  User
+  User,
+  Lock,
+  ShieldCheck
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import {
@@ -41,6 +43,13 @@ import {
 } from 'firebase/firestore';
 import CustomSelect from '@/components/CustomSelect';
 import { uploadToImageKit } from '@/lib/imageCompressor';
+import {
+  APP_MENUS,
+  MenuAccessPermission,
+  getMergedEmployeePermissions
+} from '@/lib/menuConstants';
+
+export type { MenuAccessPermission };
 
 export interface EmployeeRecord {
   id: string;
@@ -56,6 +65,7 @@ export interface EmployeeRecord {
   photoUrl: string;
   department: string;
   status: 'active' | 'inactive';
+  permissions?: MenuAccessPermission[];
   createdAt?: any;
 }
 
@@ -129,6 +139,8 @@ export default function EmployeesClient() {
   const [formDepartment, setFormDepartment] = useState('Production');
   const [formPhotoUrl, setFormPhotoUrl] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isDetectingGps, setIsDetectingGps] = useState(false);
+  const [formPermissions, setFormPermissions] = useState<Record<string, MenuAccessPermission>>({});
   
   // Camera capture state
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -194,6 +206,9 @@ export default function EmployeesClient() {
       setFormAddress(emp.address || '');
       setFormDepartment(emp.department || 'Production');
       setFormPhotoUrl(emp.photoUrl || '');
+
+      // Load dynamically merged permissions (any new menu added to APP_MENUS automatically appears!)
+      setFormPermissions(getMergedEmployeePermissions(emp.permissions));
     } else {
       setEditingEmp(null);
       setFormName('');
@@ -206,6 +221,7 @@ export default function EmployeesClient() {
       setFormAddress('');
       setFormDepartment('Production');
       setFormPhotoUrl('');
+      setFormPermissions(getMergedEmployeePermissions());
     }
     setIsModalOpen(true);
   };
@@ -216,18 +232,57 @@ export default function EmployeesClient() {
     setEditingEmp(null);
   };
 
-  // Geolocation detector
+  // Permission toggles
+  const handleTogglePermission = (key: string, type: 'view' | 'edit', val: boolean) => {
+    setFormPermissions((prev) => {
+      const current = prev[key] || { menuKey: key, menuName: APP_MENUS.find((m) => m.key === key)?.name || key, view: false, edit: false };
+      const updated = { ...current, [type]: val };
+      if (type === 'edit' && val) {
+        updated.view = true;
+      }
+      return { ...prev, [key]: updated };
+    });
+  };
+
+  const handleSelectAllViewPermissions = () => {
+    setFormPermissions((prev) => {
+      const updated = { ...prev };
+      const allChecked = APP_MENUS.every((m) => prev[m.key]?.view);
+      APP_MENUS.forEach((m) => {
+        const curr = updated[m.key] || { menuKey: m.key, menuName: m.name, view: false, edit: false };
+        updated[m.key] = { ...curr, view: !allChecked };
+      });
+      return updated;
+    });
+  };
+
+  const handleSelectAllEditPermissions = () => {
+    setFormPermissions((prev) => {
+      const updated = { ...prev };
+      const allChecked = APP_MENUS.every((m) => prev[m.key]?.edit);
+      APP_MENUS.forEach((m) => {
+        const curr = updated[m.key] || { menuKey: m.key, menuName: m.name, view: false, edit: false };
+        updated[m.key] = { ...curr, edit: !allChecked, view: !allChecked ? true : curr.view };
+      });
+      return updated;
+    });
+  };
+
+  // Geolocation detector with live loading spinner
   const handleGetLocation = () => {
     if ('geolocation' in navigator) {
+      setIsDetectingGps(true);
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setFormLat(position.coords.latitude.toFixed(6));
           setFormLng(position.coords.longitude.toFixed(6));
+          setIsDetectingGps(false);
         },
         (error) => {
           alert('Could not retrieve GPS location: ' + error.message);
+          setIsDetectingGps(false);
         },
-        { enableHighAccuracy: true }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else {
       alert('Geolocation is not supported by your browser.');
@@ -331,6 +386,7 @@ export default function EmployeesClient() {
         photoUrl: finalPhotoUrl,
         department: formDepartment,
         status: 'active' as const,
+        permissions: Object.values(formPermissions)
       };
 
       if (editingEmp) {
@@ -645,22 +701,27 @@ export default function EmployeesClient() {
         </div>
       )}
 
-      {/* Add / Edit Employee Modal */}
+      {/* Add / Edit Employee Full-Screen Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-2xl my-8 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full h-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="p-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
                   <UserCheck size={20} />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold text-slate-900">
-                    {editingEmp ? 'Edit Employee Details' : 'Add New Employee'}
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    {editingEmp ? 'Edit Employee Profile & Access' : 'Add New Employee'}
+                    {editingEmp && (
+                      <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                        {editingEmp.empId}
+                      </span>
+                    )}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Enter workforce information, geofence coordinates & reference face photo
+                    Employee profile details, geofence site coordinates, reference face photo & menu access controls.
                   </p>
                 </div>
               </div>
@@ -674,239 +735,346 @@ export default function EmployeesClient() {
             </div>
 
             {/* Modal Form Content */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
-              
-              {/* Row 1: Name & Mobile */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Employee Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Ramesh Kumar"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Mobile Number <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="e.g. +91 98765 43210"
-                    value={formMobile}
-                    onChange={(e) => setFormMobile(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Row 2: Payment Mode & Salary Amount & Accepted Leaves */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Payment Mode <span className="text-rose-500">*</span>
-                  </label>
-                  <CustomSelect
-                    options={[
-                      { value: 'monthly', label: 'Monthly Salary' },
-                      { value: 'daily', label: 'Daily Wage' },
-                    ]}
-                    value={formMode}
-                    onChange={(val) => setFormMode(val as 'monthly' | 'daily')}
-                    className="w-full"
-                    buttonClassName="w-full"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Salary Amount (₹) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    placeholder={formMode === 'monthly' ? 'e.g. 25000' : 'e.g. 800'}
-                    value={formSalary}
-                    onChange={(e) => setFormSalary(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Accepted Leaves (Mo)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="e.g. 2"
-                    value={formLeaves}
-                    onChange={(e) => setFormLeaves(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Row 3: Department & Address */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Department</label>
-                  <CustomSelect
-                    options={[
-                      { value: 'Production', label: 'Production & Kitchen' },
-                      { value: 'Packing', label: 'Packing & Dispatch' },
-                      { value: 'Store & Billing', label: 'Store & Sales' },
-                      { value: 'Management', label: 'Management & Admin' },
-                    ]}
-                    value={formDepartment}
-                    onChange={(val) => setFormDepartment(val)}
-                    className="w-full"
-                    buttonClassName="w-full"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Full Address</label>
-                  <input
-                    type="text"
-                    placeholder="Residential address..."
-                    value={formAddress}
-                    onChange={(e) => setFormAddress(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Attendance Geo-location Section */}
-              <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-indigo-950 flex items-center gap-1.5">
-                    <MapPin size={16} className="text-indigo-600" />
-                    Assigned Attendance GPS Geofence Coordinates
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleGetLocation}
-                    className="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-semibold px-3 py-1 rounded-lg transition-colors cursor-pointer"
-                  >
-                    <Navigation size={12} /> Detect Current GPS
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                
+                {/* Row 1: Name & Mobile */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <span className="text-[10px] font-semibold text-slate-500 uppercase">Latitude</span>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Employee Name <span className="text-rose-500">*</span>
+                    </label>
                     <input
-                      type="number"
-                      step="any"
-                      placeholder="e.g. 13.1189"
-                      value={formLat}
-                      onChange={(e) => setFormLat(e.target.value)}
-                      className="w-full mt-0.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono bg-white text-slate-900"
+                      type="text"
+                      required
+                      placeholder="e.g. Ramesh Kumar"
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
+
                   <div>
-                    <span className="text-[10px] font-semibold text-slate-500 uppercase">Longitude</span>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Mobile Number <span className="text-rose-500">*</span>
+                    </label>
                     <input
-                      type="number"
-                      step="any"
-                      placeholder="e.g. 80.0967"
-                      value={formLng}
-                      onChange={(e) => setFormLng(e.target.value)}
-                      className="w-full mt-0.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono bg-white text-slate-900"
+                      type="tel"
+                      required
+                      placeholder="e.g. +91 98765 43210"
+                      value={formMobile}
+                      onChange={(e) => setFormMobile(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
                 </div>
-              </div>
 
-              {/* Live Photo Capture Section */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                <label className="block text-xs font-semibold text-slate-900 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Camera size={16} className="text-indigo-600" />
-                    Live Photo Capture (Face Identification Reference)
-                  </span>
-                  <span className="text-[10px] font-medium text-slate-500">
-                    Used for biometric face verification at attendance
-                  </span>
-                </label>
-
-                {/* Camera View or Captured Photo Preview */}
-                <div className="flex flex-col sm:flex-row items-center gap-4">
-                  {/* Photo Display Frame */}
-                  <div className="w-36 h-36 rounded-2xl border-2 border-dashed border-slate-300 bg-white flex flex-col items-center justify-center overflow-hidden relative shadow-xs">
-                    {isCameraActive ? (
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-full h-full object-cover"
-                      />
-                    ) : formPhotoUrl ? (
-                      <img
-                        src={formPhotoUrl}
-                        alt="Captured Employee Live Reference"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="text-center p-2 text-slate-400">
-                        <Camera size={32} className="mx-auto mb-1 opacity-60" />
-                        <span className="text-[10px] font-semibold block">No Live Photo</span>
-                      </div>
-                    )}
+                {/* Row 2: Payment Mode & Salary Amount & Accepted Leaves */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Payment Mode <span className="text-rose-500">*</span>
+                    </label>
+                    <CustomSelect
+                      options={[
+                        { value: 'monthly', label: 'Monthly Salary' },
+                        { value: 'daily', label: 'Daily Wage' },
+                      ]}
+                      value={formMode}
+                      onChange={(val) => setFormMode(val as 'monthly' | 'daily')}
+                      className="w-full"
+                      buttonClassName="w-full"
+                    />
                   </div>
 
-                  {/* Camera Control Buttons */}
-                  <div className="flex-1 space-y-2 w-full">
-                    {isCameraActive ? (
-                      <button
-                        type="button"
-                        onClick={capturePhoto}
-                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <CheckCircle2 size={16} /> Snap Live Photo
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={startCamera}
-                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <Camera size={16} /> Start Webcam Capture
-                      </button>
-                    )}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Salary Amount (₹) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      placeholder={formMode === 'monthly' ? 'e.g. 25000' : 'e.g. 800'}
+                      value={formSalary}
+                      onChange={(e) => setFormSalary(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
 
-                    {cameraError && (
-                      <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1">
-                        <AlertCircle size={12} /> {cameraError}
-                      </p>
-                    )}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Accepted Leaves (Mo)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 2"
+                      value={formLeaves}
+                      onChange={(e) => setFormLeaves(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
 
-                    <div className="relative">
-                      <label className="w-full py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
-                        <Upload size={14} /> Upload Photo File
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                        />
-                      </label>
+                {/* Row 3: Department & Address */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Department</label>
+                    <CustomSelect
+                      options={[
+                        { value: 'Production', label: 'Production & Kitchen' },
+                        { value: 'Packing', label: 'Packing & Dispatch' },
+                        { value: 'Store & Billing', label: 'Store & Sales' },
+                        { value: 'Management', label: 'Management & Admin' },
+                      ]}
+                      value={formDepartment}
+                      onChange={(val) => setFormDepartment(val)}
+                      className="w-full"
+                      buttonClassName="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Full Address</label>
+                    <input
+                      type="text"
+                      placeholder="Residential address..."
+                      value={formAddress}
+                      onChange={(e) => setFormAddress(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Attendance Geo-location Section */}
+                <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-indigo-950 flex items-center gap-1.5">
+                      <MapPin size={16} className="text-indigo-600" />
+                      Assigned Attendance GPS Geofence Coordinates
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleGetLocation}
+                      disabled={isDetectingGps}
+                      className={`inline-flex items-center gap-1.5 text-white text-[11px] font-semibold px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                        isDetectingGps ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'
+                      }`}
+                    >
+                      {isDetectingGps ? (
+                        <>
+                          <RefreshCw size={12} className="animate-spin" /> Fetching GPS...
+                        </>
+                      ) : (
+                        <>
+                          <Navigation size={12} /> Detect Current GPS
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase">Latitude</span>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="e.g. 13.1189"
+                        value={formLat}
+                        onChange={(e) => setFormLat(e.target.value)}
+                        className="w-full mt-0.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono bg-white text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase">Longitude</span>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="e.g. 80.0967"
+                        value={formLng}
+                        onChange={(e) => setFormLng(e.target.value)}
+                        className="w-full mt-0.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono bg-white text-slate-900"
+                      />
                     </div>
                   </div>
                 </div>
+
+                {/* Live Photo Capture Section */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                  <label className="block text-xs font-semibold text-slate-900 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Camera size={16} className="text-indigo-600" />
+                      Live Photo Capture (Face Identification Reference)
+                    </span>
+                    <span className="text-[10px] font-medium text-slate-500">
+                      Used for biometric face verification at attendance
+                    </span>
+                  </label>
+
+                  {/* Camera View or Captured Photo Preview */}
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    {/* Photo Display Frame */}
+                    <div className="w-32 h-32 rounded-2xl border-2 border-dashed border-slate-300 bg-white flex flex-col items-center justify-center overflow-hidden relative shadow-xs flex-shrink-0">
+                      {isCameraActive ? (
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover"
+                        />
+                      ) : formPhotoUrl ? (
+                        <img
+                          src={formPhotoUrl}
+                          alt="Captured Employee Live Reference"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-center p-2 text-slate-400">
+                          <Camera size={28} className="mx-auto mb-1 opacity-60" />
+                          <span className="text-[10px] font-semibold block">No Live Photo</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Camera Control Buttons */}
+                    <div className="flex-1 space-y-2 w-full">
+                      {isCameraActive ? (
+                        <button
+                          type="button"
+                          onClick={capturePhoto}
+                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <CheckCircle2 size={16} /> Snap Live Photo
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={startCamera}
+                          className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Camera size={16} /> Start Webcam Capture
+                        </button>
+                      )}
+
+                      {cameraError && (
+                        <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1">
+                          <AlertCircle size={12} /> {cameraError}
+                        </p>
+                      )}
+
+                      <div className="relative">
+                        <label className="w-full py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
+                          <Upload size={14} /> Upload Photo File
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileUpload}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* System Menu Access Permissions Section */}
+                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                        <ShieldCheck size={16} className="text-indigo-600" />
+                        System Menu Access Permissions & Privilege Control
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Configure View and Edit access privileges for all software module menus for this employee.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSelectAllViewPermissions}
+                        className="px-2.5 py-1 text-[11px] font-semibold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                      >
+                        Toggle All View
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSelectAllEditPermissions}
+                        className="px-2.5 py-1 text-[11px] font-semibold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                      >
+                        Toggle All Edit
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Permissions Table Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {APP_MENUS.map((menu) => {
+                      const perm = formPermissions[menu.key] || { menuKey: menu.key, menuName: menu.name, view: false, edit: false };
+                      const isDefaultPortal = menu.key === 'employee_portal';
+
+                      return (
+                        <div
+                          key={menu.key}
+                          className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                            perm.view || perm.edit
+                              ? 'bg-white border-indigo-200 shadow-xs'
+                              : 'bg-white/60 border-slate-200/80 opacity-80'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div
+                              className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                                perm.view ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'
+                              }`}
+                            >
+                              <Lock size={13} />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-800 truncate">{menu.name}</p>
+                              {isDefaultPortal && (
+                                <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100 inline-block">
+                                  Default View Access
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            {/* View Checkbox */}
+                            <label className="flex items-center gap-1 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={perm.view}
+                                onChange={(e) => handleTogglePermission(menu.key, 'view', e.target.checked)}
+                                className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                              />
+                              <span className="text-[11px] font-semibold text-slate-600">View</span>
+                            </label>
+
+                            {/* Edit Checkbox */}
+                            <label className="flex items-center gap-1 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={perm.edit}
+                                onChange={(e) => handleTogglePermission(menu.key, 'edit', e.target.checked)}
+                                className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                              />
+                              <span className="text-[11px] font-semibold text-slate-600">Edit</span>
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
               </div>
 
               {/* Modal Actions Footer */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+              <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3 flex-shrink-0">
                 <button
                   type="button"
                   onClick={handleCloseModal}
@@ -930,7 +1098,7 @@ export default function EmployeesClient() {
                     </>
                   ) : (
                     <>
-                      <Check size={16} /> Save Employee
+                      <Check size={16} /> Save Employee Profile & Access
                     </>
                   )}
                 </button>

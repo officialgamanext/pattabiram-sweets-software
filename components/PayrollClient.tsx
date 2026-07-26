@@ -118,6 +118,30 @@ function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lo
   return Math.round(R * c);
 }
 
+// Helper to merge local & Firestore attendance records without losing any entry
+const mergeAttendanceRecords = (
+  firestoreRecords: AttendanceRecord[],
+  localRecords: AttendanceRecord[]
+): AttendanceRecord[] => {
+  const map = new Map<string, AttendanceRecord>();
+
+  (localRecords || []).forEach((item) => {
+    if (item && (item.employeeId || item.employeeName) && item.date) {
+      const key = `${item.employeeId || item.employeeName}_${item.date}`;
+      map.set(key, item);
+    }
+  });
+
+  (firestoreRecords || []).forEach((item) => {
+    if (item && (item.employeeId || item.employeeName) && item.date) {
+      const key = `${item.employeeId || item.employeeName}_${item.date}`;
+      map.set(key, item);
+    }
+  });
+
+  return Array.from(map.values());
+};
+
 export default function PayrollClient() {
   const [activeTab, setActiveTab] = useState<'attendance' | 'salary'>('attendance');
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
@@ -179,33 +203,87 @@ export default function PayrollClient() {
       });
     } catch {}
 
+
+
     // Sync Attendance records
+    let currentLocal: AttendanceRecord[] = [];
     const localAtt = localStorage.getItem('pattabiram_attendance');
     if (localAtt) {
-      setAttendanceList(JSON.parse(localAtt));
+      try {
+        currentLocal = JSON.parse(localAtt);
+        setAttendanceList(currentLocal);
+      } catch {}
     }
 
     try {
       const qAtt = query(collection(db, 'attendance'));
       onSnapshot(qAtt, (snapshot) => {
-        if (!snapshot.empty) {
-          const list: AttendanceRecord[] = snapshot.docs.map((d) => ({
+        const firestoreList: AttendanceRecord[] = snapshot.docs.map((d) => {
+          const data = d.data();
+          return {
             id: d.id,
-            ...(d.data() as Omit<AttendanceRecord, 'id'>)
-          }));
-          setAttendanceList(list);
-          localStorage.setItem('pattabiram_attendance', JSON.stringify(list));
+            employeeId: data.employeeId || '',
+            employeeName: data.employeeName || '',
+            date: data.date || '',
+            checkInTime: data.checkInTime || '09:00 AM',
+            status: data.status || 'Present',
+            latitude: data.latitude,
+            longitude: data.longitude,
+            distanceMeters: data.distanceMeters || 0,
+            faceVerified: Boolean(data.faceVerified)
+          };
+        });
+
+        let freshLocal: AttendanceRecord[] = [];
+        const raw = localStorage.getItem('pattabiram_attendance');
+        if (raw) {
+          try {
+            freshLocal = JSON.parse(raw);
+          } catch {}
         }
+
+        const merged = mergeAttendanceRecords(firestoreList, freshLocal);
+        setAttendanceList(merged);
+        localStorage.setItem('pattabiram_attendance', JSON.stringify(merged));
       });
-    } catch {}
+    } catch (err) {
+      console.warn('Firestore attendance load warning:', err);
+    }
 
     setLoading(false);
   }, []);
 
   const saveAttendanceList = (newList: AttendanceRecord[]) => {
-    setAttendanceList(newList);
-    localStorage.setItem('pattabiram_attendance', JSON.stringify(newList));
+    let existingLocal: AttendanceRecord[] = [];
+    const raw = localStorage.getItem('pattabiram_attendance');
+    if (raw) {
+      try {
+        existingLocal = JSON.parse(raw);
+      } catch {}
+    }
+
+    const merged = mergeAttendanceRecords(newList, existingLocal);
+    setAttendanceList(merged);
+    localStorage.setItem('pattabiram_attendance', JSON.stringify(merged));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('pattabiram_attendance_updated'));
+    }
   };
+
+  useEffect(() => {
+    const handleSync = () => {
+      const localAtt = localStorage.getItem('pattabiram_attendance');
+      if (localAtt) {
+        setAttendanceList(JSON.parse(localAtt));
+      }
+    };
+    window.addEventListener('storage', handleSync);
+    window.addEventListener('pattabiram_attendance_updated', handleSync);
+    return () => {
+      window.removeEventListener('storage', handleSync);
+      window.removeEventListener('pattabiram_attendance_updated', handleSync);
+    };
+  }, []);
 
   // Start Attendance marking process for an employee
   const handleStartAttendance = (emp: EmployeeRecord) => {
@@ -339,10 +417,20 @@ export default function PayrollClient() {
     try {
       try {
         await addDoc(collection(db, 'attendance'), {
-          ...newRecord,
+          employeeId: newRecord.employeeId,
+          employeeName: newRecord.employeeName,
+          date: newRecord.date,
+          checkInTime: newRecord.checkInTime,
+          status: newRecord.status,
+          latitude: newRecord.latitude || 0,
+          longitude: newRecord.longitude || 0,
+          distanceMeters: newRecord.distanceMeters || 0,
+          faceVerified: Boolean(newRecord.faceVerified),
           createdAt: serverTimestamp()
         });
-      } catch {}
+      } catch (fbErr) {
+        console.warn('Firebase attendance save error:', fbErr);
+      }
 
       // Replace existing attendance record for today if exists
       const filtered = attendanceList.filter(
@@ -715,7 +803,11 @@ export default function PayrollClient() {
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {employees.map((emp) => {
                     const todayRecord = attendanceList.find(
-                      (a) => a.employeeId === emp.id && a.date === selectedDate
+                      (a) =>
+                        (a.employeeId === emp.id ||
+                          a.employeeId === emp.empId ||
+                          (a.employeeName && a.employeeName.toLowerCase().trim() === emp.name.toLowerCase().trim())) &&
+                        a.date === selectedDate
                     );
                     const isPresent = todayRecord?.status === 'Present';
 

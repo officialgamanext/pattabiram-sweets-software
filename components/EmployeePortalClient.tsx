@@ -295,7 +295,7 @@ export default function EmployeePortalClient() {
           <div>
             <h3 className="text-sm font-semibold text-slate-900">Assigned Geofenced Workplace Site</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Attendance GPS Geofence Target: <span className="font-mono text-slate-800 font-semibold">{selectedEmp.latitude || 13.1189}, {selectedEmp.longitude || 80.0967}</span> (Max distance allowed: 50m)
+              Attendance GPS Geofence Target: <span className="font-mono text-slate-800 font-semibold">{selectedEmp.latitude || 13.1189}, {selectedEmp.longitude || 80.0967}</span> (Max distance allowed: 100m)
             </p>
           </div>
         </div>

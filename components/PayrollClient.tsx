@@ -221,8 +221,8 @@ export default function PayrollClient() {
           const dist = getHaversineDistanceMeters(uLat, uLng, eLat, eLng);
           setCurrentDistance(dist);
 
-          if (dist <= 50) {
-            // Location in range (<= 50 meters) -> Move to Face Verification
+          if (dist <= 100) {
+            // Location in range (<= 100 meters) -> Move to Face Verification
             setVerificationStep('face');
             startFaceCamera();
           } else {
@@ -426,7 +426,7 @@ export default function PayrollClient() {
 
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <span className="flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
-                <ShieldCheck size={14} /> GPS 50m Range Geofence Active
+                <ShieldCheck size={14} /> GPS 100m Range Geofence Active
               </span>
               <span className="flex items-center gap-1 font-semibold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
                 <Camera size={14} /> Face ID Verification Enabled
@@ -713,7 +713,7 @@ export default function PayrollClient() {
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900">Requesting GPS Location...</h4>
                   <p className="text-xs text-slate-500 mt-1">
-                    Verifying if user is within 50 meters of assigned site ({targetEmp.latitude}, {targetEmp.longitude})
+                    Verifying if user is within 100 meters of assigned site ({targetEmp.latitude}, {targetEmp.longitude})
                   </p>
                 </div>
               </div>
@@ -731,7 +731,7 @@ export default function PayrollClient() {
                     Current distance: <span className="font-semibold text-rose-700 text-sm">{currentDistance} meters</span> away.
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    Attendance can only be marked within <span className="font-semibold text-slate-800">50 meters</span> of assigned location.
+                    Attendance can only be marked within <span className="font-semibold text-slate-800">100 meters</span> of assigned location.
                   </p>
                 </div>
 
@@ -760,7 +760,7 @@ export default function PayrollClient() {
               <div className="p-6 space-y-4 text-center">
                 <div className="bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-xl border border-emerald-200 text-xs font-semibold flex items-center justify-center gap-1.5">
                   <ShieldCheck size={16} className="text-emerald-600" />
-                  GPS In Range ({currentDistance || 0}m away ≤ 50m)
+                  GPS In Range ({currentDistance || 0}m away ≤ 100m)
                 </div>
 
                 {/* Webcam scanner frame */}

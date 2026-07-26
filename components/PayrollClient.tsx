@@ -712,11 +712,11 @@ export default function PayrollClient() {
   return (
     <div className="w-full flex flex-col gap-6 font-sans pb-12">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md">
-              <CreditCard size={22} />
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+              <CreditCard size={20} />
             </div>
             Payroll & Attendance Management
           </h1>
@@ -731,23 +731,23 @@ export default function PayrollClient() {
         <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
           <button
             onClick={() => setActiveTab('attendance')}
-            className={`px-5 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'attendance'
                 ? 'bg-white text-indigo-600 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <UserCheck size={16} /> Attendance Geofence & Face ID
+            <UserCheck size={15} /> Attendance & Face ID
           </button>
           <button
             onClick={() => setActiveTab('salary')}
-            className={`px-5 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'salary'
                 ? 'bg-white text-emerald-600 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <DollarSign size={16} /> Salary & Payout Calculations
+            <DollarSign size={15} /> Salary Calculations
           </button>
         </div>
       </div>

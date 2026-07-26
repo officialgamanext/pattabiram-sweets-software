@@ -686,11 +686,11 @@ export default function EmployeePortalClient() {
   return (
     <div className="w-full flex flex-col gap-6 font-sans pb-12">
       {/* Top Header & Employee Selector */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md">
-              <UserCheck size={22} />
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+              <UserCheck size={20} />
             </div>
             Employee Self-Service Portal
           </h1>
@@ -704,7 +704,7 @@ export default function EmployeePortalClient() {
         </div>
 
         {/* Employee Switcher */}
-        <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
           <span className="text-xs font-bold text-slate-600 pl-2">Select Employee View:</span>
           <CustomSelect
             options={employees.map((emp) => ({ value: emp.id, label: `${emp.name} (${emp.empId})` }))}
@@ -716,65 +716,61 @@ export default function EmployeePortalClient() {
       </div>
 
       {/* Profile Header Banner */}
-      <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white rounded-3xl shadow-lg p-6 overflow-hidden relative">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
-          
-          <div className="flex items-center gap-5">
-            <div className="relative w-20 h-20 rounded-2xl overflow-hidden border-2 border-indigo-300/40 shadow-md bg-indigo-950">
-              <img
-                src={selectedEmp.photoUrl || '/logo.png'}
-                alt={selectedEmp.name}
-                className="w-full h-full object-cover"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h2 className="text-2xl font-bold tracking-tight">{selectedEmp.name}</h2>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-white/20 text-white border border-white/30 font-mono">
-                  {selectedEmp.empId}
-                </span>
-              </div>
-              
-              <p className="text-xs text-indigo-200 mt-1 flex items-center gap-2 font-medium">
-                <Briefcase size={14} className="text-indigo-300" />
-                {selectedEmp.department || 'Production'} • Mobile: <span className="font-mono text-white font-bold">{selectedEmp.mobile}</span>
-              </p>
-
-              {selectedEmp.address && (
-                <p className="text-[11px] text-indigo-300 mt-1 line-clamp-1 font-medium">
-                  Address: {selectedEmp.address}
-                </p>
-              )}
-            </div>
+      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+        <div className="flex items-center gap-4">
+          <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-slate-200 shadow-xs bg-slate-100 flex-shrink-0">
+            <img
+              src={selectedEmp.photoUrl || '/logo.png'}
+              alt={selectedEmp.name}
+              className="w-full h-full object-cover"
+            />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 bg-white/10 p-4 rounded-2xl backdrop-blur-xs border border-white/10 w-full md:w-auto justify-between">
-            <div>
-              <p className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">Payment Mode</p>
-              <span className="text-xs font-bold uppercase bg-emerald-500 text-white px-2.5 py-0.5 rounded-md mt-1 inline-block shadow-xs">
-                {selectedEmp.paymentMode}
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-slate-900 tracking-tight">{selectedEmp.name}</h2>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 font-mono">
+                {selectedEmp.empId}
               </span>
             </div>
+            
+            <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 font-medium">
+              <Briefcase size={13} className="text-slate-400" />
+              {selectedEmp.department || 'Production'} • Mobile: <span className="font-mono text-slate-800 font-bold">{selectedEmp.mobile}</span>
+            </p>
 
-            <div className="border-l border-white/20 pl-3">
-              <p className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">Base Rate</p>
-              <p className="text-sm font-bold text-white mt-0.5">
-                ₹{selectedEmp.salary.toLocaleString('en-IN')}{' '}
-                <span className="text-[10px] text-indigo-300 font-normal">
-                  ({selectedEmp.paymentMode === 'monthly' ? '/mo' : '/day'})
-                </span>
+            {selectedEmp.address && (
+              <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                Address: {selectedEmp.address}
               </p>
-            </div>
+            )}
+          </div>
+        </div>
 
-            <div className="border-l border-white/20 pl-3">
-              <p className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">Per Day Rate</p>
-              <p className="text-sm font-bold text-emerald-400 mt-0.5">
-                ₹{perDayRate.toLocaleString('en-IN')} / day
-              </p>
-            </div>
+        <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200/80 w-full md:w-auto justify-between">
+          <div>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Payment Mode</p>
+            <span className="text-xs font-bold uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md mt-0.5 inline-block border border-emerald-200">
+              {selectedEmp.paymentMode}
+            </span>
           </div>
 
+          <div className="border-l border-slate-200 pl-3">
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Base Rate</p>
+            <p className="text-xs font-bold text-slate-900 mt-0.5">
+              ₹{selectedEmp.salary.toLocaleString('en-IN')}{' '}
+              <span className="text-[10px] text-slate-400 font-normal">
+                ({selectedEmp.paymentMode === 'monthly' ? '/mo' : '/day'})
+              </span>
+            </p>
+          </div>
+
+          <div className="border-l border-slate-200 pl-3">
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Per Day Rate</p>
+            <p className="text-xs font-bold text-indigo-600 mt-0.5">
+              ₹{perDayRate.toLocaleString('en-IN')} / day
+            </p>
+          </div>
         </div>
       </div>
 

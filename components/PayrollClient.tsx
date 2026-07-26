@@ -148,6 +148,7 @@ export default function PayrollClient() {
   const scanIntervalRef = useRef<any>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const prevFrameDataRef = useRef<Uint8ClampedArray | null>(null);
+  const targetEmpRef = useRef<EmployeeRecord | null>(null);
 
   // Payslip modal state
   const [selectedPayslipEmp, setSelectedPayslipEmp] = useState<EmployeeRecord | null>(null);
@@ -209,6 +210,7 @@ export default function PayrollClient() {
   // Start Attendance marking process for an employee
   const handleStartAttendance = (emp: EmployeeRecord) => {
     setTargetEmp(emp);
+    targetEmpRef.current = emp;
     setVerificationStep('location');
     setCurrentDistance(null);
     setUserCoords(null);
@@ -247,6 +249,120 @@ export default function PayrollClient() {
     } else {
       alert('Geolocation is not supported by your browser.');
       setVerificationStep('idle');
+    }
+  };
+
+  const stopFaceCamera = () => {
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsFaceCameraActive(false);
+  };
+
+  // Play audio chime & spoken voice ("Attendance marked successfully")
+  const playAttendanceSuccessSound = (empName?: string) => {
+    try {
+      if (typeof window !== 'undefined' && (window.AudioContext || (window as any).webkitAudioContext)) {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+
+        const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5 notes
+        frequencies.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+
+          gain.gain.setValueAtTime(0.3, now + idx * 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.35);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(now + idx * 0.12);
+          osc.stop(now + idx * 0.12 + 0.35);
+        });
+      }
+    } catch (e) {
+      console.warn('Audio chime error:', e);
+    }
+
+    try {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const text = empName
+          ? `Attendance marked successfully for ${empName}`
+          : 'Attendance marked successfully';
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.rate = 1.0;
+        msg.pitch = 1.0;
+        msg.volume = 1.0;
+        msg.lang = 'en-US';
+        window.speechSynthesis.speak(msg);
+      }
+    } catch (e) {
+      console.warn('Speech synthesis error:', e);
+    }
+  };
+
+  // Confirm attendance save
+  const handleConfirmAttendance = async (overrideEmp?: EmployeeRecord) => {
+    const empToSave = overrideEmp || targetEmpRef.current || targetEmp;
+    if (!empToSave) return;
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = selectedDate;
+
+    const newRecord: AttendanceRecord = {
+      id: 'att-' + Date.now(),
+      employeeId: empToSave.id,
+      employeeName: empToSave.name,
+      date: dateStr,
+      checkInTime: timeStr,
+      status: 'Present',
+      latitude: userCoords?.lat,
+      longitude: userCoords?.lng,
+      distanceMeters: currentDistance || 0,
+      faceVerified: true
+    };
+
+    try {
+      try {
+        await addDoc(collection(db, 'attendance'), {
+          ...newRecord,
+          createdAt: serverTimestamp()
+        });
+      } catch {}
+
+      // Replace existing attendance record for today if exists
+      const filtered = attendanceList.filter(
+        (a) => !(a.employeeId === empToSave.id && a.date === dateStr)
+      );
+      saveAttendanceList([newRecord, ...filtered]);
+
+      stopFaceCamera();
+      setVerificationStep('success');
+
+      // Play audio chime + spoken voice audio
+      playAttendanceSuccessSound(empToSave.name);
+
+      setTimeout(() => {
+        setVerificationStep('idle');
+        setTargetEmp(null);
+        targetEmpRef.current = null;
+      }, 2800);
+    } catch (err) {
+      console.error('Failed to save attendance:', err);
     }
   };
 
@@ -438,16 +554,19 @@ export default function PayrollClient() {
             setFaceMatchProgress(100);
             setMatchScoreDisplay(matchConfidence);
             setFaceStatusMessage(
-              `✅ Biometric Security Passed: Verified ${targetEmp?.name || 'Employee'} (${matchConfidence}% Confidence • Live Passed)`
+              `✅ Biometric Security Passed: Verified ${targetEmpRef.current?.name || targetEmp?.name || 'Employee'} (${matchConfidence}% Confidence)`
             );
             clearInterval(scanIntervalRef.current);
+
+            // INSTANTLY AUTO-SAVE ATTENDANCE ON FACE MATCH! NO BUTTON CLICK REQUIRED!
+            handleConfirmAttendance(targetEmpRef.current || undefined);
           } else {
             setFaceStatus('mismatch');
             setFaceVerified(false);
             setFaceMatchProgress(40);
             setMatchScoreDisplay(matchConfidence);
             setFaceStatusMessage(
-              `⛔ Security Alert: Face Mismatch! Unrecognized person does not match ${targetEmp?.name} (Score: ${matchConfidence}% < 85% required)`
+              `⛔ Security Alert: Face Mismatch! Unrecognized person does not match ${targetEmpRef.current?.name || targetEmp?.name} (Score: ${matchConfidence}% < 85% required)`
             );
           }
         } else {
@@ -460,67 +579,6 @@ export default function PayrollClient() {
       setFaceStatus('no_face');
       setFaceVerified(false);
       setFaceStatusMessage('❌ Camera access denied. High-security face verification requires camera access.');
-    }
-  };
-
-  const stopFaceCamera = () => {
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
-      scanIntervalRef.current = null;
-    }
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-      mediaStreamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setIsFaceCameraActive(false);
-  };
-
-  // Confirm attendance save
-  const handleConfirmAttendance = async () => {
-    if (!targetEmp) return;
-
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    const dateStr = selectedDate;
-
-    const newRecord: AttendanceRecord = {
-      id: 'att-' + Date.now(),
-      employeeId: targetEmp.id,
-      employeeName: targetEmp.name,
-      date: dateStr,
-      checkInTime: timeStr,
-      status: 'Present',
-      latitude: userCoords?.lat,
-      longitude: userCoords?.lng,
-      distanceMeters: currentDistance || 0,
-      faceVerified: true
-    };
-
-    try {
-      try {
-        await addDoc(collection(db, 'attendance'), {
-          ...newRecord,
-          createdAt: serverTimestamp()
-        });
-      } catch {}
-
-      // Replace existing attendance record for today if exists
-      const filtered = attendanceList.filter(
-        (a) => !(a.employeeId === targetEmp.id && a.date === dateStr)
-      );
-      saveAttendanceList([newRecord, ...filtered]);
-
-      stopFaceCamera();
-      setVerificationStep('success');
-      setTimeout(() => {
-        setVerificationStep('idle');
-        setTargetEmp(null);
-      }, 1500);
-    } catch (err: any) {
-      alert('Error recording attendance: ' + err.message);
     }
   };
 
@@ -1046,8 +1104,9 @@ export default function PayrollClient() {
                 {/* Action Buttons */}
                 <div className="pt-2 flex items-center gap-3">
                   <button
+                    type="button"
                     onClick={handleCloseVerification}
-                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -1056,37 +1115,43 @@ export default function PayrollClient() {
                     <button
                       type="button"
                       onClick={startFaceCamera}
-                      className="px-3 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-colors cursor-pointer"
+                      className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-colors cursor-pointer"
                     >
-                      Re-scan
+                      Re-scan Face
                     </button>
                   )}
-
-                  <button
-                    onClick={handleConfirmAttendance}
-                    disabled={!faceVerified || faceStatus !== 'matched'}
-                    className={`flex-1 py-2.5 font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer ${
-                      faceVerified && faceStatus === 'matched'
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200'
-                        : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                    }`}
-                  >
-                    Confirm Attendance
-                  </button>
                 </div>
               </div>
             )}
 
-            {/* Step 4: Success Message */}
+            {/* Step 4: Success Message & Animated Checkmark */}
             {verificationStep === 'success' && (
-              <div className="p-8 text-center space-y-3">
-                <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto animate-bounce">
-                  <CheckCircle2 size={36} />
+              <div className="p-8 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full bg-emerald-100 animate-ping opacity-75" />
+                  <div className="relative w-20 h-20 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30 border-4 border-emerald-100">
+                    <CheckCircle2 size={44} className="animate-bounce" />
+                  </div>
                 </div>
-                <h4 className="text-lg font-semibold text-slate-900">Attendance Recorded!</h4>
-                <p className="text-xs text-slate-500">
-                  {targetEmp.name} marked Present for {selectedDate}.
+
+                <div className="space-y-1">
+                  <h4 className="text-xl font-extrabold text-slate-900 tracking-tight">
+                    Attendance Marked Successfully!
+                  </h4>
+                  <p className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 inline-block">
+                    ✓ Verified: {targetEmp?.name}
+                  </p>
+                </div>
+
+                <p className="text-xs text-slate-500 font-medium">
+                  Recorded present for <span className="font-semibold text-slate-800">{selectedDate}</span>
                 </p>
+
+                <div className="pt-2">
+                  <span className="text-[11px] font-semibold text-slate-400 flex items-center justify-center gap-1.5">
+                    🔊 Spoken Voice & Chime Confirmation Played
+                  </span>
+                </div>
               </div>
             )}
           </div>

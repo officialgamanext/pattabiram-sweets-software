@@ -18,6 +18,9 @@ import {
   AlertTriangle,
   Tag,
   Check,
+  RotateCcw,
+  Percent,
+  Sparkles,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
 import { db } from '@/lib/firebase';
@@ -86,6 +89,7 @@ export default function PriceListClient() {
   const [priceListStatus, setPriceListStatus] = useState<'Active' | 'Inactive'>('Active');
   const [modalItems, setModalItems] = useState<PriceListItemProduct[]>([]);
   const [modalSearchTerm, setModalSearchTerm] = useState('');
+  const [modalCategoryFilter, setModalCategoryFilter] = useState('All');
 
   // 1. Subscribe to Price Lists from Firebase Firestore
   useEffect(() => {
@@ -135,6 +139,8 @@ export default function PriceListClient() {
   const handleOpenAddModal = () => {
     setPriceListName('');
     setPriceListStatus('Active');
+    setModalSearchTerm('');
+    setModalCategoryFilter('All');
 
     // Populate modal items from masterItems with customPrice = defaultPrice
     const initialModalItems: PriceListItemProduct[] = masterItems.map((item) => ({
@@ -157,6 +163,8 @@ export default function PriceListClient() {
     setEditingPriceList(plist);
     setPriceListName(plist.name);
     setPriceListStatus(plist.status);
+    setModalSearchTerm('');
+    setModalCategoryFilter('All');
 
     // Merge existing custom prices with current master items
     const existingMap = new Map(plist.items.map((i) => [i.itemId, i.customPrice]));
@@ -182,6 +190,23 @@ export default function PriceListClient() {
       prev.map((item) =>
         item.itemId === itemId ? { ...item, customPrice: numPrice } : item
       )
+    );
+  };
+
+  // Apply Bulk Percentage discount or markup
+  const handleApplyBulkPercentage = (pct: number) => {
+    setModalItems((prev) =>
+      prev.map((item) => {
+        const newPrice = Math.max(0, Math.round(item.defaultPrice * (1 + pct / 100) * 100) / 100);
+        return { ...item, customPrice: newPrice };
+      })
+    );
+  };
+
+  // Reset all modal custom prices to default price
+  const handleResetAllModalPrices = () => {
+    setModalItems((prev) =>
+      prev.map((item) => ({ ...item, customPrice: item.defaultPrice }))
     );
   };
 
@@ -271,15 +296,26 @@ export default function PriceListClient() {
     return matchesSearch && matchesStatus;
   });
 
+  // Unique Categories in modal items
+  const modalCategories = Array.from(new Set(modalItems.map((i) => i.category))).filter(Boolean);
+
   // Filtered Products inside full-screen modal
   const filteredModalItems = modalItems.filter((item) => {
     const term = modalSearchTerm.toLowerCase();
-    return (
+    const matchesSearch =
       item.itemName.toLowerCase().includes(term) ||
       item.itemCode.toLowerCase().includes(term) ||
-      item.category.toLowerCase().includes(term)
-    );
+      item.category.toLowerCase().includes(term);
+
+    const matchesCategory =
+      modalCategoryFilter === 'All' ? true : item.category === modalCategoryFilter;
+
+    return matchesSearch && matchesCategory;
   });
+
+  const modifiedCustomPricesCount = modalItems.filter(
+    (i) => i.customPrice !== i.defaultPrice
+  ).length;
 
   // Custom Dropdown options
   const statusFilterOptions: CustomSelectOption[] = [
@@ -473,201 +509,349 @@ export default function PriceListClient() {
         </div>
       </div>
 
-      {/* ── 4. FULL SCREEN MODAL: Add / Edit Price List ─────────────── */}
+      {/* ── 4. STUNNING FULL SCREEN MODAL: Add / Edit Price List ─────────────── */}
       {(isAddModalOpen || editingPriceList) && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex flex-col bg-slate-50 overflow-hidden animate-in fade-in zoom-in-98 duration-150">
+        <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 lg:p-6 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-slate-50 rounded-3xl shadow-2xl border border-slate-200/90 max-w-6xl w-full flex flex-col h-full max-h-[92vh] overflow-hidden">
 
-          {/* Modal Header Bar */}
-          <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-xs">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                <Tag size={20} />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  {editingPriceList ? `Edit Price List (${editingPriceList.code})` : 'Create New Price List'}
-                </h2>
-                <p className="text-xs text-slate-500">Set custom prices for products in this price list</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAddModalOpen(false);
-                  setEditingPriceList(null);
-                }}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={editingPriceList ? handleSaveUpdatePriceList : handleSaveAddPriceList}
-                disabled={isSubmitting || !priceListName.trim()}
-                className="flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                <span>Save</span>
-              </button>
-              <button
-                onClick={() => {
-                  setIsAddModalOpen(false);
-                  setEditingPriceList(null);
-                }}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors ml-2 cursor-pointer"
-              >
-                <X size={20} />
-              </button>
-            </div>
-          </div>
-
-          {/* Modal Content Body */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 max-w-7xl mx-auto w-full">
-
-            {/* Price List Name & Status Inputs */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">Price List Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Festival Wholesale Rates 2025"
-                  value={priceListName}
-                  onChange={(e) => setPriceListName(e.target.value)}
-                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">Status</label>
-                <CustomSelect
-                  options={statusModalOptions}
-                  value={priceListStatus}
-                  onChange={(val) => setPriceListStatus(val as any)}
-                  className="w-full"
-                  buttonClassName="w-full"
-                  size="lg"
-                />
-              </div>
-            </div>
-
-            {/* Products Table with Custom Pricing */}
-            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-              <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/50">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">Product Custom Pricing</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Adjust the custom price for each item below. Default price is filled automatically.
-                  </p>
+            {/* 1. Modal Header Bar */}
+            <div className="bg-white px-6 py-4 border-b border-slate-200/90 flex items-center justify-between flex-shrink-0 shadow-2xs">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+                  <Tag size={20} />
                 </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
+                      {editingPriceList ? 'Edit Price List' : 'Create New Price List'}
+                    </h2>
+                    {editingPriceList && (
+                      <span className="px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-mono text-xs font-bold border border-indigo-100">
+                        {editingPriceList.code}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">Set custom product prices or apply percentage rules across products</p>
+                </div>
+              </div>
 
-                <div className="relative w-full sm:w-72">
+              <div className="flex items-center gap-3">
+                {modifiedCustomPricesCount > 0 && (
+                  <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold">
+                    <Sparkles size={13} className="text-amber-500" />
+                    <span>{modifiedCustomPricesCount} Custom Prices Modified</span>
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                    setEditingPriceList(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={editingPriceList ? handleSaveUpdatePriceList : handleSaveAddPriceList}
+                  disabled={isSubmitting || !priceListName.trim()}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+                  <span>Save Price List</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                    setEditingPriceList(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Modal Scrollable Content Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+
+              {/* Price List Name & Status Card */}
+              <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                <div className="flex-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Price List Name <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
-                    placeholder="Search products in list..."
-                    value={modalSearchTerm}
-                    onChange={(e) => setModalSearchTerm(e.target.value)}
-                    className="w-full pl-3.5 pr-9 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-white"
+                    required
+                    placeholder="e.g. Festival Wholesale Rates 2025"
+                    value={priceListName}
+                    onChange={(e) => setPriceListName(e.target.value)}
+                    className="w-full px-4 py-2.5 text-sm font-semibold text-slate-900 border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 bg-slate-50/50"
                   />
-                  <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+
+                <div className="w-full md:w-56">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Status</label>
+                  <CustomSelect
+                    options={statusModalOptions}
+                    value={priceListStatus}
+                    onChange={(val) => setPriceListStatus(val as any)}
+                    className="w-full"
+                    buttonClassName="w-full"
+                  />
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[700px]">
-                  <thead>
-                    <tr className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                      <th className="py-3 px-4 sm:px-6">Product</th>
-                      <th className="py-3 px-4">Code</th>
-                      <th className="py-3 px-4">Category</th>
-                      <th className="py-3 px-4">Default Price</th>
-                      <th className="py-3 px-4 sm:px-6 w-64">Custom Price (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-                    {filteredModalItems.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="py-12 text-center text-slate-400">
-                          No products found in master items. Please add items on the Items page first.
-                        </td>
+              {/* Bulk Pricing Tools & Filters Header */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs space-y-4">
+                
+                {/* Search Bar + Bulk Adjust Buttons */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  <div className="relative flex-1 max-w-md">
+                    <input
+                      type="text"
+                      placeholder="Search products by name, code or category..."
+                      value={modalSearchTerm}
+                      onChange={(e) => setModalSearchTerm(e.target.value)}
+                      className="w-full pl-3.5 pr-9 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50"
+                    />
+                    <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  </div>
+
+                  {/* Quick Percentage Adjust Tools */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 mr-1">
+                      <Percent size={13} className="text-indigo-600" />
+                      Bulk Price Adjustment:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyBulkPercentage(-5)}
+                      className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60 transition-colors cursor-pointer"
+                    >
+                      -5%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyBulkPercentage(-10)}
+                      className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60 transition-colors cursor-pointer"
+                    >
+                      -10%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyBulkPercentage(5)}
+                      className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60 transition-colors cursor-pointer"
+                    >
+                      +5%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyBulkPercentage(10)}
+                      className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60 transition-colors cursor-pointer"
+                    >
+                      +10%
+                    </button>
+
+                    {modifiedCustomPricesCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleResetAllModalPrices}
+                        className="flex items-center gap-1 px-3 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer ml-1"
+                      >
+                        <RotateCcw size={12} />
+                        <span>Reset All</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Category Filter Pills */}
+                {modalCategories.length > 0 && (
+                  <div className="flex items-center gap-2 overflow-x-auto pt-2 border-t border-slate-100 pb-1">
+                    <span className="text-[11px] font-semibold text-slate-400 mr-1 flex-shrink-0">Category:</span>
+                    <button
+                      type="button"
+                      onClick={() => setModalCategoryFilter('All')}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex-shrink-0 cursor-pointer ${
+                        modalCategoryFilter === 'All'
+                          ? 'bg-indigo-600 text-white shadow-2xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      All ({modalItems.length})
+                    </button>
+                    {modalCategories.map((cat) => {
+                      const count = modalItems.filter((i) => i.category === cat).length;
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setModalCategoryFilter(cat)}
+                          className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex-shrink-0 cursor-pointer ${
+                            modalCategoryFilter === cat
+                              ? 'bg-indigo-600 text-white shadow-2xs'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {cat} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Product Pricing Table */}
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[750px]">
+                    <thead>
+                      <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        <th className="py-3.5 px-4 sm:px-6">Product Name</th>
+                        <th className="py-3.5 px-4">Code</th>
+                        <th className="py-3.5 px-4">Category</th>
+                        <th className="py-3.5 px-4">Default Price</th>
+                        <th className="py-3.5 px-4 sm:px-6 w-80">Custom Price (₹)</th>
                       </tr>
-                    ) : (
-                      filteredModalItems.map((item) => (
-                        <tr key={item.itemId} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="py-3 px-4 sm:px-6">
-                            <div className="flex items-center gap-3">
-                              <div className="relative w-9 h-9 rounded-lg bg-slate-50 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                                <Image
-                                  src={item.imageUrl || '/logo.png'}
-                                  alt={item.itemName}
-                                  fill
-                                  className="object-contain p-1"
-                                />
-                              </div>
-                              <span className="font-bold text-slate-900">{item.itemName}</span>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4 font-bold text-indigo-600">{item.itemCode}</td>
-                          <td className="py-3 px-4">
-                            <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[11px] font-medium">
-                              {item.category}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-slate-500 font-semibold">
-                            ₹ {item.defaultPrice} / {item.unit}
-                          </td>
-                          <td className="py-3 px-4 sm:px-6">
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">₹</span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={item.customPrice}
-                                onChange={(e) => handleCustomPriceChange(item.itemId, e.target.value)}
-                                className="w-full pl-7 pr-3 py-1.5 text-xs font-bold text-indigo-600 border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 bg-white"
-                              />
-                            </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                      {filteredModalItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-14 text-center text-slate-400">
+                            No products found matching your search.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        filteredModalItems.map((item) => {
+                          const diff = item.customPrice - item.defaultPrice;
+                          const pct = item.defaultPrice > 0 ? Math.round((diff / item.defaultPrice) * 100) : 0;
+                          const isModified = item.customPrice !== item.defaultPrice;
+
+                          return (
+                            <tr key={item.itemId} className={`hover:bg-slate-50/70 transition-colors ${isModified ? 'bg-indigo-50/20' : ''}`}>
+                              <td className="py-3.5 px-4 sm:px-6">
+                                <div className="flex items-center gap-3">
+                                  <div className="relative w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center shadow-2xs">
+                                    <Image
+                                      src={item.imageUrl || '/logo.png'}
+                                      alt={item.itemName}
+                                      fill
+                                      className="object-contain p-1"
+                                    />
+                                  </div>
+                                  <div>
+                                    <span className="font-bold text-slate-900 text-sm block">{item.itemName}</span>
+                                    <span className="text-[11px] text-slate-400">Per {item.unit}</span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3.5 px-4 font-mono font-bold text-indigo-600">
+                                <span className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100 text-[11px]">
+                                  {item.itemCode}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold">
+                                  {item.category}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 text-slate-500 font-semibold">
+                                ₹ {item.defaultPrice} <span className="text-[11px] text-slate-400 font-normal">/ {item.unit}</span>
+                              </td>
+                              <td className="py-3.5 px-4 sm:px-6">
+                                <div className="flex items-center gap-2">
+                                  <div className="relative flex-1">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">₹</span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={item.customPrice}
+                                      onChange={(e) => handleCustomPriceChange(item.itemId, e.target.value)}
+                                      className={`w-full pl-7 pr-3 py-2 text-xs font-bold border rounded-xl focus:outline-none transition-all ${
+                                        isModified
+                                          ? 'border-indigo-500 text-indigo-700 bg-indigo-50/30 ring-2 ring-indigo-500/10'
+                                          : 'border-slate-300 text-slate-800 bg-white focus:border-indigo-500'
+                                      }`}
+                                    />
+                                  </div>
+
+                                  {/* Price Delta Badge */}
+                                  {isModified ? (
+                                    <div className="flex items-center gap-1">
+                                      <span
+                                        className={`px-2 py-1 rounded-lg text-[10px] font-bold flex-shrink-0 ${
+                                          diff < 0
+                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                        }`}
+                                      >
+                                        {pct > 0 ? `+${pct}%` : `${pct}%`}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCustomPriceChange(item.itemId, item.defaultPrice.toString())}
+                                        className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                        title="Reset to default price"
+                                      >
+                                        <RotateCcw size={13} />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span className="px-2 py-1 rounded-lg text-[10px] font-medium bg-slate-100 text-slate-400 flex-shrink-0">
+                                      Default
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+
+            {/* 3. Modal Footer Bar */}
+            <div className="bg-white border-t border-slate-200 px-6 py-3.5 flex items-center justify-between flex-shrink-0 text-xs text-slate-500">
+              <div>
+                Total Products: <strong className="text-slate-800">{modalItems.length}</strong>
+                {modifiedCustomPricesCount > 0 && (
+                  <span className="ml-2 text-indigo-600 font-semibold">
+                    • {modifiedCustomPricesCount} Custom Prices Modified
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                    setEditingPriceList(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={editingPriceList ? handleSaveUpdatePriceList : handleSaveAddPriceList}
+                  disabled={isSubmitting || !priceListName.trim()}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  <span>Save Price List</span>
+                </button>
               </div>
             </div>
 
           </div>
-
-          {/* Modal Footer Bar */}
-          <div className="bg-white border-t border-slate-200 px-6 py-3.5 flex items-center justify-between">
-            <p className="text-xs text-slate-500">
-              Total Products in Price List: <strong className="text-slate-800">{modalItems.length}</strong>
-            </p>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAddModalOpen(false);
-                  setEditingPriceList(null);
-                }}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={editingPriceList ? handleSaveUpdatePriceList : handleSaveAddPriceList}
-                disabled={isSubmitting || !priceListName.trim()}
-                className="flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                <span>Save Price List</span>
-              </button>
-            </div>
-          </div>
-
         </div>
       )}
 

@@ -93,10 +93,18 @@ export default function UnitManagementClient({
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const fetchedUnits: UnitItem[] = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<UnitItem, 'id'>),
-        }));
+        const fetchedUnits: UnitItem[] = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          return {
+            id: docSnap.id,
+            code: data.code || '',
+            name: data.name || '',
+            mobile: data.mobile || '',
+            address: data.address || '',
+            status: data.status || 'Active',
+            createdAt: data.createdAt,
+          };
+        });
 
         // Sort by code locally
         fetchedUnits.sort((a, b) => (a.code || '').localeCompare(b.code || ''));
@@ -164,10 +172,10 @@ export default function UnitManagementClient({
   const handleOpenEditModal = (unit: UnitItem) => {
     setEditingUnit(unit);
     setEditFormData({
-      name: unit.name,
-      mobile: unit.mobile,
-      address: unit.address,
-      status: unit.status,
+      name: unit.name || '',
+      mobile: unit.mobile || '',
+      address: unit.address || '',
+      status: unit.status || 'Active',
     });
   };
 
@@ -453,7 +461,7 @@ export default function UnitManagementClient({
                   type="text"
                   required
                   placeholder={`e.g. ${title} #1`}
-                  value={newUnit.name}
+                  value={newUnit.name || ''}
                   onChange={(e) => setNewUnit({ ...newUnit, name: e.target.value })}
                   className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
                 />
@@ -465,7 +473,7 @@ export default function UnitManagementClient({
                   <input
                     type="text"
                     placeholder="+91 98765 43210"
-                    value={newUnit.mobile}
+                    value={newUnit.mobile || ''}
                     onChange={(e) => setNewUnit({ ...newUnit, mobile: e.target.value })}
                     className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
                   />
@@ -474,7 +482,7 @@ export default function UnitManagementClient({
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
                   <CustomSelect
                     options={statusModalOptions}
-                    value={newUnit.status}
+                    value={newUnit.status || 'Active'}
                     onChange={(val) => setNewUnit({ ...newUnit, status: val as 'Active' | 'Inactive' })}
                     className="w-full"
                     buttonClassName="w-full"
@@ -487,7 +495,7 @@ export default function UnitManagementClient({
                 <textarea
                   rows={3}
                   placeholder="Enter unit address details..."
-                  value={newUnit.address}
+                  value={newUnit.address || ''}
                   onChange={(e) => setNewUnit({ ...newUnit, address: e.target.value })}
                   className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
                 />
@@ -543,7 +551,7 @@ export default function UnitManagementClient({
                 <input
                   type="text"
                   required
-                  value={editFormData.name}
+                  value={editFormData.name || ''}
                   onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
                   className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
                 />
@@ -554,7 +562,7 @@ export default function UnitManagementClient({
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Mobile Number</label>
                   <input
                     type="text"
-                    value={editFormData.mobile}
+                    value={editFormData.mobile || ''}
                     onChange={(e) => setEditFormData({ ...editFormData, mobile: e.target.value })}
                     className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
                   />
@@ -563,7 +571,7 @@ export default function UnitManagementClient({
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
                   <CustomSelect
                     options={statusModalOptions}
-                    value={editFormData.status}
+                    value={editFormData.status || 'Active'}
                     onChange={(val) => setEditFormData({ ...editFormData, status: val as 'Active' | 'Inactive' })}
                     className="w-full"
                     buttonClassName="w-full"
@@ -575,7 +583,7 @@ export default function UnitManagementClient({
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Address</label>
                 <textarea
                   rows={3}
-                  value={editFormData.address}
+                  value={editFormData.address || ''}
                   onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
                   className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
                 />

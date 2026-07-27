@@ -164,21 +164,6 @@ export default function ItemsClient() {
           ...(d.data() as Omit<CategoryRecord, 'id'>),
         }));
 
-        if (fetched.length === 0 && snapshot.metadata.fromCache === false) {
-          const defaults = [
-            { name: 'Sweets', icon: '🍰', status: 'Active' },
-            { name: 'Savouries', icon: '📦', status: 'Active' },
-            { name: 'Bakery', icon: '🍪', status: 'Active' },
-            { name: 'Beverages', icon: '🥤', status: 'Active' },
-          ];
-          defaults.forEach((def) => {
-            addDoc(collection(db, 'categories'), {
-              ...def,
-              createdAt: serverTimestamp(),
-            });
-          });
-        }
-
         setCategories(fetched);
       },
       (err) => console.error('Error fetching categories:', err)
@@ -337,7 +322,7 @@ export default function ItemsClient() {
       {
         'Item Name': 'Special Mysore Pak',
         'Price': 480,
-        'Category': 'Sweets',
+        'Category': categories[0]?.name || 'Sweets',
         'Unit': 'KG',
         'Manufacturing Unit': mfgUnits[0]?.name || 'Main Factory',
         'Packing Unit': pckUnits[0]?.name || 'Central Packing Unit',
@@ -346,7 +331,7 @@ export default function ItemsClient() {
       {
         'Item Name': 'Kaju Katli',
         'Price': 950,
-        'Category': 'Sweets',
+        'Category': categories[0]?.name || 'Sweets',
         'Unit': 'KG',
         'Manufacturing Unit': mfgUnits[0]?.name || 'Main Factory',
         'Packing Unit': pckUnits[0]?.name || 'Central Packing Unit',
@@ -355,7 +340,7 @@ export default function ItemsClient() {
       {
         'Item Name': 'Motichoor Ladoo',
         'Price': 380,
-        'Category': 'Sweets',
+        'Category': categories[0]?.name || 'Sweets',
         'Unit': 'KG',
         'Manufacturing Unit': mfgUnits[0]?.name || 'Main Factory',
         'Packing Unit': pckUnits[0]?.name || 'Central Packing Unit',
@@ -385,15 +370,21 @@ export default function ItemsClient() {
         const ws = wb.Sheets[wsname];
         const rawData: any[] = XLSX.utils.sheet_to_json(ws);
 
-        const parsed: BulkParsedItem[] = rawData.map((row) => ({
-          name: row['Item Name'] || row['ItemName'] || row['name'] || 'Unnamed Item',
-          price: parseFloat(row['Price'] || row['price'] || 0),
-          category: row['Category'] || row['category'] || 'Sweets',
-          unit: (row['Unit'] || row['unit'] || 'KG') as any,
-          manufacturingUnitName: row['Manufacturing Unit'] || row['manufacturingUnit'] || mfgUnits[0]?.name || 'Main Factory',
-          packingUnitName: row['Packing Unit'] || row['packingUnit'] || pckUnits[0]?.name || 'Central Packing Unit',
-          status: (row['Status'] || row['status'] || 'Active') as any,
-        }));
+        const parsed: BulkParsedItem[] = rawData.map((row) => {
+          const catRaw = String(row['Category'] || row['category'] || row['Category Name'] || '').trim();
+          const mfgRaw = String(row['Manufacturing Unit'] || row['manufacturingUnit'] || row['Mfg Unit'] || '').trim();
+          const pckRaw = String(row['Packing Unit'] || row['packingUnit'] || row['Pck Unit'] || '').trim();
+
+          return {
+            name: String(row['Item Name'] || row['ItemName'] || row['name'] || 'Unnamed Item').trim(),
+            price: parseFloat(row['Price'] || row['price'] || 0) || 0,
+            category: catRaw || 'Not Provided',
+            unit: (row['Unit'] || row['unit'] || 'KG') as any,
+            manufacturingUnitName: mfgRaw || 'Not Provided',
+            packingUnitName: pckRaw || 'Not Provided',
+            status: (row['Status'] || row['status'] || 'Active') as any,
+          };
+        });
 
         setBulkParsedItems(parsed);
       } catch (err) {
@@ -405,12 +396,65 @@ export default function ItemsClient() {
     reader.readAsBinaryString(file);
   };
 
-  // Submit Bulk Items to Firebase
+  // Submit Bulk Items to Firebase (Auto-creating Categories, Manufacturing Units, Packing Units if missing, without duplicates)
   const handleSaveBulkItems = async () => {
     if (bulkParsedItems.length === 0) return;
 
     try {
       setIsSubmitting(true);
+
+      // Track existing items/entities to prevent duplicate doc creation during bulk upload
+      const existingCategoryNames = new Set(categories.map((c) => c.name.trim().toLowerCase()));
+      const existingMfgNames = new Set(mfgUnits.map((m) => m.name.trim().toLowerCase()));
+      const existingPckNames = new Set(pckUnits.map((p) => p.name.trim().toLowerCase()));
+
+      let newCategoryCount = existingCategoryNames.size;
+      let newMfgCount = existingMfgNames.size;
+      let newPckCount = existingPckNames.size;
+
+      for (const item of bulkParsedItems) {
+        const catName = item.category || 'Not Provided';
+        const catLower = catName.toLowerCase();
+        if (!existingCategoryNames.has(catLower)) {
+          existingCategoryNames.add(catLower);
+          newCategoryCount++;
+          await addDoc(collection(db, 'categories'), {
+            name: catName,
+            icon: '📦',
+            status: 'Active',
+            createdAt: serverTimestamp(),
+          });
+        }
+
+        const mfgName = item.manufacturingUnitName || 'Not Provided';
+        const mfgLower = mfgName.toLowerCase();
+        if (!existingMfgNames.has(mfgLower)) {
+          existingMfgNames.add(mfgLower);
+          newMfgCount++;
+          const nextMfgCode = `MFG-${String(newMfgCount).padStart(3, '0')}`;
+          await addDoc(collection(db, 'manufacturing_units'), {
+            name: mfgName,
+            code: nextMfgCode,
+            status: 'Active',
+            createdAt: serverTimestamp(),
+          });
+        }
+
+        const pckName = item.packingUnitName || 'Not Provided';
+        const pckLower = pckName.toLowerCase();
+        if (!existingPckNames.has(pckLower)) {
+          existingPckNames.add(pckLower);
+          newPckCount++;
+          const nextPckCode = `PCK-${String(newPckCount).padStart(3, '0')}`;
+          await addDoc(collection(db, 'packing_units'), {
+            name: pckName,
+            code: nextPckCode,
+            status: 'Active',
+            createdAt: serverTimestamp(),
+          });
+        }
+      }
+
       let currentCount = items.length;
 
       for (const item of bulkParsedItems) {
@@ -421,10 +465,10 @@ export default function ItemsClient() {
           code: nextCode,
           name: item.name,
           price: item.price,
-          category: item.category,
+          category: item.category || 'Not Provided',
           unit: item.unit,
-          manufacturingUnitName: item.manufacturingUnitName,
-          packingUnitName: item.packingUnitName,
+          manufacturingUnitName: item.manufacturingUnitName || 'Not Provided',
+          packingUnitName: item.packingUnitName || 'Not Provided',
           imageUrl: '',
           status: item.status,
           createdAt: serverTimestamp(),
@@ -525,11 +569,11 @@ export default function ItemsClient() {
 
   const mfgUnitOptions: CustomSelectOption[] = mfgUnits.length > 0
     ? mfgUnits.map((u) => ({ value: u.name, label: u.name }))
-    : [{ value: 'Main Factory', label: 'Main Factory' }];
+    : [{ value: 'Not Provided', label: 'Not Provided' }];
 
   const pckUnitOptions: CustomSelectOption[] = pckUnits.length > 0
     ? pckUnits.map((u) => ({ value: u.name, label: u.name }))
-    : [{ value: 'Central Packing Unit', label: 'Central Packing Unit' }];
+    : [{ value: 'Not Provided', label: 'Not Provided' }];
 
   const statusFilterOptions: CustomSelectOption[] = [
     { value: 'All', label: 'All Statuses' },
@@ -788,34 +832,53 @@ export default function ItemsClient() {
 
       {/* ── 4. Tab Content 2: Categories ──────────────────────────── */}
       {activeTab === 'categories' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {categories.map((cat) => (
-            <div
-              key={cat.id}
-              className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs hover:shadow-md transition-all flex items-center justify-between gap-3"
-            >
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-2xl flex items-center justify-center flex-shrink-0 shadow-2xs">
-                  {cat.icon}
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-slate-900 truncate">{cat.name}</h3>
-                  <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full inline-block mt-1">
-                    {cat.status}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setDeletingCategory(cat)}
-                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer flex-shrink-0"
-                title="Delete Category"
-              >
-                <Trash2 size={16} />
-              </button>
+        categories.length === 0 ? (
+          <div className="bg-white rounded-2xl p-12 border border-slate-200/90 text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto text-xl font-bold">
+              📂
             </div>
-          ))}
-        </div>
+            <h3 className="text-base font-bold text-slate-800">No Categories Found</h3>
+            <p className="text-sm text-slate-500 max-w-sm mx-auto">
+              You haven't created any categories yet. Click "+ Add Category" above to add your custom categories.
+            </p>
+            <button
+              onClick={() => setIsAddCategoryModalOpen(true)}
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-xs cursor-pointer"
+            >
+              <Plus size={15} />
+              <span>Add First Category</span>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {categories.map((cat) => (
+              <div
+                key={cat.id}
+                className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs hover:shadow-md transition-all flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-2xl flex items-center justify-center flex-shrink-0 shadow-2xs">
+                    {cat.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-slate-900 truncate">{cat.name}</h3>
+                    <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full inline-block mt-1">
+                      {cat.status}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setDeletingCategory(cat)}
+                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer flex-shrink-0"
+                  title="Delete Category"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )
       )}
 
       {/* ── 5. Add Item Modal ──────────────────────────────────────── */}

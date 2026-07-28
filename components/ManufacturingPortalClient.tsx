@@ -16,12 +16,14 @@ import {
   Boxes,
   ListOrdered,
   ChefHat,
-  Building2
+  Building2,
+  Calendar,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, updateDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import type { OrderRecord, OrderItemLine } from './OrdersClient';
 import CustomSelect from '@/components/CustomSelect';
+import CustomDatePicker from '@/components/CustomDatePicker';
 
 export interface DynamicUnit {
   id: string;
@@ -65,8 +67,30 @@ export default function ManufacturingPortalClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUnit, setSelectedUnit] = useState('all');
+  const [selectedMfgDate, setSelectedMfgDate] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'item_wise' | 'order_wise'>('item_wise');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // Extract all manufacturing dates from active orders
+  const availableMfgDates = useMemo(() => {
+    const dateSet = new Set<string>();
+    orders.forEach((o) => {
+      const d = o.manufacturingDate || o.orderDate;
+      if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        dateSet.add(d);
+      }
+    });
+    return Array.from(dateSet).sort().reverse();
+  }, [orders]);
+
+  // Filter orders by selected manufacturing date
+  const filteredOrders = useMemo(() => {
+    if (!selectedMfgDate || selectedMfgDate === 'all') return orders;
+    return orders.filter((o) => {
+      const d = o.manufacturingDate || o.orderDate;
+      return d === selectedMfgDate;
+    });
+  }, [orders, selectedMfgDate]);
 
   // 1. Subscribe to real-time manufacturing units
   useEffect(() => {
@@ -142,7 +166,7 @@ export default function ManufacturingPortalClient() {
   const aggregatedItems = useMemo(() => {
     const map = new Map<string, AggregatedItemSummary>();
 
-    orders.forEach((order) => {
+    filteredOrders.forEach((order) => {
       // Ignore delivered or cancelled orders
       const st = order.orderStatus as string;
       if (st === 'Delivered' || st === 'Cancelled') return;
@@ -223,11 +247,11 @@ export default function ManufacturingPortalClient() {
     });
 
     return Array.from(map.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
-  }, [orders, itemInfoMap, selectedUnit, searchTerm]);
+  }, [filteredOrders, itemInfoMap, selectedUnit, searchTerm]);
 
   // Order-wise active manufacturing list
   const filteredOrderWiseList = useMemo(() => {
-    return orders.filter((order) => {
+    return filteredOrders.filter((order) => {
       const st = order.orderStatus as string;
       if (st === 'Delivered' || st === 'Cancelled') return false;
 
@@ -265,7 +289,7 @@ export default function ManufacturingPortalClient() {
 
       return true;
     });
-  }, [orders, selectedUnit, searchTerm, itemInfoMap]);
+  }, [filteredOrders, selectedUnit, searchTerm, itemInfoMap]);
 
   // Update item-level mfgStatus for an entire batch or single item
   const handleBatchUpdateItemMfgStatus = async (itemSummary: AggregatedItemSummary, targetMfgStatus: 'Manufacturing Started' | 'Moved to Packing') => {
@@ -390,18 +414,32 @@ export default function ManufacturingPortalClient() {
           </nav>
         </div>
 
-        {/* Dynamic Manufacturing Unit Selector */}
-        <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-          <span className="text-xs font-bold text-slate-700 pl-1 flex items-center gap-1.5">
-            <Building2 size={14} className="text-teal-600" /> Manufacturing Unit:
-          </span>
-          <CustomSelect
-            options={unitOptions}
-            value={selectedUnit}
-            onChange={(val) => setSelectedUnit(val)}
-            size="sm"
-            className="min-w-[220px]"
-          />
+        {/* Manufacturing Date & Dynamic Unit Selectors */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+            <span className="text-xs font-bold text-slate-700 pl-1 flex items-center gap-1.5">
+              <Calendar size={14} className="text-teal-600" /> Mfg Date:
+            </span>
+            <CustomDatePicker
+              value={selectedMfgDate}
+              onChange={(val) => setSelectedMfgDate(val)}
+              allowAll={true}
+              size="sm"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+            <span className="text-xs font-bold text-slate-700 pl-1 flex items-center gap-1.5">
+              <Building2 size={14} className="text-teal-600" /> Unit:
+            </span>
+            <CustomSelect
+              options={unitOptions}
+              value={selectedUnit}
+              onChange={(val) => setSelectedUnit(val)}
+              size="sm"
+              className="min-w-[200px]"
+            />
+          </div>
         </div>
       </div>
 

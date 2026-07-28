@@ -477,11 +477,11 @@ export default function OrderDetailClient({ orderId }: Props) {
         </div>
       </div>
 
-      {/* ── Main 3-col grid ──────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* ── Main 12-col grid ──────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-        {/* LEFT (2 cols) ─────────────────────────────────────── */}
-        <div className="lg:col-span-2 space-y-5">
+        {/* LEFT (8 cols) ─────────────────────────────────────── */}
+        <div className="lg:col-span-8 space-y-5">
 
           {/* Order Header Card */}
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
@@ -511,10 +511,12 @@ export default function OrderDetailClient({ orderId }: Props) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-5 pt-5 border-t border-slate-100">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mt-5 pt-5 border-t border-slate-100">
                 {[
                   { icon: <Calendar size={14} className="text-indigo-500" />, bg: 'bg-indigo-50', label: 'Slot',          val: order.slot },
                   { icon: <Clock size={14} className="text-sky-500" />,      bg: 'bg-sky-50',     label: 'Order Time',    val: order.orderTime || '—' },
+                  { icon: <Calendar size={14} className="text-teal-500" />,   bg: 'bg-teal-50',    label: 'Mfg Date',      val: order.manufacturingDate || order.orderDate || '—' },
+                  { icon: <Truck size={14} className="text-emerald-500" />,   bg: 'bg-emerald-50', label: 'Exp Delivery',   val: order.expectedDeliveryDate || '—' },
                   { icon: <ShoppingBag size={14} className="text-amber-500" />, bg: 'bg-amber-50', label: 'Items',        val: `${order.totalItems || order.items?.length || 0} Products` },
                   { icon: <Tag size={14} className="text-violet-500" />,     bg: 'bg-violet-50',  label: 'Customer Type', val: order.customerType || 'Customer' },
                 ].map(({ icon, bg, label, val }) => (
@@ -527,6 +529,40 @@ export default function OrderDetailClient({ orderId }: Props) {
                   </div>
                 ))}
               </div>
+
+              {/* Customisation Box Banner if present */}
+              {order.isCustomisation && order.customisationDetails && (
+                <div className="mt-5 p-4 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-amber-900 uppercase tracking-wider">Customisation Box Included</span>
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">
+                      {order.customisationDetails.noOfBoxes} Boxes
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-semibold">Box Type</p>
+                      <p className="font-bold text-slate-800">{order.customisationDetails.boxType} (₹{order.customisationDetails.boxPrice})</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-semibold">Sticker</p>
+                      <p className="font-bold text-slate-800">{order.customisationDetails.hasSticker ? `Yes (₹10/box)` : 'No'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-semibold">Shrink</p>
+                      <p className="font-bold text-slate-800">{order.customisationDetails.hasShrink ? `Yes (₹10/box)` : 'No'}</p>
+                    </div>
+                    {order.customisationDetails.boxImageUrl && (
+                      <div>
+                        <p className="text-[10px] text-slate-400 font-semibold mb-1">Box Image</p>
+                        <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-amber-300 shadow-2xs">
+                          <Image src={order.customisationDetails.boxImageUrl} alt="Custom Box" fill className="object-cover" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -542,12 +578,13 @@ export default function OrderDetailClient({ orderId }: Props) {
               </span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[580px]">
+              <table className="w-full text-left border-collapse min-w-[640px]">
                 <thead>
                   <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50/60 border-b border-slate-100">
                     <th className="py-3 px-5">Product</th>
                     <th className="py-3 px-4">Unit Price</th>
                     <th className="py-3 px-4">Qty</th>
+                    <th className="py-3 px-4">Packet (₹5)</th>
                     <th className="py-3 px-4">Line Total</th>
                     <th className="py-3 px-4">Instructions</th>
                   </tr>
@@ -573,6 +610,15 @@ export default function OrderDetailClient({ orderId }: Props) {
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
                           {item.quantity} <span className="text-indigo-400">{item.unit}</span>
                         </span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {item.hasPacket ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                            ✓ ₹5 ({item.quantity * 5})
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">No</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-xs font-extrabold text-slate-900">
                         {fmtCurrency(item.lineTotal || 0)}
@@ -601,7 +647,7 @@ export default function OrderDetailClient({ orderId }: Props) {
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-50/80 border-t border-slate-200">
-                    <td colSpan={3} className="py-3.5 px-5 text-xs font-bold text-slate-600 text-right">Grand Total:</td>
+                    <td colSpan={4} className="py-3.5 px-5 text-xs font-bold text-slate-600 text-right">Grand Total:</td>
                     <td className="py-3.5 px-4 text-sm font-extrabold text-indigo-600">{fmtCurrency(order.totalAmount || 0)}</td>
                     <td />
                   </tr>
@@ -745,8 +791,8 @@ export default function OrderDetailClient({ orderId }: Props) {
 
         </div>
 
-        {/* RIGHT sidebar ──────────────────────────────────────── */}
-        <div className="space-y-5">
+        {/* RIGHT sidebar (4 cols) ──────────────────────────────────────── */}
+        <div className="lg:col-span-4 space-y-5">
 
           {/* Customer Details */}
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
@@ -802,10 +848,68 @@ export default function OrderDetailClient({ orderId }: Props) {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500 font-medium">Total Amount</span>
-                  <span className="font-extrabold text-slate-900">{fmtCurrency(order.totalAmount || 0)}</span>
+              <div className="space-y-2 text-xs border-b border-slate-100 pb-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Sub Total</span>
+                  <span className="font-semibold text-slate-800">{fmtCurrency(order.subTotal || 0)}</span>
+                </div>
+
+                {order.isCustomisation ? (
+                  <>
+                    {(order.boxChargesTotal || 0) > 0 && (
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span>Box Charges ({order.customisationDetails?.noOfBoxes || 1} × ₹{order.customisationDetails?.boxPrice || 0}):</span>
+                        <span className="font-semibold text-slate-800">+ {fmtCurrency(order.boxChargesTotal || 0)}</span>
+                      </div>
+                    )}
+                    {(order.stickerChargesTotal || 0) > 0 && (
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span>Sticker Charges ({order.customisationDetails?.noOfBoxes || 1} × ₹10):</span>
+                        <span className="font-semibold text-slate-800">+ {fmtCurrency(order.stickerChargesTotal || 0)}</span>
+                      </div>
+                    )}
+                    {(order.shrinkChargesTotal || 0) > 0 && (
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span>Shrink Charges ({order.customisationDetails?.noOfBoxes || 1} × ₹10):</span>
+                        <span className="font-semibold text-slate-800">+ {fmtCurrency(order.shrinkChargesTotal || 0)}</span>
+                      </div>
+                    )}
+                    {(order.packetChargesTotal || 0) > 0 && (
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span>Packet Charges ({order.customisationDetails?.noOfBoxes || 1} boxes × ₹5):</span>
+                        <span className="font-semibold text-slate-800">+ {fmtCurrency(order.packetChargesTotal || 0)}</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {(order.packingCharges || 0) > 0 && (
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span>Packing Charges:</span>
+                        <span className="font-semibold text-slate-800">+ {fmtCurrency(order.packingCharges || 0)}</span>
+                      </div>
+                    )}
+                    {(order.additionalCharges || 0) > 0 && (
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span>Additional Charges:</span>
+                        <span className="font-semibold text-slate-800">+ {fmtCurrency(order.additionalCharges || 0)}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {(order.discountAmount || 0) > 0 && (
+                  <div className="flex justify-between items-center text-emerald-600 font-medium">
+                    <span>Discount:</span>
+                    <span className="font-bold">- {fmtCurrency(order.discountAmount || 0)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-700">Grand Total</span>
+                  <span className="text-sm font-extrabold text-indigo-600">{fmtCurrency(order.totalAmount || 0)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500 font-medium">Total Received</span>

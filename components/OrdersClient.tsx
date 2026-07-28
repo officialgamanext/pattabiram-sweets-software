@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -13,6 +13,7 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   X,
   Loader2,
   Filter,
@@ -33,6 +34,7 @@ import {
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
 import CustomDatePicker from '@/components/CustomDatePicker';
+import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -41,8 +43,8 @@ import {
   updateDoc,
   deleteDoc,
   doc,
-  serverTimestamp,
   query,
+  serverTimestamp,
 } from 'firebase/firestore';
 
 export type SlotTime =
@@ -64,12 +66,27 @@ export type OrderStatus =
   | 'Moved to Store'
   | 'Received at Store'
   | 'Awaiting for Delivery'
+  | 'Ready For Dispatch'
+  | 'Dispatched'
   | 'Delivered'
   | 'Confirmed'
   | 'Processing'
-  | 'Pending';
+  | 'Pending'
+  | 'Cancelled';
+
+export interface CustomisationDetails {
+  noOfBoxes: number;
+  boxType: string;
+  boxPrice: number;
+  boxImageUrl?: string;
+  hasSticker?: boolean;
+  stickerPrice?: number;
+  hasShrink?: boolean;
+  shrinkPrice?: number;
+}
 
 export interface OrderItemLine {
+  lineId?: string;
   itemId: string;
   itemCode: string;
   itemName: string;
@@ -79,6 +96,8 @@ export interface OrderItemLine {
   unitPrice: number;
   quantity: number;
   lineTotal: number;
+  hasPacket?: boolean;
+  packetCharge?: number;
   manufacturingDescription?: string;
   packingDescription?: string;
   mfgStatus?: 'Pending' | 'Manufacturing Started' | 'Moved to Packing';
@@ -90,13 +109,25 @@ export interface OrderRecord {
   code: string;
   customerName: string;
   customerMobile: string;
-  customerId?: string;
-  customerType?: 'Customer' | 'Wholesaler';
+  customerId: string;
+  customerType: string;
   slot: SlotTime;
   orderTime: string;
-  orderDate?: string;
+  orderDate: string;
+  manufacturingDate?: string;
+  expectedDeliveryDate?: string;
+  isCustomisation?: boolean;
+  customisationDetails?: CustomisationDetails | null;
   items: OrderItemLine[];
   totalItems: number;
+  subTotal: number;
+  boxChargesTotal?: number;
+  stickerChargesTotal?: number;
+  shrinkChargesTotal?: number;
+  packetChargesTotal?: number;
+  packingCharges?: number;
+  additionalCharges?: number;
+  discountAmount?: number;
   totalAmount: number;
   receivedAmount: number;
   paymentMode: 'Cash' | 'Card' | 'UPI';
@@ -125,11 +156,21 @@ interface ItemMasterOption {
   imageUrl?: string;
 }
 
-const SLOT_TIMES: SlotTime[] = [
+export const SLOT_TIMES: SlotTime[] = [
   '9:00 AM - 12:00 PM',
   '12:00 PM - 3:00 PM',
   '3:00 PM - 6:00 PM',
   '6:00 PM - 9:00 PM',
+];
+
+export const BOX_TYPES = [
+  { name: 'HandleBox', price: 5 },
+  { name: 'cellbox', price: 10 },
+  { name: '1/4 box', price: 10 },
+  { name: '1/2 box', price: 10 },
+  { name: '1kg box', price: 20 },
+  { name: 'Dental box', price: 5 },
+  { name: 'pakam gheebox', price: 10 },
 ];
 
 const ALL_ORDER_STATUSES: OrderStatus[] = [
@@ -298,6 +339,17 @@ export default function OrdersClient() {
 
   // New Order Form State
   const [orderSlot, setOrderSlot] = useState<SlotTime>('9:00 AM - 12:00 PM');
+  const [mfgDate, setMfgDate] = useState<string>(getTodayDateStr());
+  const [expDeliveryDate, setExpDeliveryDate] = useState<string>(getTodayDateStr());
+  const [isCustomisation, setIsCustomisation] = useState<boolean>(false);
+  const [noOfBoxes, setNoOfBoxes] = useState<number>(1);
+  const [boxType, setBoxType] = useState<string>('HandleBox');
+  const [boxImageUrl, setBoxImageUrl] = useState<string>('');
+  const [hasSticker, setHasSticker] = useState<boolean>(false);
+  const [hasShrink, setHasShrink] = useState<boolean>(false);
+  const [packingCharges, setPackingCharges] = useState<string>('0');
+  const [additionalCharges, setAdditionalCharges] = useState<string>('0');
+  const [discountAmount, setDiscountAmount] = useState<string>('0');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [orderItems, setOrderItems] = useState<OrderItemLine[]>([]);
@@ -315,9 +367,89 @@ export default function OrdersClient() {
     status: 'Active' as 'Active' | 'Inactive',
   });
 
-  // Item selector check state inside item selector modal
-  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
-  const [itemSearchTerm, setItemSearchTerm] = useState('');
+  // Product Selector Modal States
+  const [targetRowIdForModal, setTargetRowIdForModal] = useState<string | null>(null);
+  const [productSearchQuery, setProductSearchQuery] = useState<string>('');
+  const [isUploadingBoxImage, setIsUploadingBoxImage] = useState<boolean>(false);
+
+  // Open Product Selector Modal (targetRowId null means adding new item row)
+  const handleOpenProductModal = (targetRowId: string | null = null) => {
+    setTargetRowIdForModal(targetRowId);
+    setProductSearchQuery('');
+    setIsAddItemSelectorOpen(true);
+  };
+
+  // Confirm Product Selection from Modal
+  const handleSelectProductFromModal = (prod: ItemMasterOption) => {
+    if (targetRowIdForModal) {
+      // Swapping / editing existing row
+      setOrderItems((prev) =>
+        prev.map((item, idx) => {
+          const currentKey = item.lineId || `${item.itemId}-${idx}`;
+          if (currentKey !== targetRowIdForModal) return item;
+          return {
+            ...item,
+            itemId: prod.id,
+            itemCode: prod.code,
+            itemName: prod.name,
+            category: prod.category,
+            unit: prod.unit,
+            imageUrl: prod.imageUrl || '',
+            unitPrice: prod.price,
+            quantity: item.quantity || 1,
+            lineTotal: Math.round((item.quantity || 1) * prod.price * 100) / 100,
+          };
+        })
+      );
+    } else {
+      // Adding new row to item table (always generate unique lineId)
+      const uniqueLineId = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const newLine: OrderItemLine = {
+        lineId: uniqueLineId,
+        itemId: prod.id,
+        itemCode: prod.code,
+        itemName: prod.name,
+        category: prod.category,
+        unit: prod.unit,
+        imageUrl: prod.imageUrl || '',
+        unitPrice: prod.price,
+        quantity: 1,
+        lineTotal: prod.price,
+        hasPacket: false,
+        packetCharge: 0,
+        manufacturingDescription: '',
+        packingDescription: '',
+      };
+      setOrderItems((prev) => [...prev, newLine]);
+    }
+
+    setIsAddItemSelectorOpen(false);
+  };
+
+  // Filter products for Product Modal
+  const filteredProductMasterForModal = itemsMaster.filter((item) => {
+    if (!productSearchQuery.trim()) return true;
+    const q = productSearchQuery.toLowerCase().trim();
+    return (
+      item.name.toLowerCase().includes(q) ||
+      item.code.toLowerCase().includes(q) ||
+      item.category.toLowerCase().includes(q)
+    );
+  });
+
+  const [boxImageFile, setBoxImageFile] = useState<File | null>(null);
+
+  // Handle local image file selection for Customisation Box (preview only, upload on order creation)
+  const handleBoxImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBoxImageFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setBoxImageUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
   // 1. Subscribe to Orders collection from Firebase Firestore
   useEffect(() => {
@@ -393,9 +525,24 @@ export default function OrdersClient() {
     return () => unsubItems();
   }, []);
 
+  const [editingOrder, setEditingOrder] = useState<OrderRecord | null>(null);
+
   // Open Full Screen Add Order Modal for a specific Slot
   const handleOpenAddOrderModal = (slot: SlotTime = '9:00 AM - 12:00 PM') => {
+    setEditingOrder(null);
     setOrderSlot(slot);
+    setMfgDate(getTodayDateStr());
+    setExpDeliveryDate(getTodayDateStr());
+    setIsCustomisation(false);
+    setNoOfBoxes(1);
+    setBoxType('HandleBox');
+    setBoxImageFile(null);
+    setBoxImageUrl('');
+    setHasSticker(false);
+    setHasShrink(false);
+    setPackingCharges('0');
+    setAdditionalCharges('0');
+    setDiscountAmount('0');
     setSelectedCustomer(null);
     setCustomerSearchTerm('');
     setOrderItems([]);
@@ -403,6 +550,45 @@ export default function OrdersClient() {
     setPaymentMode('UPI');
     setPaymentStatus('Pending');
     setOrderStatus('Order Created');
+    setIsAddOrderModalOpen(true);
+  };
+
+  // Open Full Screen Edit Order Modal
+  const handleOpenEditOrderModal = (order: OrderRecord) => {
+    setEditingOrder(order);
+    setOrderSlot(order.slot || '9:00 AM - 12:00 PM');
+    setMfgDate(order.manufacturingDate || getTodayDateStr());
+    setExpDeliveryDate(order.expectedDeliveryDate || getTodayDateStr());
+    setIsCustomisation(Boolean(order.isCustomisation));
+    if (order.customisationDetails) {
+      setNoOfBoxes(order.customisationDetails.noOfBoxes || 1);
+      setBoxType(order.customisationDetails.boxType || 'HandleBox');
+      setBoxImageUrl(order.customisationDetails.boxImageUrl || '');
+      setHasSticker(Boolean(order.customisationDetails.hasSticker));
+      setHasShrink(Boolean(order.customisationDetails.hasShrink));
+    } else {
+      setNoOfBoxes(1);
+      setBoxType('HandleBox');
+      setBoxImageUrl('');
+      setHasSticker(false);
+      setHasShrink(false);
+    }
+    setPackingCharges(String(order.packingCharges || 0));
+    setAdditionalCharges(String(order.additionalCharges || 0));
+    setDiscountAmount(String(order.discountAmount || 0));
+    setSelectedCustomer({
+      id: order.customerId || '',
+      code: 'CUST-000',
+      name: order.customerName,
+      mobile: order.customerMobile,
+      type: (order.customerType as 'Customer' | 'Wholesaler') || 'Customer',
+    });
+    setCustomerSearchTerm(order.customerName);
+    setOrderItems(order.items || []);
+    setReceivedAmount(String(order.receivedAmount || 0));
+    setPaymentMode(order.paymentMode || 'UPI');
+    setPaymentStatus(order.paymentStatus || 'Pending');
+    setOrderStatus(order.orderStatus || 'Order Created');
     setIsAddOrderModalOpen(true);
   };
 
@@ -453,58 +639,28 @@ export default function OrdersClient() {
     }
   };
 
-  // Open Item Multi-Selector Modal
-  const handleOpenItemSelector = () => {
-    setSelectedItemIds(orderItems.map((i) => i.itemId));
-    setItemSearchTerm('');
-    setIsAddItemSelectorOpen(true);
-  };
-
-  // Confirm Item Selection from Multi-Selector Modal
-  const handleConfirmSelectedItems = () => {
-    const updatedOrderItems: OrderItemLine[] = selectedItemIds.map((itemId) => {
-      const existing = orderItems.find((i) => i.itemId === itemId);
-      if (existing) return existing;
-
-      const master = itemsMaster.find((i) => i.id === itemId);
-      return {
-        itemId: master?.id || itemId,
-        itemCode: master?.code || 'ITM-000',
-        itemName: master?.name || 'Item',
-        category: master?.category || 'General',
-        unit: master?.unit || 'KG',
-        imageUrl: master?.imageUrl || '',
-        unitPrice: master?.price || 0,
-        quantity: 1,
-        lineTotal: master?.price || 0,
-        manufacturingDescription: '',
-        packingDescription: '',
-      };
-    });
-
-    setOrderItems(updatedOrderItems);
-    setIsAddItemSelectorOpen(false);
-  };
-
   // Handle Item Quantity & Price Changes in Order Table
   const handleItemLineChange = (
-    itemId: string,
-    field: 'quantity' | 'unitPrice' | 'mfgDesc' | 'pckDesc',
-    val: string
+    targetLineKey: string,
+    field: 'quantity' | 'unitPrice' | 'mfgDesc' | 'pckDesc' | 'hasPacket',
+    val: any
   ) => {
     setOrderItems((prev) =>
-      prev.map((item) => {
-        if (item.itemId !== itemId) return item;
+      prev.map((item, idx) => {
+        const currentKey = item.lineId || `${item.itemId}-${idx}`;
+        if (currentKey !== targetLineKey) return item;
 
         let qty = item.quantity;
         let price = item.unitPrice;
         let mfgDesc = item.manufacturingDescription;
         let pckDesc = item.packingDescription;
+        let packet = item.hasPacket;
 
         if (field === 'quantity') qty = Math.max(0.01, parseFloat(val) || 0);
         if (field === 'unitPrice') price = Math.max(0, parseFloat(val) || 0);
         if (field === 'mfgDesc') mfgDesc = val;
         if (field === 'pckDesc') pckDesc = val;
+        if (field === 'hasPacket') packet = Boolean(val);
 
         return {
           ...item,
@@ -513,18 +669,43 @@ export default function OrdersClient() {
           lineTotal: Math.round(qty * price * 100) / 100,
           manufacturingDescription: mfgDesc,
           packingDescription: pckDesc,
+          hasPacket: packet,
+          packetCharge: packet ? 5 : 0,
         };
       })
     );
   };
 
   // Remove Item line
-  const handleRemoveItemLine = (itemId: string) => {
-    setOrderItems((prev) => prev.filter((i) => i.itemId !== itemId));
+  const handleRemoveItemLine = (targetLineKey: string) => {
+    setOrderItems((prev) =>
+      prev.filter((i, idx) => {
+        const currentKey = i.lineId || `${i.itemId}-${idx}`;
+        return currentKey !== targetLineKey;
+      })
+    );
   };
 
-  // Calculate Order Grand Total
-  const grandTotal = orderItems.reduce((acc, curr) => acc + curr.lineTotal, 0);
+  // Order Calculations
+  const selectedBoxPrice = BOX_TYPES.find((b) => b.name === boxType)?.price || 0;
+  const subTotal = orderItems.reduce((acc, curr) => acc + curr.lineTotal, 0);
+
+  // Packet charges: ₹5 per box for each item line where packet is selected (ONLY when Customisation is enabled!)
+  const packetChargesTotal = isCustomisation
+    ? orderItems.reduce((acc, curr) => acc + (curr.hasPacket ? Math.max(0, noOfBoxes) * 5 : 0), 0)
+    : 0;
+
+  const boxChargesTotal = isCustomisation ? Math.max(0, noOfBoxes) * selectedBoxPrice : 0;
+  const stickerChargesTotal = isCustomisation && hasSticker ? Math.max(0, noOfBoxes) * 10 : 0;
+  const shrinkChargesTotal = isCustomisation && hasShrink ? Math.max(0, noOfBoxes) * 10 : 0;
+
+  const pCharges = !isCustomisation ? parseFloat(packingCharges) || 0 : 0;
+  const addCharges = !isCustomisation ? parseFloat(additionalCharges) || 0 : 0;
+  const discountVal = parseFloat(discountAmount) || 0;
+
+  const grandTotal = isCustomisation
+    ? Math.max(0, subTotal + boxChargesTotal + stickerChargesTotal + shrinkChargesTotal + packetChargesTotal - discountVal)
+    : Math.max(0, subTotal + pCharges + addCharges - discountVal);
 
   // Automatically compute Payment Status based on received amount vs grand total
   useEffect(() => {
@@ -550,6 +731,12 @@ export default function OrdersClient() {
       return;
     }
 
+    const validItems = orderItems.filter((i) => i.itemName.trim().length > 0);
+    if (validItems.length === 0) {
+      alert('Please select a valid product for at least one item row.');
+      return;
+    }
+
     const recv = parseFloat(receivedAmount) || 0;
     if (recv > grandTotal) {
       alert(`Received amount (₹${recv}) cannot exceed the order total of ₹${grandTotal.toFixed(2)}.`);
@@ -565,28 +752,116 @@ export default function OrdersClient() {
       const orderCount = orders.length + 1;
       const orderCode = `#ORD-${now.getFullYear().toString().slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(orderCount).padStart(3, '0')}`;
 
-      await addDoc(collection(db, 'orders'), {
-        code: orderCode,
-        customerName: selectedCustomer.name,
-        customerMobile: selectedCustomer.mobile,
-        customerId: selectedCustomer.id,
-        customerType: selectedCustomer.type,
-        slot: orderSlot,
-        orderTime: timeStr,
-        orderDate: selectedDate && selectedDate !== 'All' ? selectedDate : getTodayDateStr(),
-        items: orderItems,
-        totalItems: orderItems.length,
-        totalAmount: grandTotal,
-        receivedAmount: parseFloat(receivedAmount) || 0,
-        paymentMode: paymentMode,
-        paymentStatus: paymentStatus,
-        orderStatus: orderStatus,
-        createdAt: serverTimestamp(),
-      });
+      // Upload Box Image to ImageKit ONLY on Order Creation if image is present
+      let finalBoxImageUrl = boxImageUrl;
+      if (isCustomisation && boxImageFile) {
+        try {
+          const base64 = await compressImageTo60KB(boxImageFile);
+          const fileName = `box_pkg_${Date.now()}_${boxImageFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+          finalBoxImageUrl = await uploadToImageKit(base64, fileName);
+        } catch (imgErr) {
+          console.warn('Failed box image upload to ImageKit on submit, using preview URL fallback:', imgErr);
+        }
+      } else if (isCustomisation && boxImageUrl && boxImageUrl.startsWith('data:')) {
+        try {
+          finalBoxImageUrl = await uploadToImageKit(boxImageUrl, `box_pkg_${Date.now()}.png`);
+        } catch (imgErr) {
+          console.warn('Fallback saving box image URL:', imgErr);
+        }
+      }
 
+      if (editingOrder) {
+        // Update existing order
+        await updateDoc(doc(db, 'orders', editingOrder.id), {
+          code: editingOrder.code,
+          customerName: selectedCustomer.name,
+          customerMobile: selectedCustomer.mobile,
+          customerId: selectedCustomer.id,
+          customerType: selectedCustomer.type,
+          slot: orderSlot,
+          orderTime: editingOrder.orderTime || timeStr,
+          orderDate: editingOrder.orderDate || (selectedDate && selectedDate !== 'All' ? selectedDate : getTodayDateStr()),
+          manufacturingDate: mfgDate,
+          expectedDeliveryDate: expDeliveryDate,
+          isCustomisation: isCustomisation,
+          customisationDetails: isCustomisation
+            ? {
+                noOfBoxes: noOfBoxes,
+                boxType: boxType,
+                boxPrice: selectedBoxPrice,
+                boxImageUrl: finalBoxImageUrl,
+                hasSticker: hasSticker,
+                stickerPrice: 10,
+                hasShrink: hasShrink,
+                shrinkPrice: 10,
+              }
+            : null,
+          items: validItems,
+          totalItems: validItems.length,
+          subTotal: subTotal,
+          boxChargesTotal: isCustomisation ? boxChargesTotal : 0,
+          stickerChargesTotal: isCustomisation ? stickerChargesTotal : 0,
+          shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
+          packetChargesTotal: packetChargesTotal,
+          packingCharges: !isCustomisation ? pCharges : 0,
+          additionalCharges: !isCustomisation ? addCharges : 0,
+          discountAmount: discountVal,
+          totalAmount: grandTotal,
+          receivedAmount: parseFloat(receivedAmount) || 0,
+          paymentMode: paymentMode,
+          paymentStatus: paymentStatus,
+          orderStatus: orderStatus,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        // Create new order
+        await addDoc(collection(db, 'orders'), {
+          code: orderCode,
+          customerName: selectedCustomer.name,
+          customerMobile: selectedCustomer.mobile,
+          customerId: selectedCustomer.id,
+          customerType: selectedCustomer.type,
+          slot: orderSlot,
+          orderTime: timeStr,
+          orderDate: selectedDate && selectedDate !== 'All' ? selectedDate : getTodayDateStr(),
+          manufacturingDate: mfgDate,
+          expectedDeliveryDate: expDeliveryDate,
+          isCustomisation: isCustomisation,
+          customisationDetails: isCustomisation
+            ? {
+                noOfBoxes: noOfBoxes,
+                boxType: boxType,
+                boxPrice: selectedBoxPrice,
+                boxImageUrl: finalBoxImageUrl,
+                hasSticker: hasSticker,
+                stickerPrice: 10,
+                hasShrink: hasShrink,
+                shrinkPrice: 10,
+              }
+            : null,
+          items: validItems,
+          totalItems: validItems.length,
+          subTotal: subTotal,
+          boxChargesTotal: isCustomisation ? boxChargesTotal : 0,
+          stickerChargesTotal: isCustomisation ? stickerChargesTotal : 0,
+          shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
+          packetChargesTotal: packetChargesTotal,
+          packingCharges: !isCustomisation ? pCharges : 0,
+          additionalCharges: !isCustomisation ? addCharges : 0,
+          discountAmount: discountVal,
+          totalAmount: grandTotal,
+          receivedAmount: parseFloat(receivedAmount) || 0,
+          paymentMode: paymentMode,
+          paymentStatus: paymentStatus,
+          orderStatus: orderStatus,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      setEditingOrder(null);
       setIsAddOrderModalOpen(false);
     } catch (err: any) {
-      console.error('Failed to create order:', err);
+      console.error('Failed to save order:', err);
       setFirebaseError(err?.message || 'Failed to save order');
     } finally {
       setIsSubmitting(false);
@@ -632,16 +907,6 @@ export default function OrdersClient() {
       );
     })
     : [];
-
-  // Filtered Item Master for Item Selector Modal
-  const filteredItemsMaster = itemsMaster.filter((item) => {
-    const term = itemSearchTerm.toLowerCase();
-    return (
-      item.name.toLowerCase().includes(term) ||
-      item.code.toLowerCase().includes(term) ||
-      item.category.toLowerCase().includes(term)
-    );
-  });
 
   // Filter orders by selectedDate, orderStatusFilter, paymentStatusFilter, and searchTerm
   const filteredOrders = orders.filter((order) => {
@@ -1014,20 +1279,22 @@ export default function OrdersClient() {
                             <span>{order.orderTime || '10:00 AM'}</span>
                           </div>
 
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5">
                             <button
                               onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
-                              className="p-1 text-slate-400 hover:text-indigo-600 rounded-md"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-600 transition-colors cursor-pointer border border-indigo-100 shadow-2xs"
                               title="View Order Details"
                             >
-                              <Eye size={14} />
+                              <Eye size={13} />
+                              <span>View</span>
                             </button>
                             <button
-                              onClick={(e) => { e.stopPropagation(); setDeletingOrder(order); }}
-                              className="p-1 text-slate-400 hover:text-red-600 rounded-md"
-                              title="Delete Order"
+                              onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer border border-slate-200/80 shadow-2xs"
+                              title="Edit Order"
                             >
-                              <Trash2 size={14} />
+                              <Pencil size={13} />
+                              <span>Edit</span>
                             </button>
                           </div>
                         </div>
@@ -1115,18 +1382,22 @@ export default function OrdersClient() {
                         })()}
                       </td>
                       <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
+                        <div className="flex items-center justify-center gap-1.5">
                           <button
                             onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
-                            className="p-1 text-slate-400 hover:text-indigo-600"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-600 transition-colors cursor-pointer border border-indigo-100 shadow-2xs"
+                            title="View Order Details"
                           >
-                            <Eye size={15} />
+                            <Eye size={13} />
+                            <span>View</span>
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); setDeletingOrder(order); }}
-                            className="p-1 text-slate-400 hover:text-red-600"
+                            onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer border border-slate-200/80 shadow-2xs"
+                            title="Edit Order"
                           >
-                            <Trash2 size={15} />
+                            <Pencil size={13} />
+                            <span>Edit</span>
                           </button>
                         </div>
                       </td>
@@ -1151,7 +1422,9 @@ export default function OrdersClient() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">Create New Order</h2>
+                  <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
+                    {editingOrder ? `Edit Order ${editingOrder.code}` : 'Create New Order'}
+                  </h2>
                   <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
                     {orderSlot}
                   </span>
@@ -1175,7 +1448,7 @@ export default function OrdersClient() {
                 className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                <span>Create Order</span>
+                <span>{editingOrder ? 'Update Order' : 'Create Order'}</span>
               </button>
               <button
                 onClick={() => setIsAddOrderModalOpen(false)}
@@ -1188,39 +1461,213 @@ export default function OrdersClient() {
 
           {/* Modal Main Body: 2 Columns Layout */}
           <div className="flex-1 overflow-y-auto p-6 sm:p-8 w-full">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-              {/* Left Column (2 Cols): Time Slot, Customer Search, Product Items Table */}
-              <div className="lg:col-span-2 space-y-6">
+              {/* Left Column (8 Cols): Time Slot, Customer Search, Product Items Table */}
+              <div className="lg:col-span-8 space-y-6">
 
-                {/* 1. Time Slot Selector */}
-                <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Order Time Slot *
-                    </label>
-                    <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
-                      Slot Locked
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {SLOT_TIMES.map((slot) => (
-                      <button
-                        key={slot}
-                        type="button"
-                        disabled={true}
-                        className={`px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold border transition-all ${orderSlot === slot
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                          : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                {/* 1. Time Slot & Dates Selection */}
+                <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Order Time Slot *
+                      </label>
+                      <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                        Required
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      {SLOT_TIMES.map((slot) => (
+                        <button
+                          key={slot}
+                          type="button"
+                          onClick={() => setOrderSlot(slot)}
+                          className={`px-[8px] py-[4px] h-[34px] rounded-[6px] text-xs font-bold border transition-all cursor-pointer ${
+                            orderSlot === slot
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                           }`}
-                      >
-                        {slot}
-                      </button>
-                    ))}
+                        >
+                          {slot}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Manufacturing Date *
+                      </label>
+                      <CustomDatePicker
+                        value={mfgDate}
+                        onChange={(d) => setMfgDate(d)}
+                        allowAll={false}
+                        size="md"
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Expected Delivery Date *
+                      </label>
+                      <CustomDatePicker
+                        value={expDeliveryDate}
+                        onChange={(d) => setExpDeliveryDate(d)}
+                        allowAll={false}
+                        size="md"
+                        className="w-full"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* 2. Customer / Wholesaler Search */}
+                {/* 2. Customisation Box Checkbox & Section */}
+                <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="customisationCheckbox"
+                        checked={isCustomisation}
+                        onChange={(e) => setIsCustomisation(e.target.checked)}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <label
+                        htmlFor="customisationCheckbox"
+                        className="text-xs font-extrabold text-slate-900 cursor-pointer select-none"
+                      >
+                        Include Customisation Box
+                      </label>
+                    </div>
+                    {isCustomisation && (
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                        Customisation Active
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Customisation Box Details (Label Below Layout) */}
+                  {isCustomisation && (
+                    <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200 space-y-4 animate-in fade-in duration-150">
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-2">
+                        Customisation Box Details
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        {/* 1. No of Boxes */}
+                        <div className="flex flex-col">
+                          <input
+                            type="number"
+                            min="1"
+                            value={noOfBoxes}
+                            onChange={(e) => setNoOfBoxes(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-white font-semibold shadow-2xs"
+                          />
+                          <label className="text-[11px] font-bold text-slate-500 mt-1">No of boxes</label>
+                        </div>
+
+                        {/* 2. Box Type Dropdown */}
+                        <div className="flex flex-col">
+                          <CustomSelect
+                            options={BOX_TYPES.map((b) => ({
+                              value: b.name,
+                              label: `${b.name} (₹${b.price})`,
+                            }))}
+                            value={boxType}
+                            onChange={(val) => setBoxType(val)}
+                            className="w-full"
+                            buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs py-2 h-[34px]"
+                          />
+                          <label className="text-[11px] font-bold text-slate-500 mt-1">Box type</label>
+                        </div>
+
+                        {/* 3. Packing Box Image Holder */}
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2 bg-white p-1 border border-slate-200 rounded-xl shadow-2xs">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              disabled={isUploadingBoxImage}
+                              onChange={handleBoxImageUpload}
+                              className="text-[10px] text-slate-500 file:mr-1 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-indigo-50 file:text-indigo-700 cursor-pointer w-full"
+                            />
+                            {isUploadingBoxImage ? (
+                              <Loader2 size={16} className="animate-spin text-indigo-600 flex-shrink-0 mr-1" />
+                            ) : boxImageUrl ? (
+                              <div className="relative w-7 h-7 rounded-md overflow-hidden border border-slate-200 flex-shrink-0">
+                                <Image src={boxImageUrl} alt="Box Preview" fill className="object-cover" />
+                              </div>
+                            ) : null}
+                          </div>
+                          <label className="text-[11px] font-bold text-slate-500 mt-1">Packing box image</label>
+                        </div>
+
+                        {/* 4. Sticker Selection */}
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-1.5 h-[34px]">
+                            <button
+                              type="button"
+                              onClick={() => setHasSticker(true)}
+                              className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
+                                hasSticker
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              <Check size={13} /> Yes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setHasSticker(false)}
+                              className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
+                                !hasSticker
+                                  ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              <X size={13} /> No
+                            </button>
+                          </div>
+                          <label className="text-[11px] font-bold text-slate-500 mt-1">Sticker (₹10)</label>
+                        </div>
+
+                        {/* 5. Shrink Selection */}
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-1.5 h-[34px]">
+                            <button
+                              type="button"
+                              onClick={() => setHasShrink(true)}
+                              className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
+                                hasShrink
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              <Check size={13} /> Yes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setHasShrink(false)}
+                              className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
+                                !hasShrink
+                                  ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              <X size={13} /> No
+                            </button>
+                          </div>
+                          <label className="text-[11px] font-bold text-slate-500 mt-1">Shrink (₹10)</label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Customer / Wholesaler Search */}
                 <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
@@ -1327,32 +1774,33 @@ export default function OrdersClient() {
                   )}
                 </div>
 
-                {/* 3. Products Selector Table */}
+                {/* 4. Products Selector Table */}
                 <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
                   <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                     <div>
                       <h3 className="text-sm font-bold text-slate-900">Order Products</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Add products and set quantity and special instructions</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Add products, set quantities, select packet options, and add instructions</p>
                     </div>
 
                     <button
                       type="button"
-                      onClick={handleOpenItemSelector}
-                      className="flex items-center gap-1.5 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                      onClick={() => handleOpenProductModal(null)}
+                      className="flex items-center gap-1.5 px-[12px] py-[6px] h-[34px] rounded-[10px] bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                     >
                       <Plus size={15} />
-                      <span>+ Add Products</span>
+                      <span>Add Item</span>
                     </button>
                   </div>
 
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs min-w-[700px]">
+                    <table className="w-full text-left border-collapse text-xs min-w-[760px]">
                       <thead>
                         <tr className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                          <th className="py-3 px-4">Item</th>
+                          <th className="py-3 px-4 min-w-[220px]">Item Name</th>
                           <th className="py-3 px-3">Price (₹)</th>
-                          <th className="py-3 px-3 w-28">Qty</th>
+                          <th className="py-3 px-3 w-24">Qty</th>
                           <th className="py-3 px-3">Total (₹)</th>
+                          {isCustomisation && <th className="py-3 px-3 text-center">Packet (₹5/box)</th>}
                           <th className="py-3 px-3">Mfg Instructions</th>
                           <th className="py-3 px-3">Packing Instructions</th>
                           <th className="py-3 px-3 text-center">Action</th>
@@ -1361,93 +1809,147 @@ export default function OrdersClient() {
                       <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                         {orderItems.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="py-12 text-center text-slate-400">
+                            <td colSpan={isCustomisation ? 8 : 7} className="py-12 text-center text-slate-400">
                               <div className="flex flex-col items-center justify-center gap-2">
                                 <ShoppingBag size={28} className="text-slate-300" />
                                 <p className="font-semibold text-slate-600">No items added yet</p>
                                 <button
                                   type="button"
-                                  onClick={handleOpenItemSelector}
-                                  className="mt-1 px-3.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-600 text-xs font-bold hover:bg-indigo-100 transition-colors"
+                                  onClick={() => handleOpenProductModal(null)}
+                                  className="mt-1 px-3.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-600 text-xs font-bold hover:bg-indigo-100 transition-colors cursor-pointer"
                                 >
-                                  + Click here to add products
+                                  + Click here to add item
                                 </button>
                               </div>
                             </td>
                           </tr>
                         ) : (
-                          orderItems.map((item) => (
-                            <tr key={item.itemId} className="hover:bg-slate-50/60 transition-colors">
-                              <td className="py-3 px-4">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="relative w-9 h-9 rounded-lg bg-slate-50 border border-slate-200 overflow-hidden flex-shrink-0">
-                                    <Image
-                                      src={item.imageUrl || '/logo.png'}
-                                      alt={item.itemName}
-                                      fill
-                                      className="object-contain p-1"
-                                    />
-                                  </div>
-                                  <div>
-                                    <p className="font-bold text-slate-900">{item.itemName}</p>
-                                    <p className="text-[10px] text-slate-400 font-mono">{item.itemCode}</p>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-3 px-3">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={item.unitPrice}
-                                  onChange={(e) => handleItemLineChange(item.itemId, 'unitPrice', e.target.value)}
-                                  className="w-20 px-2 py-1 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
-                                />
-                              </td>
-                              <td className="py-3 px-3">
-                                <div className="flex items-center gap-1">
+                          orderItems.map((item, idx) => {
+                            const lineKey = item.lineId || `${item.itemId}-${idx}`;
+                            return (
+                              <tr key={lineKey} className="hover:bg-slate-50/60 transition-colors">
+                                <td className="py-3 px-4">
+                                  {item.itemName ? (
+                                    <div
+                                      onClick={() => handleOpenProductModal(lineKey)}
+                                      className="flex items-center justify-between gap-2.5 bg-slate-50 hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 p-1.5 rounded-xl transition-all cursor-pointer group shadow-2xs min-w-[200px]"
+                                      title="Click to change product"
+                                    >
+                                      <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="relative w-8 h-8 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0">
+                                          <Image
+                                            src={item.imageUrl || '/logo.png'}
+                                            alt={item.itemName}
+                                            fill
+                                            className="object-contain p-1"
+                                          />
+                                        </div>
+                                        <div className="min-w-0 text-left">
+                                          <p className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
+                                            {item.itemName}
+                                          </p>
+                                          <p className="text-[10px] text-slate-400 font-mono truncate">{item.itemCode}</p>
+                                        </div>
+                                      </div>
+                                      <Pencil size={13} className="text-slate-400 group-hover:text-indigo-600 flex-shrink-0 mr-1" />
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenProductModal(lineKey)}
+                                      className="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer min-w-[200px]"
+                                    >
+                                      <Plus size={14} />
+                                      <span>Select Product</span>
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3">
                                   <input
                                     type="number"
-                                    step="0.1"
-                                    min="0.1"
-                                    value={item.quantity}
-                                    onChange={(e) => handleItemLineChange(item.itemId, 'quantity', e.target.value)}
-                                    className="w-16 px-2 py-1 border border-slate-200 rounded-lg font-bold text-indigo-600 text-xs focus:outline-none focus:border-indigo-500"
+                                    step="0.01"
+                                    value={item.unitPrice}
+                                    onChange={(e) => handleItemLineChange(lineKey, 'unitPrice', e.target.value)}
+                                    className="w-20 px-2 py-1 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
                                   />
-                                  <span className="text-[10px] font-semibold text-slate-400">{item.unit}</span>
-                                </div>
-                              </td>
-                              <td className="py-3 px-3 font-extrabold text-slate-900">
-                                ₹ {item.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-3 px-3">
-                                <input
-                                  type="text"
-                                  placeholder="Mfg notes..."
-                                  value={item.manufacturingDescription || ''}
-                                  onChange={(e) => handleItemLineChange(item.itemId, 'mfgDesc', e.target.value)}
-                                  className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
-                                />
-                              </td>
-                              <td className="py-3 px-3">
-                                <input
-                                  type="text"
-                                  placeholder="Packing notes..."
-                                  value={item.packingDescription || ''}
-                                  onChange={(e) => handleItemLineChange(item.itemId, 'pckDesc', e.target.value)}
-                                  className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
-                                />
-                              </td>
-                              <td className="py-3 px-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveItemLine(item.itemId)}
-                                  className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                                >
-                                  <Trash2 size={15} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))
+                                </td>
+                                <td className="py-3 px-3">
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      min="0.1"
+                                      value={item.quantity}
+                                      onChange={(e) => handleItemLineChange(lineKey, 'quantity', e.target.value)}
+                                      className="w-16 px-2 py-1 border border-slate-200 rounded-lg font-bold text-indigo-600 text-xs focus:outline-none focus:border-indigo-500"
+                                    />
+                                    <span className="text-[10px] font-semibold text-slate-400">{item.unit}</span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3 font-extrabold text-slate-900">
+                                  ₹ {item.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </td>
+
+                                {/* Packet Column - Displays only when customisation is enabled */}
+                                {isCustomisation && (
+                                  <td className="py-3 px-3 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleItemLineChange(lineKey, 'hasPacket', !item.hasPacket)}
+                                        className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                                          item.hasPacket
+                                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                            : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                                        }`}
+                                        title={`Packet charge ₹5 per box (${noOfBoxes} boxes = ₹${noOfBoxes * 5})`}
+                                      >
+                                        {item.hasPacket ? (
+                                          <>
+                                            <Check size={13} />
+                                            <span>₹{noOfBoxes * 5}</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <X size={13} />
+                                            <span>₹5</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
+
+                                <td className="py-3 px-3">
+                                  <input
+                                    type="text"
+                                    placeholder="Mfg notes..."
+                                    value={item.manufacturingDescription || ''}
+                                    onChange={(e) => handleItemLineChange(lineKey, 'mfgDesc', e.target.value)}
+                                    className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                                  />
+                                </td>
+                                <td className="py-3 px-3">
+                                  <input
+                                    type="text"
+                                    placeholder="Packing notes..."
+                                    value={item.packingDescription || ''}
+                                    onChange={(e) => handleItemLineChange(lineKey, 'pckDesc', e.target.value)}
+                                    className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                                  />
+                                </td>
+                                <td className="py-3 px-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveItemLine(lineKey)}
+                                    className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
@@ -1456,8 +1958,8 @@ export default function OrdersClient() {
 
               </div>
 
-              {/* Right Column (1 Col): Sticky Order Summary & Payment Checkout Panel */}
-              <div className="space-y-6">
+              {/* Right Column (4 Cols): Sticky Order Summary & Payment Checkout Panel */}
+              <div className="lg:col-span-4 space-y-6">
                 <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-2xs space-y-5 sticky top-6">
                   <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-100 pb-3.5">
                     Order Summary
@@ -1474,7 +1976,111 @@ export default function OrdersClient() {
                       <span className="font-bold text-slate-800">{orderItems.length} items</span>
                     </div>
 
-                    <div className="flex justify-between py-2 border-b border-slate-100 text-base font-extrabold text-slate-900">
+                    <div className="flex justify-between py-1 border-b border-slate-50">
+                      <span className="text-slate-500 font-semibold">Sub Total:</span>
+                      <span className="font-bold text-slate-800">
+                        ₹ {subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    {/* Breakdown based on Customisation Toggle */}
+                    {isCustomisation ? (
+                      <>
+                        <div className="flex justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-500 font-semibold">
+                            Box Charges ({noOfBoxes} × ₹{selectedBoxPrice}):
+                          </span>
+                          <span className="font-bold text-slate-800">
+                            + ₹ {boxChargesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-500 font-semibold">
+                            Sticker Charges ({hasSticker ? `${noOfBoxes} × ₹10` : 'No'}):
+                          </span>
+                          <span className="font-bold text-slate-800">
+                            + ₹ {stickerChargesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-500 font-semibold">
+                            Shrink Charges ({hasShrink ? `${noOfBoxes} × ₹10` : 'No'}):
+                          </span>
+                          <span className="font-bold text-slate-800">
+                            + ₹ {shrinkChargesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-500 font-semibold">
+                            Packet Charges ({orderItems.filter((i) => i.hasPacket).length} items × {noOfBoxes} boxes × ₹5):
+                          </span>
+                          <span className="font-bold text-slate-800">
+                            + ₹ {packetChargesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+
+                        <div className="pt-2">
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Discount (₹)</label>
+                          <input
+                            type="number"
+                            step="1"
+                            min="0"
+                            placeholder="0"
+                            value={discountAmount}
+                            onChange={(e) => setDiscountAmount(e.target.value)}
+                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="pt-2 space-y-2.5">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Packing Charges (₹)</label>
+                            <input
+                              type="number"
+                              step="1"
+                              min="0"
+                              placeholder="0"
+                              value={packingCharges}
+                              onChange={(e) => setPackingCharges(e.target.value)}
+                              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Additional Charges (₹)</label>
+                            <input
+                              type="number"
+                              step="1"
+                              min="0"
+                              placeholder="0"
+                              value={additionalCharges}
+                              onChange={(e) => setAdditionalCharges(e.target.value)}
+                              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Discount (₹)</label>
+                            <input
+                              type="number"
+                              step="1"
+                              min="0"
+                              placeholder="0"
+                              value={discountAmount}
+                              onChange={(e) => setDiscountAmount(e.target.value)}
+                              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="flex justify-between py-2.5 border-t border-slate-200 text-base font-extrabold text-slate-900 mt-2">
                       <span>Grand Total:</span>
                       <span className="text-indigo-600">
                         ₹ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -1567,7 +2173,7 @@ export default function OrdersClient() {
                       className="w-full flex items-center justify-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-gradient-to-br from-indigo-600 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50"
                     >
                       {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                      <span>Create Order</span>
+                      <span>{editingOrder ? 'Update Order' : 'Create Order'}</span>
                     </button>
 
                     <button
@@ -1581,89 +2187,6 @@ export default function OrdersClient() {
                 </div>
               </div>
 
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── 7. ITEM MULTI-SELECTOR MODAL ───────────────────────────── */}
-      {isAddItemSelectorOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">Select Products for Order</h3>
-              <button onClick={() => setIsAddItemSelectorOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={itemSearchTerm}
-                onChange={(e) => setItemSearchTerm(e.target.value)}
-                className="w-full pl-3.5 pr-9 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
-              />
-              <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            </div>
-
-            <div className="max-h-72 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
-              {filteredItemsMaster.map((item) => {
-                const isChecked = selectedItemIds.includes(item.id);
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => {
-                      if (isChecked) {
-                        setSelectedItemIds((prev) => prev.filter((id) => id !== item.id));
-                      } else {
-                        setSelectedItemIds((prev) => [...prev, item.id]);
-                      }
-                    }}
-                    className={`p-3 flex items-center justify-between cursor-pointer transition-colors ${isChecked ? 'bg-indigo-50/60' : 'hover:bg-slate-50'
-                      }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        readOnly
-                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                      />
-                      <div className="relative w-8 h-8 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
-                        <Image src={item.imageUrl || '/logo.png'} alt={item.name} fill className="object-contain p-1" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-slate-900">{item.name}</p>
-                        <p className="text-[10px] text-slate-400">{item.category} • {item.unit}</p>
-                      </div>
-                    </div>
-
-                    <span className="font-extrabold text-xs text-indigo-600">₹ {item.price}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-              <span className="text-xs text-slate-500">Selected: {selectedItemIds.length} items</span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddItemSelectorOpen(false)}
-                  className="px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmSelectedItems}
-                  className="px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
-                >
-                  Confirm Selected Items
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -1747,6 +2270,101 @@ export default function OrdersClient() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 8.5. SELECT PRODUCT MODAL ────────────────────────────── */}
+      {isAddItemSelectorOpen && (
+        <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 font-sans">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Select Product</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Search and select a product for the order</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddItemSelectorOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative">
+              <input
+                type="text"
+                autoFocus
+                placeholder="Search products by name, code, or category..."
+                value={productSearchQuery}
+                onChange={(e) => setProductSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm border border-slate-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 font-semibold bg-slate-50/50"
+              />
+              <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+
+            {/* Product List Grid */}
+            <div className="max-h-80 overflow-y-auto border border-slate-200/90 rounded-2xl divide-y divide-slate-100 p-1 bg-slate-50/30 no-scrollbar">
+              {filteredProductMasterForModal.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400 font-semibold">
+                  No matching products found. Try a different search query.
+                </div>
+              ) : (
+                filteredProductMasterForModal.map((prod) => (
+                  <div
+                    key={prod.id}
+                    onClick={() => handleSelectProductFromModal(prod)}
+                    className="p-3 rounded-xl hover:bg-indigo-50/80 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="relative w-11 h-11 rounded-xl bg-white border border-slate-200 overflow-hidden flex-shrink-0 shadow-2xs group-hover:border-indigo-200">
+                        <Image src={prod.imageUrl || '/logo.png'} alt={prod.name} fill className="object-contain p-1.5" />
+                      </div>
+                      <div className="min-w-0 text-left">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
+                            {prod.name}
+                          </p>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-mono">
+                            {prod.code}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {prod.category} • Unit: <span className="font-semibold text-slate-700">{prod.unit}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className="text-xs font-extrabold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-xl border border-indigo-100">
+                        ₹ {prod.price}
+                      </span>
+                      <button
+                        type="button"
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs transition-colors cursor-pointer"
+                      >
+                        Select
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <span className="text-xs font-semibold text-slate-500">
+                Found {filteredProductMasterForModal.length} products
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsAddItemSelectorOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

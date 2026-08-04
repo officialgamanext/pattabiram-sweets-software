@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useRef, useState, useEffect } from 'react';
 import Image from 'next/image';
+import { useAuth } from '@/context/AuthContext';
 import {
   Menu,
   LayoutGrid,
@@ -24,6 +25,8 @@ import {
   CreditCard,
   Settings,
   Headphones,
+  LogOut,
+  User as UserIcon,
 } from 'lucide-react';
 
 const navItems = [
@@ -48,7 +51,10 @@ const navItems = [
 
 export default function Header() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
 
@@ -64,15 +70,27 @@ export default function Header() {
     const el = scrollRef.current;
     el?.addEventListener('scroll', checkScroll);
     window.addEventListener('resize', checkScroll);
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+
     return () => {
       el?.removeEventListener('scroll', checkScroll);
       window.removeEventListener('resize', checkScroll);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
 
   const scroll = (dir: 'left' | 'right') => {
     scrollRef.current?.scrollBy({ left: dir === 'left' ? -260 : 260, behavior: 'smooth' });
   };
+
+  const userDisplayName = user?.email || user?.phoneNumber || 'Authenticated User';
+  const userRole = user?.email ? 'SuperAdmin' : 'Staff User';
 
   return (
     <div className="bg-white border-b border-slate-200">
@@ -87,7 +105,7 @@ export default function Header() {
           <Link href="/" className="flex items-center">
             <Image
               src="/logo.png"
-              alt="ManageX"
+              alt="Pattabiram Sweets"
               width={140}
               height={40}
               className="h-9 w-auto object-contain"
@@ -105,24 +123,49 @@ export default function Header() {
             </span>
           </button>
 
-          <div className="flex items-center gap-2 sm:gap-3 cursor-pointer group">
-            <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden border border-slate-200 shadow-xs">
-              <Image
-                src="/images/user_avatar.png"
-                alt="Arun Kumar"
-                width={36}
-                height={36}
-                className="object-cover w-full h-full"
-              />
-            </div>
-            <div className="hidden sm:block leading-tight">
-              <p className="text-xs sm:text-sm font-semibold text-slate-800 group-hover:text-indigo-600 transition-colors">Arun Kumar</p>
-              <p className="text-[10px] sm:text-xs text-slate-400">Admin</p>
-            </div>
-            <ChevronDown size={14} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+          {/* User Profile Menu */}
+          <div className="relative" ref={userMenuRef}>
+            <button
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              className="flex items-center gap-2 sm:gap-3 cursor-pointer group focus:outline-none"
+            >
+              <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold flex items-center justify-center shadow-xs">
+                <UserIcon size={18} />
+              </div>
+              <div className="hidden sm:block leading-tight text-left max-w-[160px] truncate">
+                <p className="text-xs sm:text-sm font-semibold text-slate-800 group-hover:text-indigo-600 transition-colors truncate">
+                  {userDisplayName}
+                </p>
+                <p className="text-[10px] sm:text-xs text-indigo-600 font-medium">{userRole}</p>
+              </div>
+              <ChevronDown size={14} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {userMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200/80 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
+                  <p className="text-xs font-semibold text-slate-900 truncate">{userDisplayName}</p>
+                  <p className="text-[11px] text-indigo-600 font-medium">{userRole}</p>
+                </div>
+                <div className="p-1">
+                  <button
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      logout();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <LogOut size={16} />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
 
       {/* ── Secondary Nav Tabs Bar ───────────────────────────────── */}
       <div className="flex items-center justify-between px-2 sm:px-4 h-16 sm:h-[68px] bg-white">

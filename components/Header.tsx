@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 import {
   Menu,
-  LayoutGrid,
+  X,
   Bell,
   ChevronDown,
   ChevronLeft,
@@ -27,6 +27,7 @@ import {
   Headphones,
   LogOut,
   User as UserIcon,
+  Sparkles,
 } from 'lucide-react';
 
 const navItems = [
@@ -53,6 +54,8 @@ export default function Header() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -85,6 +88,11 @@ export default function Header() {
     };
   }, []);
 
+  // Close mobile drawer on route change
+  useEffect(() => {
+    setIsDrawerOpen(false);
+  }, [pathname]);
+
   const scroll = (dir: 'left' | 'right') => {
     scrollRef.current?.scrollBy({ left: dir === 'left' ? -260 : 260, behavior: 'smooth' });
   };
@@ -93,136 +101,280 @@ export default function Header() {
   const userRole = user?.email ? 'SuperAdmin' : 'Staff User';
 
   return (
-    <div className="bg-white border-b border-slate-200">
-      {/* ── Top Bar ───────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 sm:px-6 h-16 border-b border-slate-100">
-        {/* Left: Hamburger + Logo */}
-        <div className="flex items-center gap-3 sm:gap-4">
-          <button className="text-slate-500 hover:text-slate-800 transition-colors p-1 cursor-pointer">
-            <Menu size={20} />
-          </button>
-
-          <Link href="/" className="flex items-center">
-            <Image
-              src="/logo.png"
-              alt="Pattabiram Sweets"
-              width={140}
-              height={40}
-              className="h-9 w-auto object-contain"
-              priority
-            />
-          </Link>
-        </div>
-
-        {/* Right: Notifications + Profile */}
-        <div className="flex items-center gap-3 sm:gap-5">
-          <button className="relative p-2 rounded-full text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
-            <Bell size={20} />
-            <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
-              5
-            </span>
-          </button>
-
-          {/* User Profile Menu */}
-          <div className="relative" ref={userMenuRef}>
+    <>
+      <div className="bg-white border-b border-slate-200">
+        {/* ── Top Bar ───────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-3 sm:px-6 h-16 border-b border-slate-100">
+          {/* Left: Hamburger + Logo */}
+          <div className="flex items-center gap-2 sm:gap-4">
             <button
-              onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className="flex items-center gap-2 sm:gap-3 cursor-pointer group focus:outline-none"
+              onClick={() => setIsDrawerOpen(true)}
+              className="text-slate-600 hover:text-slate-900 transition-colors p-2 rounded-xl hover:bg-slate-100 cursor-pointer"
+              aria-label="Open Navigation Menu"
             >
-              <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold flex items-center justify-center shadow-xs">
-                <UserIcon size={18} />
-              </div>
-              <div className="hidden sm:block leading-tight text-left max-w-[160px] truncate">
-                <p className="text-xs sm:text-sm font-semibold text-slate-800 group-hover:text-indigo-600 transition-colors truncate">
-                  {userDisplayName}
-                </p>
-                <p className="text-[10px] sm:text-xs text-indigo-600 font-medium">{userRole}</p>
-              </div>
-              <ChevronDown size={14} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+              <Menu size={22} />
             </button>
 
-            {/* Dropdown Menu */}
-            {userMenuOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200/80 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
-                  <p className="text-xs font-semibold text-slate-900 truncate">{userDisplayName}</p>
-                  <p className="text-[11px] text-indigo-600 font-medium">{userRole}</p>
+            <Link href="/" className="flex items-center">
+              <Image
+                src="/logo.png"
+                alt="Pattabiram Sweets"
+                width={140}
+                height={40}
+                className="h-8 sm:h-9 w-auto object-contain"
+                priority
+              />
+            </Link>
+          </div>
+
+          {/* Right: Notifications + Profile */}
+          <div className="flex items-center gap-2 sm:gap-5">
+            <button className="relative p-2 rounded-full text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
+              <Bell size={20} />
+              <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
+                5
+              </span>
+            </button>
+
+            {/* User Profile Menu */}
+            <div className="relative" ref={userMenuRef}>
+              <button
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="flex items-center gap-2 sm:gap-3 cursor-pointer group focus:outline-none"
+              >
+                <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold flex items-center justify-center shadow-xs">
+                  <UserIcon size={18} />
                 </div>
-                <div className="p-1">
-                  <button
-                    onClick={() => {
-                      setUserMenuOpen(false);
-                      logout();
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-                  >
-                    <LogOut size={16} />
-                    <span>Sign Out</span>
-                  </button>
+                <div className="hidden sm:block leading-tight text-left max-w-[160px] truncate">
+                  <p className="text-xs sm:text-sm font-semibold text-slate-800 group-hover:text-indigo-600 transition-colors truncate">
+                    {userDisplayName}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-indigo-600 font-medium">{userRole}</p>
                 </div>
-              </div>
-            )}
+                <ChevronDown size={14} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+              </button>
+
+              {/* Dropdown Menu */}
+              {userMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200/80 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
+                    <p className="text-xs font-semibold text-slate-900 truncate">{userDisplayName}</p>
+                    <p className="text-[11px] text-indigo-600 font-medium">{userRole}</p>
+                  </div>
+                  <div className="p-1">
+                    <button
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        logout();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                    >
+                      <LogOut size={16} />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-
-      {/* ── Secondary Nav Tabs Bar ───────────────────────────────── */}
-      <div className="flex items-center justify-between px-2 sm:px-4 h-16 sm:h-[68px] bg-white">
-        {/* Left Arrow Button */}
-        <button
-          onClick={() => scroll('left')}
-          disabled={!canScrollLeft}
-          className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-all flex-shrink-0 mr-1 sm:mr-2 ${canScrollLeft
-              ? 'border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer shadow-xs'
-              : 'border-slate-100 text-slate-300 bg-slate-50/50 cursor-not-allowed opacity-40'
+        {/* ── Desktop & Tablet Secondary Nav Tabs Bar ───────────────── */}
+        <div className="hidden sm:flex items-center justify-between px-2 sm:px-4 h-16 sm:h-[68px] bg-white">
+          {/* Left Arrow Button */}
+          <button
+            onClick={() => scroll('left')}
+            disabled={!canScrollLeft}
+            className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-all flex-shrink-0 mr-1 sm:mr-2 ${
+              canScrollLeft
+                ? 'border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer shadow-xs'
+                : 'border-slate-100 text-slate-300 bg-slate-50/50 cursor-not-allowed opacity-40'
             }`}
-        >
-          <ChevronLeft size={16} />
-        </button>
+          >
+            <ChevronLeft size={16} />
+          </button>
 
-        {/* Center Evenly Spaced Nav Tabs */}
-        <div
-          ref={scrollRef}
-          className="flex-1 flex items-center justify-between gap-1 sm:gap-3 overflow-x-auto no-scrollbar py-1 scroll-smooth"
-        >
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex flex-col items-center justify-center min-w-[76px] sm:min-w-[84px] px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl transition-all duration-150 flex-shrink-0 relative group ${isActive
-                    ? 'bg-indigo-50 text-indigo-600 font-semibold shadow-xs'
-                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+          {/* Center Evenly Spaced Nav Tabs */}
+          <div
+            ref={scrollRef}
+            className="flex-1 flex items-center justify-between gap-1 sm:gap-3 overflow-x-auto no-scrollbar py-1 scroll-smooth"
+          >
+            {navItems.map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex flex-col items-center justify-center min-w-[76px] sm:min-w-[84px] px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl transition-all duration-150 flex-shrink-0 relative group ${
+                    isActive
+                      ? 'bg-indigo-50 text-indigo-600 font-semibold shadow-xs'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
                   }`}
-              >
-                <div className={`mb-1 transition-colors ${isActive ? 'text-indigo-600' : 'text-slate-500 group-hover:text-slate-700'}`}>
-                  {item.icon}
-                </div>
-                <span className="text-[10px] sm:text-[11px] whitespace-nowrap leading-none tracking-tight">
-                  {item.label}
-                </span>
-                {isActive && (
-                  <span className="absolute bottom-1 w-4 h-[2px] rounded-full bg-indigo-600" />
-                )}
-              </Link>
-            );
-          })}
-        </div>
+                >
+                  <div className={`mb-1 transition-colors ${isActive ? 'text-indigo-600' : 'text-slate-500 group-hover:text-slate-700'}`}>
+                    {item.icon}
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] whitespace-nowrap leading-none tracking-tight">
+                    {item.label}
+                  </span>
+                  {isActive && (
+                    <span className="absolute bottom-1 w-4 h-[2px] rounded-full bg-indigo-600" />
+                  )}
+                </Link>
+              );
+            })}
+          </div>
 
-        {/* Right Arrow Button */}
-        <button
-          onClick={() => scroll('right')}
-          disabled={!canScrollRight}
-          className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-all flex-shrink-0 ml-1 sm:ml-2 ${canScrollRight
-              ? 'border-indigo-100 bg-indigo-50/50 text-indigo-600 hover:bg-indigo-100 cursor-pointer shadow-xs'
-              : 'border-slate-100 text-slate-300 bg-slate-50/50 cursor-not-allowed opacity-40'
+          {/* Right Arrow Button */}
+          <button
+            onClick={() => scroll('right')}
+            disabled={!canScrollRight}
+            className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-all flex-shrink-0 ml-1 sm:ml-2 ${
+              canScrollRight
+                ? 'border-indigo-100 bg-indigo-50/50 text-indigo-600 hover:bg-indigo-100 cursor-pointer shadow-xs'
+                : 'border-slate-100 text-slate-300 bg-slate-50/50 cursor-not-allowed opacity-40'
             }`}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Mobile Side Navigation Drawer ─────────────────────────── */}
+      {isDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex sm:hidden">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsDrawerOpen(false)}
+          />
+
+          {/* Drawer content */}
+          <div className="relative w-full max-w-xs bg-white h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-left duration-200">
+            {/* Drawer Header */}
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-2">
+                <Image
+                  src="/logo.png"
+                  alt="Pattabiram Sweets"
+                  width={120}
+                  height={32}
+                  className="h-7 w-auto object-contain"
+                />
+              </div>
+              <button
+                onClick={() => setIsDrawerOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* User Info Bar in Drawer */}
+            <div className="p-4 bg-indigo-50/50 border-b border-indigo-100/60 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center border border-indigo-200">
+                  <UserIcon size={18} />
+                </div>
+                <div className="leading-tight max-w-[170px] truncate">
+                  <p className="text-xs font-bold text-slate-800 truncate">{userDisplayName}</p>
+                  <p className="text-[10px] text-indigo-600 font-medium">{userRole}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsDrawerOpen(false);
+                  logout();
+                }}
+                className="p-2 text-red-600 hover:bg-red-100/50 rounded-xl transition-colors"
+                title="Sign Out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+
+            {/* Nav Items List */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+              <p className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Navigation Modules</p>
+              {navItems.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setIsDrawerOpen(false)}
+                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                      isActive
+                        ? 'bg-indigo-600 text-white font-semibold shadow-sm'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    <span className={isActive ? 'text-white' : 'text-slate-500'}>{item.icon}</span>
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 border-t border-slate-100 bg-slate-50 text-[11px] text-slate-400 text-center flex items-center justify-center gap-1">
+              <Sparkles size={13} className="text-indigo-500" />
+              <span>Pattabiram Sweets Management</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Sticky Mobile Bottom App Navigation Bar ──────────────── */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-2xl px-2 py-1.5 flex justify-around items-center">
+        <Link
+          href="/"
+          className={`flex flex-col items-center py-1 px-3 rounded-xl transition-colors ${
+            pathname === '/' ? 'text-indigo-600 font-semibold' : 'text-slate-500 hover:text-slate-800'
+          }`}
         >
-          <ChevronRight size={16} />
+          <Home size={20} />
+          <span className="text-[10px] mt-0.5 font-medium">Home</span>
+        </Link>
+
+        <Link
+          href="/orders"
+          className={`flex flex-col items-center py-1 px-3 rounded-xl transition-colors ${
+            pathname === '/orders' ? 'text-indigo-600 font-semibold' : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <ShoppingBag size={20} />
+          <span className="text-[10px] mt-0.5 font-medium">Orders</span>
+        </Link>
+
+        <Link
+          href="/manufacturing-portal"
+          className={`flex flex-col items-center py-1 px-3 rounded-xl transition-colors ${
+            pathname === '/manufacturing-portal' ? 'text-indigo-600 font-semibold' : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Factory size={20} />
+          <span className="text-[10px] mt-0.5 font-medium">Mfg Portal</span>
+        </Link>
+
+        <Link
+          href="/packing-portal"
+          className={`flex flex-col items-center py-1 px-3 rounded-xl transition-colors ${
+            pathname === '/packing-portal' ? 'text-indigo-600 font-semibold' : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Package size={20} />
+          <span className="text-[10px] mt-0.5 font-medium">Packing</span>
+        </Link>
+
+        <button
+          onClick={() => setIsDrawerOpen(true)}
+          className="flex flex-col items-center py-1 px-3 rounded-xl text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+        >
+          <Menu size={20} />
+          <span className="text-[10px] mt-0.5 font-medium">Menu</span>
         </button>
       </div>
-    </div>
+    </>
   );
 }

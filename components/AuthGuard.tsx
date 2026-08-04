@@ -63,7 +63,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen">
         <div className="bg-white rounded-xl lg:rounded-2xl border border-slate-200/80 shadow-xl overflow-hidden">
           <Header />
-          <main className="p-4 sm:p-6 lg:p-8 bg-slate-50/50 min-h-[calc(100vh-140px)]">
+          <main className="p-3 sm:p-6 lg:p-8 pb-20 sm:pb-8 bg-slate-50/50 min-h-[calc(100vh-140px)]">
             {children}
           </main>
         </div>

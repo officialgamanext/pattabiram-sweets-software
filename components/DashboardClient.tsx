@@ -241,19 +241,19 @@ export default function DashboardClient() {
       </div>
 
       {/* ── 2. Top 5 Stat Cards Row ─────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 w-full">
         {statCards.map((card) => (
           <div
             key={card.title}
-            className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:shadow-md transition-shadow flex items-center gap-3.5"
+            className="bg-white rounded-xl sm:rounded-2xl p-3.5 sm:p-5 border border-slate-100 shadow-xs hover:shadow-md transition-shadow flex flex-col sm:flex-row items-start sm:items-center gap-2.5 sm:gap-3.5"
           >
-            <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${card.bgColor} ${card.iconColor}`}>
+            <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${card.bgColor} ${card.iconColor}`}>
               {card.icon}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-slate-500 mb-0.5">{card.title}</p>
-              <p className="text-lg sm:text-xl font-extrabold text-slate-900 leading-tight truncate">{card.value}</p>
-              <p className="text-[11px] font-semibold text-emerald-600 mt-1 flex items-center gap-1">
+              <p className="text-[11px] sm:text-xs font-medium text-slate-500 mb-0.5 truncate">{card.title}</p>
+              <p className="text-base sm:text-xl font-extrabold text-slate-900 leading-tight truncate">{card.value}</p>
+              <p className="text-[10px] sm:text-[11px] font-semibold text-emerald-600 mt-0.5 sm:mt-1 flex items-center gap-0.5 truncate">
                 <span>↑</span> {card.change}
               </p>
             </div>

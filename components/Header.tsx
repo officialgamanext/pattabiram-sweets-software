@@ -55,9 +55,9 @@ export default function Header() {
   // Grouped Navigation matching Shopify Sidebar Architecture
   const mainNavItems = [
     { label: 'Home', href: '/', icon: <Home size={17} /> },
-    { label: 'Orders', href: '/orders', icon: <ShoppingBag size={17} />, count: 15 },
+    { label: 'Orders', href: '/orders', icon: <ShoppingBag size={17} />},
     { label: 'Products', href: '/items', icon: <Tag size={17} /> },
-    { label: 'Store POS', href: '/store', icon: <Store size={17} /> },
+    { label: 'Stores', href: '/store', icon: <Store size={17} /> },
     { label: 'Inventory', href: '/inventory', icon: <Boxes size={17} /> },
     { label: 'Price List', href: '/price-list', icon: <ClipboardList size={17} /> },
   ];

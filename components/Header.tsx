@@ -27,6 +27,8 @@ import {
   Headphones,
   LogOut,
   User as UserIcon,
+  Receipt,
+  Printer,
 } from 'lucide-react';
 
 export default function Header() {
@@ -55,7 +57,9 @@ export default function Header() {
   // Grouped Navigation matching Shopify Sidebar Architecture
   const mainNavItems = [
     { label: 'Home', href: '/', icon: <Home size={17} /> },
+    { label: 'Billing & POS', href: '/pos', icon: <Receipt size={17} /> },
     { label: 'Orders', href: '/orders', icon: <ShoppingBag size={17} />},
+    { label: 'Walk-In Sales', href: '/walk-in-sales', icon: <Printer size={17} /> },
     { label: 'Products', href: '/items', icon: <Tag size={17} /> },
     { label: 'Stores', href: '/store', icon: <Store size={17} /> },
     { label: 'Inventory', href: '/inventory', icon: <Boxes size={17} /> },

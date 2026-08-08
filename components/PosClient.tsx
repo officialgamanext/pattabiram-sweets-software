@@ -613,11 +613,11 @@ export default function PosClient() {
   // Bluetooth Thermal Printer Pairing
   const handleConnectBluetoothPrinter = async () => {
     try {
-      if (!navigator.bluetooth) {
+      if (!(navigator as any).bluetooth) {
         alert('Web Bluetooth API is not supported in this browser. Use Google Chrome or Edge.');
         return;
       }
-      const device = await navigator.bluetooth.requestDevice({
+      const device = await (navigator as any).bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb'],
       });

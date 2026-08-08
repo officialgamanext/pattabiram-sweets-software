@@ -70,6 +70,7 @@ export default function Header() {
     { label: 'Manufacturing', href: '/manufacturing', icon: <Factory size={17} /> },
     { label: 'Packing Unit', href: '/packing', icon: <Package size={17} /> },
     { label: 'Wholesalers', href: '/wholesalers', icon: <Users size={17} /> },
+    { label: 'Wholesaler Orders', href: '/wholesaler-orders', icon: <Users size={17} /> },
     { label: 'Customers', href: '/customers', icon: <UserCheck size={17} /> },
     { label: 'Employees', href: '/employees', icon: <UserCheck size={17} /> },
     { label: 'Payroll', href: '/payroll', icon: <CreditCard size={17} /> },

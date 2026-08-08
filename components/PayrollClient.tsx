@@ -54,54 +54,6 @@ export interface AttendanceRecord {
   faceVerified?: boolean;
 }
 
-const DEFAULT_EMPLOYEES: EmployeeRecord[] = [
-  {
-    id: 'emp-1',
-    empId: 'EMP-1001',
-    name: 'Ramesh Kumar',
-    mobile: '+91 98765 43210',
-    salary: 25000,
-    paymentMode: 'monthly',
-    acceptedLeaves: 2,
-    latitude: 13.1189,
-    longitude: 80.0967,
-    address: '12, Main Road, Pattabiram, Chennai - 600072',
-    photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-    department: 'Production',
-    status: 'active'
-  },
-  {
-    id: 'emp-2',
-    empId: 'EMP-1002',
-    name: 'Suresh V',
-    mobile: '+91 98401 12345',
-    salary: 800,
-    paymentMode: 'daily',
-    acceptedLeaves: 4,
-    latitude: 13.1192,
-    longitude: 80.0971,
-    address: '45, Station Street, Pattabiram, Chennai - 600072',
-    photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
-    department: 'Packing',
-    status: 'active'
-  },
-  {
-    id: 'emp-3',
-    empId: 'EMP-1003',
-    name: 'Priya Sundaram',
-    mobile: '+91 97100 88990',
-    salary: 28000,
-    paymentMode: 'monthly',
-    acceptedLeaves: 2,
-    latitude: 13.1185,
-    longitude: 80.0962,
-    address: '8, Bazaar Lane, Pattabiram, Chennai - 600072',
-    photoUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80',
-    department: 'Store & Billing',
-    status: 'active'
-  }
-];
-
 // Calculate Haversine distance between 2 GPS coordinates in meters
 function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371e3; // metres
@@ -186,7 +138,7 @@ export default function PayrollClient() {
     if (localEmps) {
       setEmployees(JSON.parse(localEmps));
     } else {
-      setEmployees(DEFAULT_EMPLOYEES);
+      setEmployees([]);
     }
 
     try {

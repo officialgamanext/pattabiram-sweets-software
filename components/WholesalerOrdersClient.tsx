@@ -19,6 +19,7 @@ import {
   Building2,
   FileText,
 } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -325,6 +326,12 @@ export default function WholesalerOrdersClient() {
     });
   }, [orders, searchQuery, selectedStatusFilter]);
 
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const paginatedOrders = useMemo(() => {
+    return filteredOrders.slice((currentPage - 1) * 45, currentPage * 45);
+  }, [filteredOrders, currentPage]);
+
   return (
     <div className="w-full flex flex-col gap-4 text-slate-800 font-sans pb-12">
       {/* ── Page Header Title Bar ────────────────────────────────────────────── */}
@@ -404,7 +411,7 @@ export default function WholesalerOrdersClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {filteredOrders.map((order) => (
+                {paginatedOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-3 px-4">
                       <span className="font-mono font-bold text-slate-900">{order.orderId}</span>
@@ -465,6 +472,14 @@ export default function WholesalerOrdersClient() {
             </table>
           </div>
         )}
+
+        {/* 45 Items Per Page Pagination */}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredOrders.length}
+          pageSize={45}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* ── MODAL: Create New Wholesaler B2B Order ────────────────────────────── */}

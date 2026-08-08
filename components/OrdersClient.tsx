@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
 import CustomDatePicker from '@/components/CustomDatePicker';
+import Pagination from '@/components/Pagination';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 import { db } from '@/lib/firebase';
 import {
@@ -946,6 +947,9 @@ export default function OrdersClient() {
     return true;
   });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const paginatedOrders = filteredOrders.slice((currentPage - 1) * 45, currentPage * 45);
+
   // Calculate Order Statistics for Summary Bar from filtered orders
   const totalOrdersCount = filteredOrders.length;
   const totalAmountSum = filteredOrders.reduce((acc, o) => acc + (o.totalAmount || 0), 0);
@@ -1353,7 +1357,7 @@ export default function OrdersClient() {
                     </td>
                   </tr>
                 ) : (
-                  filteredOrders.map((order) => (
+                  paginatedOrders.map((order) => (
                     <tr
                       key={order.id}
                       onClick={() => navigateToOrder(order.id)}
@@ -1411,6 +1415,14 @@ export default function OrdersClient() {
               </tbody>
             </table>
           </div>
+
+          {/* 45 Items Per Page Pagination */}
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filteredOrders.length}
+            pageSize={45}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 

@@ -33,55 +33,8 @@ import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, serverTimestamp, query } from 'firebase/firestore';
 import { EmployeeRecord } from './EmployeesClient';
 import { AttendanceRecord } from './PayrollClient';
+import { useAuth } from '@/context/AuthContext';
 import CustomSelect from '@/components/CustomSelect';
-
-const DEFAULT_EMPLOYEES: EmployeeRecord[] = [
-  {
-    id: 'emp-1',
-    empId: 'EMP-1001',
-    name: 'Ramesh Kumar',
-    mobile: '+91 98765 43210',
-    salary: 25000,
-    paymentMode: 'monthly',
-    acceptedLeaves: 2,
-    latitude: 13.1189,
-    longitude: 80.0967,
-    address: '12, Main Road, Pattabiram, Chennai - 600072',
-    photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-    department: 'Production',
-    status: 'active'
-  },
-  {
-    id: 'emp-2',
-    empId: 'EMP-1002',
-    name: 'Suresh V',
-    mobile: '+91 98401 12345',
-    salary: 800,
-    paymentMode: 'daily',
-    acceptedLeaves: 4,
-    latitude: 13.1192,
-    longitude: 80.0971,
-    address: '45, Station Street, Pattabiram, Chennai - 600072',
-    photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
-    department: 'Packing',
-    status: 'active'
-  },
-  {
-    id: 'emp-3',
-    empId: 'EMP-1003',
-    name: 'Priya Sundaram',
-    mobile: '+91 97100 88990',
-    salary: 28000,
-    paymentMode: 'monthly',
-    acceptedLeaves: 2,
-    latitude: 13.1185,
-    longitude: 80.0962,
-    address: '8, Bazaar Lane, Pattabiram, Chennai - 600072',
-    photoUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80',
-    department: 'Store & Billing',
-    status: 'active'
-  }
-];
 
 function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371000;
@@ -124,11 +77,31 @@ const mergeAttendanceRecords = (
 export default function EmployeePortalClient() {
   const searchParams = useSearchParams();
   const queryEmpId = searchParams.get('id');
+  const { employeeProfile } = useAuth();
 
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [selectedEmpId, setSelectedEmpId] = useState<string>('');
   const [attendanceList, setAttendanceList] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Lock selectedEmpId to logged-in employee for non-SuperAdmin users
+  useEffect(() => {
+    if (employeeProfile && !employeeProfile.isSuperAdmin && employees.length > 0) {
+      const cleanMobile = (employeeProfile.mobile || '').replace(/\D/g, '');
+      const matched = employees.find((emp) => {
+        const empMobClean = (emp.mobile || '').replace(/\D/g, '');
+        return (
+          emp.id === employeeProfile.id ||
+          emp.empId === employeeProfile.empId ||
+          (cleanMobile && empMobClean && (cleanMobile === empMobClean || cleanMobile.endsWith(empMobClean) || empMobClean.endsWith(cleanMobile)))
+        );
+      });
+
+      if (matched) {
+        setSelectedEmpId(matched.id);
+      }
+    }
+  }, [employeeProfile, employees]);
 
   // Tab State
   const [activeTab, setActiveTab] = useState<'attendance' | 'salary' | 'profile'>('attendance');
@@ -166,10 +139,7 @@ export default function EmployeePortalClient() {
     if (localEmps) {
       const parsed: EmployeeRecord[] = JSON.parse(localEmps);
       setEmployees(parsed);
-      setSelectedEmpId(queryEmpId || parsed[0]?.id || 'emp-1');
-    } else {
-      setEmployees(DEFAULT_EMPLOYEES);
-      setSelectedEmpId(queryEmpId || DEFAULT_EMPLOYEES[0].id);
+      setSelectedEmpId(queryEmpId || parsed[0]?.id || '');
     }
 
     try {
@@ -693,15 +663,24 @@ export default function EmployeePortalClient() {
         </div>
 
         {/* Employee Switcher */}
-        <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-lg border border-slate-300 shadow-2xs">
-          <span className="text-xs font-semibold text-slate-700">Employee View:</span>
-          <CustomSelect
-            options={employees.map((emp) => ({ value: emp.id, label: `${emp.name} (${emp.empId})` }))}
-            value={selectedEmp.id}
-            onChange={(val) => setSelectedEmpId(val)}
-            size="sm"
-          />
-        </div>
+        {employeeProfile?.isSuperAdmin ? (
+          <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-lg border border-slate-300 shadow-2xs">
+            <span className="text-xs font-semibold text-slate-700">Admin View:</span>
+            <CustomSelect
+              options={employees.map((emp) => ({ value: emp.id, label: `${emp.name} (${emp.empId})` }))}
+              value={selectedEmp.id}
+              onChange={(val) => setSelectedEmpId(val)}
+              size="sm"
+            />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 bg-slate-100 px-3.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs select-none">
+            <Lock size={14} className="text-indigo-600" />
+            <span className="text-xs font-bold text-slate-800">
+              {selectedEmp.name} <span className="font-mono text-slate-500 font-medium">({selectedEmp.empId})</span>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Profile Header Banner */}

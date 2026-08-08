@@ -10,10 +10,13 @@ import {
   ConfirmationResult,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { useAuth } from '@/context/AuthContext';
+import { sendDescopeOtp, verifyDescopeOtp } from '@/lib/descope';
 import { ShieldCheck, Mail, Lock, Phone, KeyRound, ArrowRight, Loader2, AlertCircle, RefreshCw, LockKeyhole } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { setEmployeeProfileByMobile } = useAuth();
   const [activeTab, setActiveTab] = useState<'superadmin' | 'phone'>('superadmin');
 
   // SuperAdmin state
@@ -106,30 +109,17 @@ export default function LoginPage() {
 
     setPhoneLoading(true);
     try {
-      const verifier = setupRecaptcha();
-      const confirmation = await signInWithPhoneNumber(auth, formattedPhone, verifier);
-      setConfirmationResult(confirmation);
-      setOtpStep('otp');
-    } catch (err: unknown) {
-      console.error('OTP Send error:', err);
-      const firebaseError = err as { code?: string; message?: string };
-      if (firebaseError.code === 'auth/invalid-phone-number') {
-        setPhoneError('Invalid phone number format. Include country code e.g. +91 9876543210');
-      } else if (firebaseError.code === 'auth/quota-exceeded') {
-        setPhoneError('SMS quota exceeded. Please try again later.');
-      } else if (firebaseError.code === 'auth/operation-not-allowed') {
-        setPhoneError('SMS sending to this region is disabled in Firebase Console. Enable Phone Sign-in and add your region (e.g. India +91) under Authentication > Settings > SMS Region Policy.');
+      // Pure Descope Mobile OTP SMS Trigger
+      const descopeRes = await sendDescopeOtp(formattedPhone);
+      if (descopeRes.success) {
+        setOtpStep('otp');
       } else {
-        setPhoneError(firebaseError.message || 'Failed to send OTP code.');
+        setPhoneError(descopeRes.error || 'Failed to send Mobile OTP via Descope service.');
       }
-      if (recaptchaVerifierRef.current) {
-        try {
-          recaptchaVerifierRef.current.clear();
-          recaptchaVerifierRef.current = null;
-        } catch {
-          // ignore
-        }
-      }
+    } catch (err: unknown) {
+      console.error('Descope OTP Send error:', err);
+      const errorMsg = (err as { message?: string }).message || 'Failed to send Descope OTP.';
+      setPhoneError(errorMsg);
     } finally {
       setPhoneLoading(false);
     }
@@ -142,24 +132,30 @@ export default function LoginPage() {
       setPhoneError('Please enter the full 6-digit OTP code.');
       return;
     }
-    if (!confirmationResult) {
-      setPhoneError('Session expired. Please request a new OTP code.');
-      setOtpStep('phone');
-      return;
-    }
 
     setPhoneLoading(true);
     try {
-      await confirmationResult.confirm(otp);
-      router.replace('/');
-    } catch (err: unknown) {
-      console.error('OTP Verification error:', err);
-      const firebaseError = err as { code?: string; message?: string };
-      if (firebaseError.code === 'auth/invalid-verification-code') {
-        setPhoneError('Incorrect OTP code. Please verify and try again.');
-      } else {
-        setPhoneError(firebaseError.message || 'Failed to verify OTP code.');
+      let formattedPhone = phoneNumber.trim();
+      if (!formattedPhone.startsWith('+')) formattedPhone = `+91${formattedPhone}`;
+
+      // Pure Descope OTP Verification
+      const descopeVerify = await verifyDescopeOtp(formattedPhone, otp);
+      if (!descopeVerify.success) {
+        setPhoneError(descopeVerify.error || 'Invalid OTP code entered.');
+        return;
       }
+
+      // Verify that the mobile number matches an active record in the Employee database
+      const empResult = await setEmployeeProfileByMobile(formattedPhone);
+      if (empResult.success) {
+        router.replace('/');
+      } else {
+        setPhoneError(empResult.error || 'Access Denied: Mobile number is not registered in Employee database.');
+      }
+    } catch (err: unknown) {
+      console.error('Descope OTP Verification error:', err);
+      const errorMsg = (err as { message?: string }).message || 'Failed to verify Descope OTP code.';
+      setPhoneError(errorMsg);
     } finally {
       setPhoneLoading(false);
     }
@@ -418,7 +414,7 @@ export default function LoginPage() {
         {/* Footer info notice matching layout style */}
         <div className="p-3.5 text-center border-t border-slate-100 bg-[#f7f7f8] text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
           <LockKeyhole size={13} className="text-slate-400" />
-          <span>Secured with Firebase Authentication</span>
+          <span>Secured with Firebase Email &amp; Descope Mobile OTP Authentication</span>
         </div>
       </div>
     </div>

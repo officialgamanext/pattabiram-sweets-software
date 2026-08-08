@@ -33,7 +33,7 @@ import {
 
 export default function Header() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, employeeProfile, logout } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -52,7 +52,38 @@ export default function Header() {
     setIsMobileDrawerOpen(false);
   }, [pathname]);
 
-  const userDisplayName = user?.email ? user.email.split('@')[0] : 'Admin User';
+  const userDisplayName = employeeProfile?.name || (user?.email ? user.email.split('@')[0] : 'Admin User');
+
+  // Permission Check Helper
+  const isNavAllowed = (href: string) => {
+    if (!employeeProfile) return true;
+    if (employeeProfile.isSuperAdmin) return true;
+    const menuKeyMap: Record<string, string> = {
+      '/': 'dashboard',
+      '/pos': 'pos',
+      '/orders': 'orders',
+      '/walk-in-sales': 'walk_in_sales',
+      '/items': 'items',
+      '/store': 'store',
+      '/inventory': 'inventory',
+      '/price-list': 'price_list',
+      '/manufacturing': 'manufacturing',
+      '/packing': 'packing',
+      '/wholesalers': 'wholesalers',
+      '/wholesaler-orders': 'wholesaler_orders',
+      '/customers': 'customers',
+      '/employees': 'employee_portal',
+      '/payroll': 'payroll',
+      '/manufacturing-portal': 'manufacturing_portal',
+      '/packing-portal': 'packing_portal',
+      '/employee-portal': 'employee_portal',
+      '/support': 'support',
+      '/settings': 'settings',
+    };
+    const key = menuKeyMap[href];
+    if (!key) return true;
+    return Boolean(employeeProfile.permissions?.[key]?.view);
+  };
 
   // Grouped Navigation matching Shopify Sidebar Architecture
   const mainNavItems = [
@@ -64,7 +95,7 @@ export default function Header() {
     { label: 'Stores', href: '/store', icon: <Store size={17} /> },
     { label: 'Inventory', href: '/inventory', icon: <Boxes size={17} /> },
     { label: 'Price List', href: '/price-list', icon: <ClipboardList size={17} /> },
-  ];
+  ].filter((item) => isNavAllowed(item.href));
 
   const managementNavItems = [
     { label: 'Manufacturing', href: '/manufacturing', icon: <Factory size={17} /> },
@@ -74,14 +105,14 @@ export default function Header() {
     { label: 'Customers', href: '/customers', icon: <UserCheck size={17} /> },
     { label: 'Employees', href: '/employees', icon: <UserCheck size={17} /> },
     { label: 'Payroll', href: '/payroll', icon: <CreditCard size={17} /> },
-  ];
+  ].filter((item) => isNavAllowed(item.href));
 
   const portalNavItems = [
     { label: 'Mfg Portal', href: '/manufacturing-portal', icon: <Factory size={17} /> },
     { label: 'Packing Portal', href: '/packing-portal', icon: <Package size={17} /> },
     { label: 'Employee Portal', href: '/employee-portal', icon: <UserCheck size={17} /> },
     { label: 'Support', href: '/support', icon: <Headphones size={17} /> },
-  ];
+  ].filter((item) => isNavAllowed(item.href));
 
   const renderNavLink = (item: { label: string; href: string; icon: React.ReactNode; count?: number }) => {
     const isActive = pathname === item.href;

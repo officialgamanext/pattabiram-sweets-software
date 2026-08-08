@@ -21,6 +21,7 @@ import {
   MapPin,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
+import Pagination from '@/components/Pagination';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -113,6 +114,9 @@ export default function CustomersClient() {
 
     return matchesSearch && matchesStatus;
   });
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const paginatedCustomers = filteredCustomers.slice((currentPage - 1) * 45, currentPage * 45);
 
   // Handle Add Customer Submit
   const handleAddCustomer = async (e: React.FormEvent) => {
@@ -326,7 +330,7 @@ export default function CustomersClient() {
                   </td>
                 </tr>
               ) : (
-                filteredCustomers.map((item) => (
+                paginatedCustomers.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-4 px-4 sm:px-6 font-bold text-indigo-600">{item.code}</td>
                     <td className="py-4 px-4 font-bold text-slate-900">{item.name}</td>
@@ -376,11 +380,13 @@ export default function CustomersClient() {
           </table>
         </div>
 
-        {/* Footer */}
-        <div className="p-4 sm:p-5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>Showing {filteredCustomers.length} of {customers.length} customers</p>
-          <CustomSelect options={paginationPageOptions} value={itemsPerPage} onChange={setItemsPerPage} size="sm" />
-        </div>
+        {/* 45 Items Per Page Pagination */}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredCustomers.length}
+          pageSize={45}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* ── 4. Add Customer Modal ─────────────────────────────────────── */}

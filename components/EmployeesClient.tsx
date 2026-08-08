@@ -42,6 +42,7 @@ import {
   orderBy
 } from 'firebase/firestore';
 import CustomSelect from '@/components/CustomSelect';
+import Pagination from '@/components/Pagination';
 import { uploadToImageKit } from '@/lib/imageCompressor';
 import {
   APP_MENUS,
@@ -68,54 +69,6 @@ export interface EmployeeRecord {
   permissions?: MenuAccessPermission[];
   createdAt?: any;
 }
-
-const DEFAULT_EMPLOYEES: EmployeeRecord[] = [
-  {
-    id: 'emp-1',
-    empId: 'EMP-1001',
-    name: 'Ramesh Kumar',
-    mobile: '+91 98765 43210',
-    salary: 25000,
-    paymentMode: 'monthly',
-    acceptedLeaves: 2,
-    latitude: 13.1189,
-    longitude: 80.0967,
-    address: '12, Main Road, Pattabiram, Chennai - 600072',
-    photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-    department: 'Production',
-    status: 'active'
-  },
-  {
-    id: 'emp-2',
-    empId: 'EMP-1002',
-    name: 'Suresh V',
-    mobile: '+91 98401 12345',
-    salary: 800,
-    paymentMode: 'daily',
-    acceptedLeaves: 4,
-    latitude: 13.1192,
-    longitude: 80.0971,
-    address: '45, Station Street, Pattabiram, Chennai - 600072',
-    photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
-    department: 'Packing',
-    status: 'active'
-  },
-  {
-    id: 'emp-3',
-    empId: 'EMP-1003',
-    name: 'Priya Sundaram',
-    mobile: '+91 97100 88990',
-    salary: 28000,
-    paymentMode: 'monthly',
-    acceptedLeaves: 2,
-    latitude: 13.1185,
-    longitude: 80.0962,
-    address: '8, Bazaar Lane, Pattabiram, Chennai - 600072',
-    photoUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80',
-    department: 'Store & Billing',
-    status: 'active'
-  }
-];
 
 export default function EmployeesClient() {
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
@@ -148,42 +101,28 @@ export default function EmployeesClient() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
-  // Firestore Sync & Local Fallback
+  // Firestore Sync & Realtime Updates
   useEffect(() => {
     setLoading(true);
-    try {
-      const q = query(collection(db, 'employees'), orderBy('createdAt', 'desc'));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        if (!snapshot.empty) {
-          const list: EmployeeRecord[] = snapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as Omit<EmployeeRecord, 'id'>)
-          }));
-          setEmployees(list);
-        } else {
-          // Initialize local storage or fallback defaults
-          const local = localStorage.getItem('pattabiram_employees');
-          if (local) {
-            setEmployees(JSON.parse(local));
-          } else {
-            setEmployees(DEFAULT_EMPLOYEES);
-            localStorage.setItem('pattabiram_employees', JSON.stringify(DEFAULT_EMPLOYEES));
-          }
-        }
+    const unsubscribe = onSnapshot(
+      collection(db, 'employees'),
+      (snapshot) => {
+        const list: EmployeeRecord[] = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<EmployeeRecord, 'id'>)
+        }));
+        setEmployees(list);
         setLoading(false);
-      }, (err) => {
-        console.warn('Firestore offline, using local storage fallback:', err);
+      },
+      (err) => {
+        console.warn('Firestore subscription warning, falling back to local storage:', err);
         const local = localStorage.getItem('pattabiram_employees');
-        setEmployees(local ? JSON.parse(local) : DEFAULT_EMPLOYEES);
+        setEmployees(local ? JSON.parse(local) : []);
         setLoading(false);
-      });
+      }
+    );
 
-      return () => unsubscribe();
-    } catch (e) {
-      const local = localStorage.getItem('pattabiram_employees');
-      setEmployees(local ? JSON.parse(local) : DEFAULT_EMPLOYEES);
-      setLoading(false);
-    }
+    return () => unsubscribe();
   }, []);
 
   const saveEmployeesToStateAndStorage = (newList: EmployeeRecord[]) => {
@@ -390,32 +329,25 @@ export default function EmployeesClient() {
       };
 
       if (editingEmp) {
-        try {
-          await updateDoc(doc(db, 'employees', editingEmp.id), empPayload);
-        } catch {
-          // Local fallback
-        }
+        await updateDoc(doc(db, 'employees', editingEmp.id), empPayload);
         const updatedList = employees.map((emp) =>
           emp.id === editingEmp.id ? { ...emp, ...empPayload } : emp
         );
         saveEmployeesToStateAndStorage(updatedList);
+        alert(`Employee "${formName}" updated successfully in Firebase!`);
       } else {
-        let newId = 'emp-' + Date.now();
-        try {
-          const docRef = await addDoc(collection(db, 'employees'), {
-            ...empPayload,
-            createdAt: serverTimestamp()
-          });
-          newId = docRef.id;
-        } catch {
-          // Local fallback
-        }
-        const newRecord: EmployeeRecord = { id: newId, ...empPayload };
+        const docRef = await addDoc(collection(db, 'employees'), {
+          ...empPayload,
+          createdAt: serverTimestamp()
+        });
+        const newRecord: EmployeeRecord = { id: docRef.id, ...empPayload };
         saveEmployeesToStateAndStorage([newRecord, ...employees]);
+        alert(`Employee "${formName}" saved successfully to Firebase!`);
       }
       handleCloseModal();
     } catch (err: any) {
-      alert('Error saving employee record: ' + err.message);
+      console.error('Error saving employee to Firebase:', err);
+      alert('Error saving employee to Firebase: ' + err.message);
     } finally {
       setIsSaving(false);
     }
@@ -424,13 +356,13 @@ export default function EmployeesClient() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this employee?')) return;
     try {
-      try {
-        await deleteDoc(doc(db, 'employees', id));
-      } catch {}
+      await deleteDoc(doc(db, 'employees', id));
       const filtered = employees.filter((emp) => emp.id !== id);
       saveEmployeesToStateAndStorage(filtered);
+      alert('Employee record deleted from Firebase.');
     } catch (err: any) {
-      alert('Error deleting employee: ' + err.message);
+      console.error('Error deleting employee from Firebase:', err);
+      alert('Error deleting employee from Firebase: ' + err.message);
     }
   };
 
@@ -445,6 +377,9 @@ export default function EmployeesClient() {
     const matchesMode = filterMode === 'all' || emp.paymentMode === filterMode;
     return matchesSearch && matchesMode;
   });
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const paginatedEmployees = filteredEmployees.slice((currentPage - 1) * 45, currentPage * 45);
 
   const totalMonthlySalary = employees
     .filter((e) => e.paymentMode === 'monthly')
@@ -582,121 +517,109 @@ export default function EmployeesClient() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredEmployees.map((emp) => (
-            <div
-              key={emp.id}
-              className="bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md transition-all overflow-hidden flex flex-col justify-between group"
-            >
-              <div className="p-5">
-                {/* Header & Avatar */}
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-3.5">
-                    <div className="relative w-14 h-14 rounded-2xl overflow-hidden border-2 border-indigo-100 shadow-xs bg-slate-100">
-                      <img
-                        src={emp.photoUrl}
-                        alt={emp.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                      />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                          {emp.name}
-                        </h3>
-                      </div>
-                      <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {paginatedEmployees.map((emp) => (
+              <div
+                key={emp.id}
+                className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+              >
+                {/* Employee Card Top */}
+                <div className="flex items-start gap-4">
+                  <div className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0 relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={emp.photoUrl}
+                      alt={emp.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
                         {emp.empId}
                       </span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          emp.paymentMode === 'monthly'
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}
+                      >
+                        {emp.paymentMode === 'monthly' ? 'Monthly' : 'Daily Worker'}
+                      </span>
                     </div>
-                  </div>
 
-                  <span
-                    className={`text-[10px] font-semibold uppercase px-2.5 py-1 rounded-lg border ${
-                      emp.paymentMode === 'monthly'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-amber-50 text-amber-700 border-amber-200'
-                    }`}
-                  >
-                    {emp.paymentMode}
-                  </span>
+                    <h3 className="text-base font-bold text-slate-900 truncate mt-1">{emp.name}</h3>
+                    <p className="text-xs text-slate-500 font-medium truncate">{emp.department || 'Production'}</p>
+                  </div>
                 </div>
 
-                {/* Details list */}
-                <div className="space-y-2.5 border-t border-slate-100 pt-4 text-xs">
-                  <div className="flex items-center justify-between text-slate-600">
-                    <span className="flex items-center gap-1.5 text-slate-400">
-                      <Phone size={14} /> Mobile:
+                {/* Info List */}
+                <div className="mt-4 pt-3 border-t border-slate-100 space-y-2 text-xs text-slate-600">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-slate-500">
+                      <Phone size={13} className="text-slate-400" /> Mobile:
                     </span>
-                    <span className="font-semibold text-slate-800">{emp.mobile}</span>
+                    <span className="font-semibold text-slate-800 font-mono">{emp.mobile}</span>
                   </div>
 
-                  <div className="flex items-center justify-between text-slate-600">
-                    <span className="flex items-center gap-1.5 text-slate-400">
-                      <DollarSign size={14} /> Salary Rate:
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-slate-500">
+                      <DollarSign size={13} className="text-slate-400" /> Pay Rate:
                     </span>
-                    <span className="font-semibold text-slate-900">
-                      ₹{emp.salary.toLocaleString('en-IN')}{' '}
-                      <span className="text-[10px] text-slate-400 font-normal">
-                        ({emp.paymentMode === 'monthly' ? '/ month' : '/ day'})
+                    <span className="font-bold text-emerald-600">
+                      ₹{emp.salary.toLocaleString()}{' '}
+                      <span className="text-[10px] font-normal text-slate-400">
+                        /{emp.paymentMode === 'monthly' ? 'mo' : 'day'}
                       </span>
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between text-slate-600">
-                    <span className="flex items-center gap-1.5 text-slate-400">
-                      <Calendar size={14} /> Accepted Leaves:
-                    </span>
-                    <span className="font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
-                      {emp.acceptedLeaves} Days / Mo
-                    </span>
+                  <div className="flex items-start gap-1.5 text-slate-500 text-[11px] mt-1">
+                    <MapPin size={13} className="text-slate-400 flex-shrink-0 mt-0.5" />
+                    <span className="truncate">{emp.address || 'Address not registered'}</span>
                   </div>
+                </div>
 
-                  <div className="flex items-center justify-between text-slate-600">
-                    <span className="flex items-center gap-1.5 text-slate-400">
-                      <MapPin size={14} className="text-rose-500" /> Geofence Base:
-                    </span>
-                    <span className="font-mono text-[11px] text-slate-700">
-                      {emp.latitude ? `${emp.latitude}, ${emp.longitude}` : 'Not set'}
-                    </span>
+                {/* Card Actions */}
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <Link
+                    href={`/employee-portal?id=${emp.id}`}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 hover:underline"
+                  >
+                    <Eye size={14} /> View Portal
+                  </Link>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleOpenModal(emp)}
+                      className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 transition-colors cursor-pointer"
+                      title="Edit Employee"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(emp.id)}
+                      className="p-1.5 rounded-lg bg-white border border-slate-200 text-rose-500 hover:bg-rose-50 hover:border-rose-200 transition-colors cursor-pointer"
+                      title="Delete Employee"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
-
-                  {emp.address && (
-                    <div className="text-[11px] text-slate-500 line-clamp-1 pt-1 border-t border-slate-100">
-                      <span className="font-semibold text-slate-600">Address:</span> {emp.address}
-                    </div>
-                  )}
                 </div>
               </div>
+            ))}
+          </div>
 
-              {/* Action buttons footer */}
-              <div className="bg-slate-50/80 px-5 py-3 border-t border-slate-100 flex items-center justify-between">
-                <Link
-                  href={`/employee-portal?id=${emp.id}`}
-                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
-                >
-                  <Eye size={14} /> View Portal
-                </Link>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleOpenModal(emp)}
-                    className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 transition-colors cursor-pointer"
-                    title="Edit Employee"
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(emp.id)}
-                    className="p-1.5 rounded-lg bg-white border border-slate-200 text-rose-500 hover:bg-rose-50 hover:border-rose-200 transition-colors cursor-pointer"
-                    title="Delete Employee"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+          {/* 45 Items Per Page Pagination */}
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filteredEmployees.length}
+            pageSize={45}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 

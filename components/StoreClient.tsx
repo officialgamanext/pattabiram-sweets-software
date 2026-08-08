@@ -18,6 +18,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
+import Pagination from '@/components/Pagination';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -127,6 +128,9 @@ export default function StoreClient() {
 
     return matchesSearch && matchesStatus;
   });
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const paginatedStores = filteredStores.slice((currentPage - 1) * 45, currentPage * 45);
 
   // Handle Add Store directly to Firebase
   const handleAddStore = async (e: React.FormEvent) => {
@@ -364,7 +368,7 @@ export default function StoreClient() {
                   </td>
                 </tr>
               ) : (
-                filteredStores.map((store) => (
+                paginatedStores.map((store) => (
                   <tr key={store.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-4 px-4 sm:px-6 font-bold text-indigo-600">{store.code}</td>
                     <td className="py-4 px-4 font-semibold text-slate-900">{store.name}</td>
@@ -417,34 +421,13 @@ export default function StoreClient() {
           </table>
         </div>
 
-        {/* Pagination Footer */}
-        <div className="p-4 sm:p-5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>
-            Showing 1 to {filteredStores.length} of {stores.length} stores
-          </p>
-
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 cursor-not-allowed opacity-50">
-                <ChevronLeft size={14} />
-              </button>
-              <button className="w-8 h-8 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center shadow-xs">
-                1
-              </button>
-              <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 cursor-pointer">
-                <ChevronRight size={14} />
-              </button>
-            </div>
-
-            {/* Custom Select for items per page */}
-            <CustomSelect
-              options={paginationPageOptions}
-              value={itemsPerPage}
-              onChange={setItemsPerPage}
-              size="sm"
-            />
-          </div>
-        </div>
+        {/* 45 Items Per Page Pagination */}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredStores.length}
+          pageSize={45}
+          onPageChange={setCurrentPage}
+        />
 
       </div>
 

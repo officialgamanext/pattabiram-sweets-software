@@ -19,6 +19,7 @@ import {
   Package,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
+import Pagination from '@/components/Pagination';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -136,6 +137,9 @@ export default function UnitManagementClient({
 
     return matchesSearch && matchesStatus;
   });
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const paginatedUnits = filteredUnits.slice((currentPage - 1) * 45, currentPage * 45);
 
   // Handle Add Unit directly to Firebase
   const handleAddUnit = async (e: React.FormEvent) => {
@@ -353,7 +357,7 @@ export default function UnitManagementClient({
                   </td>
                 </tr>
               ) : (
-                filteredUnits.map((unit) => (
+                paginatedUnits.map((unit) => (
                   <tr key={unit.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-4 px-4 sm:px-6 font-bold text-indigo-600">{unit.code}</td>
                     <td className="py-4 px-4 font-semibold text-slate-900">{unit.name}</td>
@@ -375,7 +379,7 @@ export default function UnitManagementClient({
                         <button
                           onClick={() => setViewUnit(unit)}
                           className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                          title="View Details"
+                          title="View Unit Details"
                         >
                           <Eye size={15} />
                         </button>
@@ -402,33 +406,13 @@ export default function UnitManagementClient({
           </table>
         </div>
 
-        {/* Pagination Footer */}
-        <div className="p-4 sm:p-5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>
-            Showing 1 to {filteredUnits.length} of {units.length} units
-          </p>
-
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 cursor-not-allowed opacity-50">
-                <ChevronLeft size={14} />
-              </button>
-              <button className="w-8 h-8 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center shadow-xs">
-                1
-              </button>
-              <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 cursor-pointer">
-                <ChevronRight size={14} />
-              </button>
-            </div>
-
-            <CustomSelect
-              options={paginationPageOptions}
-              value={itemsPerPage}
-              onChange={setItemsPerPage}
-              size="sm"
-            />
-          </div>
-        </div>
+        {/* 45 Items Per Page Pagination */}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredUnits.length}
+          pageSize={45}
+          onPageChange={setCurrentPage}
+        />
 
       </div>
 

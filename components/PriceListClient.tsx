@@ -24,6 +24,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
+import Pagination from '@/components/Pagination';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -297,6 +298,9 @@ export default function PriceListClient() {
     return matchesSearch && matchesStatus;
   });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const paginatedPriceLists = filteredPriceLists.slice((currentPage - 1) * 45, currentPage * 45);
+
   // Unique Categories in modal items
   const modalCategories = Array.from(new Set(modalItems.map((i) => i.category))).filter(Boolean);
 
@@ -448,7 +452,7 @@ export default function PriceListClient() {
                   </td>
                 </tr>
               ) : (
-                filteredPriceLists.map((plist) => (
+                paginatedPriceLists.map((plist) => (
                   <tr key={plist.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-4 px-4 sm:px-6 font-bold text-indigo-600">{plist.code}</td>
                     <td className="py-4 px-4 font-semibold text-slate-900">{plist.name}</td>
@@ -500,11 +504,13 @@ export default function PriceListClient() {
           </table>
         </div>
 
-        {/* Footer */}
-        <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-          <p>Showing {filteredPriceLists.length} of {priceLists.length} price lists</p>
-          <CustomSelect options={paginationPageOptions} value={itemsPerPage} onChange={setItemsPerPage} size="sm" />
-        </div>
+        {/* 45 Items Per Page Pagination */}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredPriceLists.length}
+          pageSize={45}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* ── 4. STUNNING FULL SCREEN MODAL: Add / Edit Price List ─────────────── */}

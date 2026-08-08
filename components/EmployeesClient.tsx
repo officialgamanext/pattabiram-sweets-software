@@ -453,30 +453,29 @@ export default function EmployeesClient() {
   const totalDailyWorkers = employees.filter((e) => e.paymentMode === 'daily').length;
 
   return (
-    <div className="w-full flex flex-col gap-6 font-sans pb-12">
+    <div className="w-full flex flex-col gap-4 text-slate-800 pb-12">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md">
-              <Users size={22} />
-            </div>
-            Employee Directory & Management
-          </h1>
-          <nav className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
-            <Link href="/" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
-            <ChevronRight size={12} />
-            <span className="text-slate-800 font-medium">Employees</span>
-          </nav>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Users size={22} className="text-slate-800 stroke-[1.75]" />
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Employees</h1>
         </div>
 
-        <button
-          onClick={() => handleOpenModal()}
-          className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
-        >
-          <Plus size={18} />
-          Add New Employee
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => alert('Exporting employees...')}
+            className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+          >
+            Export
+          </button>
+          <button
+            onClick={() => handleOpenModal()}
+            className="bg-[#303030] hover:bg-[#111111] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <Plus size={14} />
+            <span>Add employee</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary KPI Cards */}
@@ -1078,7 +1077,7 @@ export default function EmployeesClient() {
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  className="px-3.5 py-1 h-8 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1086,19 +1085,19 @@ export default function EmployeesClient() {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className={`px-6 py-2 rounded-xl text-white text-xs font-semibold shadow-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-4 py-1 h-8 rounded-lg text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 ${
                     isSaving
-                      ? 'bg-indigo-400 cursor-not-allowed'
-                      : 'bg-indigo-600 hover:bg-indigo-700'
+                      ? 'bg-slate-700 cursor-not-allowed'
+                      : 'bg-[#303030] hover:bg-[#111111]'
                   }`}
                 >
                   {isSaving ? (
                     <>
-                      <RefreshCw size={16} className="animate-spin" /> Uploading Photo & Saving...
+                      <RefreshCw size={14} className="animate-spin" /> Saving Profile...
                     </>
                   ) : (
                     <>
-                      <Check size={16} /> Save Employee Profile & Access
+                      <Check size={14} /> Save Employee Profile & Access
                     </>
                   )}
                 </button>

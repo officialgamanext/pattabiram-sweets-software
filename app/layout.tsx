@@ -22,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={sora.variable}>
-      <body className="min-h-screen bg-slate-900 font-sans antialiased text-slate-900">
+      <body className="min-h-screen bg-[#f6f6f7] font-sans antialiased text-[#1a1a1a]">
         <AuthProvider>
           <AuthGuard>{children}</AuthGuard>
         </AuthProvider>

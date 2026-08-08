@@ -215,45 +215,47 @@ export default function DashboardClient() {
   const xAxisLabels = ['1 May', '5 May', '10 May', '15 May', '20 May', '25 May', '30 May'];
 
   return (
-    <div className="w-full flex flex-col gap-6">
+    <div className="w-full flex flex-col gap-4 text-slate-800">
 
-      {/* ── 1. Title Header Row ─────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* ── 1. SHOPIFY TITLE HEADER ROW ─────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
         <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">Dashboard</h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1 font-normal">Welcome back, Arun Kumar! Here&apos;s what&apos;s happening today.</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Home</h1>
+          <p className="text-xs text-slate-500 mt-0.5 font-normal">Welcome back, Pattabiram Admin! Here&apos;s your store summary.</p>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           {/* Date Picker Button */}
-          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 shadow-xs text-xs sm:text-sm font-medium text-slate-700 cursor-pointer hover:border-indigo-300 transition-colors flex-1 sm:flex-none justify-center">
-            <Calendar size={15} className="text-slate-400" />
-            <span>29 May 2025</span>
+          <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-1.5 shadow-2xs text-xs font-semibold text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors">
+            <Calendar size={13} className="text-slate-400" />
+            <span>Last 30 days</span>
             <ChevronDown size={12} className="text-slate-400" />
           </div>
 
           {/* Quick Action Button */}
-          <button className="flex items-center justify-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white text-xs sm:text-sm font-semibold shadow-sm transition-all hover:shadow cursor-pointer flex-1 sm:flex-none">
-            <Plus size={15} />
-            <span>Quick Action</span>
+          <button className="bg-[#303030] hover:bg-[#111111] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5">
+            <Plus size={14} />
+            <span>Add order</span>
           </button>
         </div>
       </div>
 
-      {/* ── 2. Top 5 Stat Cards Row ─────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 w-full">
+      {/* ── 2. SHOPIFY POLARIS STAT CARDS BAR ───────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 w-full">
         {statCards.map((card) => (
           <div
             key={card.title}
-            className="bg-white rounded-xl sm:rounded-2xl p-3.5 sm:p-5 border border-slate-100 shadow-xs hover:shadow-md transition-shadow flex flex-col sm:flex-row items-start sm:items-center gap-2.5 sm:gap-3.5"
+            className="bg-white rounded-xl p-4 border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-all flex flex-col justify-between"
           >
-            <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${card.bgColor} ${card.iconColor}`}>
-              {card.icon}
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-slate-500 truncate">{card.title}</p>
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${card.bgColor} ${card.iconColor}`}>
+                {card.icon}
+              </div>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] sm:text-xs font-medium text-slate-500 mb-0.5 truncate">{card.title}</p>
-              <p className="text-base sm:text-xl font-extrabold text-slate-900 leading-tight truncate">{card.value}</p>
-              <p className="text-[10px] sm:text-[11px] font-semibold text-emerald-600 mt-0.5 sm:mt-1 flex items-center gap-0.5 truncate">
+            <div className="mt-3">
+              <p className="text-lg font-bold text-slate-900 leading-tight truncate">{card.value}</p>
+              <p className="text-[11px] font-semibold text-emerald-700 mt-1 flex items-center gap-0.5 truncate">
                 <span>↑</span> {card.change}
               </p>
             </div>
@@ -265,7 +267,7 @@ export default function DashboardClient() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-5 w-full items-stretch">
 
         {/* Card 1: Sales Overview (5 Cols on Desktop) */}
-        <div className="col-span-1 md:col-span-2 lg:col-span-5 bg-white rounded-xl sm:rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-xs flex flex-col justify-between">
+        <div className="col-span-1 md:col-span-2 lg:col-span-5 bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm sm:text-base font-bold text-slate-900">Sales Overview</h2>
             <CustomSelect
@@ -313,16 +315,16 @@ export default function DashboardClient() {
         </div>
 
         {/* Card 2: Orders Status (3 Cols on Desktop) */}
-        <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white rounded-xl sm:rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-xs flex flex-col justify-between">
+        <div className="col-span-1 md:col-span-1 lg:col-span-3 bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
           <h2 className="text-sm sm:text-base font-bold text-slate-900 mb-2">Orders Status</h2>
           <OrdersDonutChart />
         </div>
 
         {/* Card 3: Recent Orders (4 Cols on Desktop) */}
-        <div className="col-span-1 md:col-span-1 lg:col-span-4 bg-white rounded-xl sm:rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-xs flex flex-col justify-between">
+        <div className="col-span-1 md:col-span-1 lg:col-span-4 bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm sm:text-base font-bold text-slate-900">Recent Orders</h2>
-            <button className="text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors cursor-pointer">
+            <button className="text-xs font-bold text-slate-700 hover:text-slate-900 transition-colors cursor-pointer">
               View All
             </button>
           </div>
@@ -346,7 +348,7 @@ export default function DashboardClient() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 w-full items-stretch">
 
         {/* Card 1: Top Selling Items */}
-        <div className="col-span-1 bg-white rounded-xl sm:rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-xs flex flex-col justify-between">
+        <div className="col-span-1 bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm sm:text-base font-bold text-slate-900">Top Selling Items</h2>
             <button className="text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors cursor-pointer">
@@ -374,10 +376,10 @@ export default function DashboardClient() {
         </div>
 
         {/* Card 2: Inventory Alert */}
-        <div className="col-span-1 bg-white rounded-xl sm:rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-xs flex flex-col justify-between">
+        <div className="col-span-1 bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm sm:text-base font-bold text-slate-900">Inventory Alert</h2>
-            <button className="text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors cursor-pointer">
+            <button className="text-xs font-bold text-slate-700 hover:text-slate-900 transition-colors cursor-pointer">
               View All
             </button>
           </div>
@@ -392,7 +394,7 @@ export default function DashboardClient() {
                   <p className="text-xs font-bold text-slate-800 truncate">{item.name}</p>
                   <p className="text-[11px] text-slate-400 mt-0.5">{item.stock}</p>
                 </div>
-                <span className="text-[10px] font-bold text-red-500 bg-red-50 border border-red-100 px-2 py-0.5 rounded-md flex-shrink-0">
+                <span className="text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full flex-shrink-0">
                   Low Stock
                 </span>
               </div>
@@ -401,7 +403,7 @@ export default function DashboardClient() {
         </div>
 
         {/* Card 3: Manufacturing & Packing */}
-        <div className="col-span-1 md:col-span-2 lg:col-span-1 bg-white rounded-xl sm:rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-xs flex flex-col justify-between">
+        <div className="col-span-1 md:col-span-2 lg:col-span-1 bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
           <h2 className="text-sm sm:text-base font-bold text-slate-900 mb-4">Manufacturing &amp; Packing</h2>
 
           <div className="grid grid-cols-2 gap-3.5">

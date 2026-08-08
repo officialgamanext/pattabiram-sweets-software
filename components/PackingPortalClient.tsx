@@ -377,34 +377,25 @@ export default function PackingPortalClient() {
   const activeCount = aggregatedItems.filter((i) => i.orders.some((o) => o.pckStatus === 'Packing Started')).length;
 
   return (
-    <div className="w-full flex flex-col gap-6 font-sans pb-12">
+    <div className="w-full flex flex-col gap-4 text-slate-800 pb-12">
       {/* Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div>
-          <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-violet-600 text-white flex items-center justify-center shadow-xs">
-              <Package size={20} />
-            </div>
-            Packing & Dispatch Portal
-          </h1>
-          <nav className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
-            <Link href="/" className="hover:text-violet-600 transition-colors">Dashboard</Link>
-            <ChevronRight size={12} />
-            <span className="text-slate-800 font-medium">Packing Portal</span>
-          </nav>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Package size={22} className="text-slate-800 stroke-[1.75]" />
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Packing & Dispatch Portal</h1>
         </div>
 
         {/* Dynamic Packing Unit Selector */}
-        <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-          <span className="text-xs font-bold text-slate-700 pl-1 flex items-center gap-1.5">
-            <Building2 size={14} className="text-violet-600" /> Packing Unit:
+        <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-lg border border-slate-300 shadow-2xs">
+          <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+            <Building2 size={13} className="text-slate-500" /> Packing Unit:
           </span>
           <CustomSelect
             options={unitOptions}
             value={selectedUnit}
             onChange={(val) => setSelectedUnit(val)}
             size="sm"
-            className="min-w-[220px]"
+            className="min-w-[200px]"
           />
         </div>
       </div>

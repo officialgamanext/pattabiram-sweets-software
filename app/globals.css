@@ -1,14 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sora:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
-  --font-sora: 'Sora', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sora: 'Inter', 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 body {
-  font-family: 'Sora', var(--font-sora), -apple-system, BlinkMacSystemFont, sans-serif;
-  background-color: #f1f5f9;
-  color: #0f172a;
+  font-family: var(--font-sora), -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #f6f6f7;
+  color: #1a1a1a;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -21,3 +21,44 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Shopify Polaris Badges & Elements */
+.polaris-badge-success {
+  background-color: #e3f5e1;
+  color: #14532d;
+  border: 1px solid #c3ebbf;
+}
+
+.polaris-badge-attention {
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.polaris-badge-neutral {
+  background-color: #f1f2f4;
+  color: #4a4a4a;
+  border: 1px solid #e1e3e5;
+}
+
+/* Shopify Polaris Main Layout Container Spacing */
+.shopify-main-layout {
+  padding-top: 88px !important;
+  padding-left: 264px !important;
+  padding-right: 32px !important;
+  padding-bottom: 48px !important;
+  min-height: 100vh;
+  background-color: #f6f6f7;
+  transition: all 0.15s ease-in-out;
+}
+
+@media (max-width: 1023px) {
+  .shopify-main-layout {
+    padding-top: 76px !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    padding-bottom: 32px !important;
+  }
+}
+
+

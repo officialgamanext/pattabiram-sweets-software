@@ -57,17 +57,15 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Authenticated user on protected page: render Header and page content
+  // Authenticated user on protected page: render Header and main workspace container
   return (
-    <div className="min-h-screen bg-slate-100/80 font-sans antialiased text-slate-900">
-      <div className="min-h-screen">
-        <div className="bg-white rounded-xl lg:rounded-2xl border border-slate-200/80 shadow-xl overflow-hidden">
-          <Header />
-          <main className="p-3 sm:p-6 lg:p-8 pb-20 sm:pb-8 bg-slate-50/50 min-h-[calc(100vh-140px)]">
-            {children}
-          </main>
+    <div className="min-h-screen bg-[#f6f6f7] font-sans antialiased text-[#1a1a1a]">
+      <Header />
+      <main className="shopify-main-layout">
+        <div className="max-w-[1400px] mx-auto space-y-6">
+          {children}
         </div>
-      </div>
+      </main>
     </div>
   );
 }

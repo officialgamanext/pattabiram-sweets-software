@@ -102,36 +102,13 @@ export default function SupportClient() {
   };
 
   return (
-    <div className="w-full flex flex-col gap-8 font-sans pb-12">
+    <div className="w-full flex flex-col gap-4 text-slate-800 font-sans pb-12">
 
-      {/* ── 1. Hero Header Banner ──────────────────────────────────── */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-900 via-indigo-800 to-violet-900 text-white p-6 sm:p-10 shadow-xl border border-indigo-700/50">
-        {/* Subtle decorative grid background */}
-        <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px] opacity-10 pointer-events-none" />
-
-        <div className="relative z-10 max-w-3xl space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-semibold text-indigo-200">
-            <Sparkles size={14} className="text-amber-300 animate-pulse" />
-            <span>Gamanext Official Technical Support</span>
-          </div>
-
-          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
-            How can we help you today?
-          </h1>
-          <p className="text-sm sm:text-base text-indigo-100/90 leading-relaxed">
-            Get instant support for Pattabiram Sweets Management Software. Contact our technical engineering team directly or send a message for quick resolution.
-          </p>
-
-          <div className="flex flex-wrap gap-4 pt-2">
-            <div className="flex items-center gap-2 text-xs font-semibold bg-emerald-500/20 text-emerald-200 px-3.5 py-1.5 rounded-xl border border-emerald-400/30">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span>All Systems Operational</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs font-semibold bg-white/10 text-white px-3.5 py-1.5 rounded-xl border border-white/20">
-              <Clock size={14} className="text-indigo-300" />
-              <span>Avg. Response Time: &lt; 15 mins</span>
-            </div>
-          </div>
+      {/* ── 1. SHOPIFY POLARIS PAGE TITLE & HERO ─────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Headphones size={22} className="text-slate-800 stroke-[1.75]" />
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Support & Contact</h1>
         </div>
       </div>
 

@@ -710,34 +710,25 @@ export default function PayrollClient() {
   };
 
   return (
-    <div className="w-full flex flex-col gap-6 font-sans pb-12">
+    <div className="w-full flex flex-col gap-4 text-slate-800 pb-12">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-              <CreditCard size={20} />
-            </div>
-            Payroll & Attendance Management
-          </h1>
-          <nav className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
-            <Link href="/" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
-            <ChevronRight size={12} />
-            <span className="text-slate-800 font-medium">Payroll</span>
-          </nav>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <CreditCard size={22} className="text-slate-800 stroke-[1.75]" />
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Payroll & Attendance</h1>
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+        <div className="flex rounded-lg bg-white p-1 border border-slate-300 shadow-2xs">
           <button
             onClick={() => setActiveTab('attendance')}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'attendance'
-                ? 'bg-white text-indigo-600 shadow-xs'
+                ? 'bg-slate-100 text-slate-900 font-bold'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <UserCheck size={15} /> Attendance & Face ID
+            <UserCheck size={14} /> Attendance & Face ID
           </button>
           <button
             onClick={() => setActiveTab('salary')}
@@ -878,17 +869,17 @@ export default function PayrollClient() {
                           )}
                         </td>
 
-                        <td className="py-3.5 px-5 text-right">
+                        <td className="py-3 px-5 text-right">
                           <button
                             onClick={() => handleStartAttendance(emp)}
-                            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all shadow-xs inline-flex items-center gap-1.5 cursor-pointer ${
+                            className={`h-8 px-3 rounded-lg text-xs font-semibold transition-all shadow-2xs inline-flex items-center gap-1.5 cursor-pointer ${
                               isPresent
-                                ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
+                                ? 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-300'
+                                : 'bg-[#303030] hover:bg-[#111111] text-white'
                             }`}
                           >
-                            <UserCheck size={14} />
-                            {isPresent ? 'Re-mark Attendance' : 'Mark Attendance'}
+                            <UserCheck size={13} />
+                            {isPresent ? 'Re-mark' : 'Mark Attendance'}
                           </button>
                         </td>
                       </tr>

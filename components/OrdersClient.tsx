@@ -969,29 +969,33 @@ export default function OrdersClient() {
   return (
     <div className="w-full flex flex-col gap-6 font-sans pb-10">
 
-      {/* ── 1. Page Header & Top Sub-Tabs ──────────────────────────── */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Orders</h1>
-            <nav className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
-              <Link href="/" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
-              <span>&gt;</span>
-              <span className="text-slate-800 font-medium">Orders</span>
-            </nav>
+      {/* ── 1. SHOPIFY POLARIS PAGE TITLE & ACTION BAR ────────────────────── */}
+      <div className="flex flex-col gap-3 pt-1">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <ShoppingBag size={22} className="text-slate-800 stroke-[1.75]" />
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Orders</h1>
           </div>
 
-          <button
-            onClick={() => handleOpenAddOrderModal('9:00 AM - 12:00 PM')}
-            className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer self-start sm:self-auto"
-          >
-            <Plus size={16} />
-            <span>Add New Order</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => alert('Exporting orders...')}
+              className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+            >
+              Export
+            </button>
+            <button
+              onClick={() => handleOpenAddOrderModal('9:00 AM - 12:00 PM')}
+              className="bg-[#303030] hover:bg-[#111111] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <Plus size={14} />
+              <span>Create order</span>
+            </button>
+          </div>
         </div>
 
         {/* ── Filter Toolbar (Date, Order Status, Payment Status, Search) ── */}
-        <div className="bg-white rounded-2xl p-3.5 border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-white rounded-xl p-3 border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-3">
           {/* Left: Custom Date Picker Control */}
           <div className="flex items-center gap-2 flex-wrap">
             <CustomDatePicker
@@ -1004,10 +1008,10 @@ export default function OrdersClient() {
             <button
               type="button"
               onClick={() => setSelectedDate(getTodayDateStr())}
-              className={`px-3 py-1.5 h-[36px] rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+              className={`px-3 py-1 h-[32px] rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
                 selectedDate === getTodayDateStr()
-                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200 shadow-2xs'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  ? 'bg-slate-100 text-slate-900 border-slate-300 font-bold'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
               }`}
             >
               Today
@@ -1016,10 +1020,10 @@ export default function OrdersClient() {
             <button
               type="button"
               onClick={() => setSelectedDate('All')}
-              className={`px-3 py-1.5 h-[36px] rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+              className={`px-3 py-1 h-[32px] rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
                 selectedDate === 'All'
-                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200 shadow-2xs'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  ? 'bg-slate-100 text-slate-900 border-slate-300 font-bold'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
               }`}
             >
               All Dates

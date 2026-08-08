@@ -166,46 +166,41 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100/90 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden font-sans">
-      {/* Background design elements matching dashboard */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-[#f6f6f7] flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden font-sans text-slate-800">
+      {/* Background design accents */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-[#1a1a1a]" />
 
-      {/* Main card matching application light theme */}
-      <div className="w-full max-w-md bg-white border border-slate-200/90 rounded-3xl shadow-xl overflow-hidden relative z-10">
+      {/* Main card matching Shopify Polaris light theme */}
+      <div className="w-full max-w-md bg-white border border-slate-200/90 rounded-2xl shadow-xl overflow-hidden relative z-10">
         
         {/* Header Branding */}
-        <div className="p-8 pb-6 text-center border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white">
-          <div className="inline-flex items-center justify-center bg-white border border-slate-200/80 rounded-2xl p-3.5 mb-4 shadow-sm">
-            <Image
-              src="/logo.png"
-              alt="Pattabiram Sweets"
-              width={160}
-              height={44}
-              className="h-10 w-auto object-contain"
-              priority
-            />
+        <div className="p-6 sm:p-8 pb-5 text-center border-b border-slate-100 bg-white">
+          <div className="inline-flex items-center gap-2 bg-[#1a1a1a] text-white px-3 py-1.5 rounded-lg mb-4 shadow-2xs">
+            <span className="font-extrabold text-xs tracking-wider uppercase">Pattabiram</span>
+            <span className="text-[10px] text-slate-400 font-medium bg-[#2a2a2c] px-2 py-0.5 rounded-full">
+              Spring &apos;26
+            </span>
           </div>
-          <h1 className="text-xl font-bold text-slate-800 tracking-tight">Portal Access Sign In</h1>
-          <p className="text-xs text-slate-500 mt-1 font-medium">Management & Operations Software</p>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Log in</h1>
+          <p className="text-xs text-slate-500 mt-1 font-medium">Continue to Pattabiram Sweets Admin</p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="p-3 bg-slate-50 border-b border-slate-100">
-          <div className="flex bg-slate-200/60 p-1 rounded-2xl gap-1">
+        <div className="px-6 pt-4 bg-white">
+          <div className="flex bg-[#f1f2f4] p-1 rounded-xl gap-1 border border-slate-200/60">
             <button
               type="button"
               onClick={() => {
                 setActiveTab('superadmin');
                 setEmailError('');
               }}
-              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 activeTab === 'superadmin'
-                  ? 'bg-white text-indigo-600 shadow-sm'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <ShieldCheck size={16} />
+              <ShieldCheck size={14} />
               <span>SuperAdmin</span>
             </button>
             <button
@@ -214,13 +209,13 @@ export default function LoginPage() {
                 setActiveTab('phone');
                 setPhoneError('');
               }}
-              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 activeTab === 'phone'
-                  ? 'bg-white text-indigo-600 shadow-sm'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Phone size={16} />
+              <Phone size={14} />
               <span>Phone OTP</span>
             </button>
           </div>
@@ -232,17 +227,17 @@ export default function LoginPage() {
           {activeTab === 'superadmin' && (
             <form onSubmit={handleSuperAdminLogin} className="space-y-4">
               {emailError && (
-                <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5 font-medium">
-                  <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-red-500" />
+                <div className="p-3 rounded-lg bg-[#fbeae5] border border-[#f8c9c0] text-[#8e1f0b] text-xs flex items-start gap-2 font-medium">
+                  <AlertCircle size={15} className="mt-0.5 flex-shrink-0 text-[#8e1f0b]" />
                   <span>{emailError}</span>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">SuperAdmin Email</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">SuperAdmin Email</label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <Mail size={18} />
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Mail size={15} />
                   </div>
                   <input
                     type="email"
@@ -250,16 +245,16 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="admin@pattabiramsweets.com"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-600/10 transition-all"
+                    className="w-full pl-9 pr-3 h-9 bg-[#f7f7f8] focus:bg-white border border-slate-300 rounded-lg text-slate-800 text-xs placeholder-slate-400 focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-400 transition-all"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Password</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Password</label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <Lock size={18} />
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Lock size={15} />
                   </div>
                   <input
                     type="password"
@@ -267,7 +262,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-600/10 transition-all"
+                    className="w-full pl-9 pr-3 h-9 bg-[#f7f7f8] focus:bg-white border border-slate-300 rounded-lg text-slate-800 text-xs placeholder-slate-400 focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-400 transition-all"
                   />
                 </div>
               </div>
@@ -275,17 +270,17 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={emailLoading}
-                className="w-full mt-2 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold text-sm rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full mt-2 h-9 bg-[#303030] hover:bg-[#111111] disabled:bg-slate-400 text-white font-semibold text-xs rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 {emailLoading ? (
                   <>
-                    <Loader2 size={18} className="animate-spin" />
+                    <Loader2 size={15} className="animate-spin" />
                     <span>Authenticating...</span>
                   </>
                 ) : (
                   <>
-                    <span>Sign In to Dashboard</span>
-                    <ArrowRight size={18} />
+                    <span>Log in</span>
+                    <ArrowRight size={14} />
                   </>
                 )}
               </button>
@@ -298,17 +293,17 @@ export default function LoginPage() {
               {otpStep === 'phone' ? (
                 <form onSubmit={handleSendOtp} className="space-y-4">
                   {phoneError && (
-                    <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5 font-medium">
-                      <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-red-500" />
+                    <div className="p-3 rounded-lg bg-[#fbeae5] border border-[#f8c9c0] text-[#8e1f0b] text-xs flex items-start gap-2 font-medium">
+                      <AlertCircle size={15} className="mt-0.5 flex-shrink-0 text-[#8e1f0b]" />
                       <span>{phoneError}</span>
                     </div>
                   )}
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Registered Phone Number</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Registered Phone Number</label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                        <Phone size={18} />
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <Phone size={15} />
                       </div>
                       <input
                         type="tel"
@@ -316,7 +311,7 @@ export default function LoginPage() {
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
                         placeholder="9876543210 or +91 9876543210"
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-600/10 transition-all"
+                        className="w-full pl-9 pr-3 h-9 bg-[#f7f7f8] focus:bg-white border border-slate-300 rounded-lg text-slate-800 text-xs placeholder-slate-400 focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-400 transition-all"
                       />
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">An SMS OTP verification code will be sent to your mobile number.</p>
@@ -325,17 +320,17 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     disabled={phoneLoading}
-                    className="w-full mt-2 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold text-sm rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full mt-2 h-9 bg-[#303030] hover:bg-[#111111] disabled:bg-slate-400 text-white font-semibold text-xs rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {phoneLoading ? (
                       <>
-                        <Loader2 size={18} className="animate-spin" />
+                        <Loader2 size={15} className="animate-spin" />
                         <span>Sending OTP...</span>
                       </>
                     ) : (
                       <>
                         <span>Get OTP Code</span>
-                        <ArrowRight size={18} />
+                        <ArrowRight size={14} />
                       </>
                     )}
                   </button>
@@ -343,21 +338,21 @@ export default function LoginPage() {
               ) : (
                 <form onSubmit={handleVerifyOtp} className="space-y-4">
                   {phoneError && (
-                    <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5 font-medium">
-                      <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-red-500" />
+                    <div className="p-3 rounded-lg bg-[#fbeae5] border border-[#f8c9c0] text-[#8e1f0b] text-xs flex items-start gap-2 font-medium">
+                      <AlertCircle size={15} className="mt-0.5 flex-shrink-0 text-[#8e1f0b]" />
                       <span>{phoneError}</span>
                     </div>
                   )}
 
-                  <div className="text-center bg-indigo-50 border border-indigo-100 p-3 rounded-xl mb-3">
-                    <p className="text-xs text-indigo-900">OTP code sent to <span className="font-bold text-indigo-700">{phoneNumber}</span></p>
+                  <div className="text-center bg-[#f1f2f4] border border-slate-200 p-2.5 rounded-lg mb-2">
+                    <p className="text-xs text-slate-700">OTP code sent to <span className="font-bold text-slate-900">{phoneNumber}</span></p>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Enter 6-Digit OTP</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Enter 6-Digit OTP</label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                        <KeyRound size={18} />
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <KeyRound size={15} />
                       </div>
                       <input
                         type="text"
@@ -366,7 +361,7 @@ export default function LoginPage() {
                         value={otp}
                         onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                         placeholder="123456"
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-base tracking-widest font-mono placeholder-slate-300 focus:outline-none focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-600/10 transition-all text-center"
+                        className="w-full pl-9 pr-3 h-9 bg-[#f7f7f8] focus:bg-white border border-slate-300 rounded-lg text-slate-900 text-sm tracking-widest font-mono placeholder-slate-300 focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-400 transition-all text-center"
                       />
                     </div>
                   </div>
@@ -374,17 +369,17 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     disabled={phoneLoading}
-                    className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold text-sm rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full h-9 bg-[#303030] hover:bg-[#111111] disabled:bg-slate-400 text-white font-semibold text-xs rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {phoneLoading ? (
                       <>
-                        <Loader2 size={18} className="animate-spin" />
+                        <Loader2 size={15} className="animate-spin" />
                         <span>Verifying...</span>
                       </>
                     ) : (
                       <>
                         <span>Verify &amp; Sign In</span>
-                        <ArrowRight size={18} />
+                        <ArrowRight size={14} />
                       </>
                     )}
                   </button>
@@ -405,7 +400,7 @@ export default function LoginPage() {
                     <button
                       type="button"
                       onClick={(e) => handleSendOtp(e)}
-                      className="text-indigo-600 hover:text-indigo-800 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                      className="text-slate-800 hover:text-black font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                     >
                       <RefreshCw size={12} />
                       Resend OTP
@@ -421,7 +416,7 @@ export default function LoginPage() {
         <div id="recaptcha-container" />
 
         {/* Footer info notice matching layout style */}
-        <div className="p-4 text-center border-t border-slate-100 bg-slate-50/60 text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
+        <div className="p-3.5 text-center border-t border-slate-100 bg-[#f7f7f8] text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
           <LockKeyhole size={13} className="text-slate-400" />
           <span>Secured with Firebase Authentication</span>
         </div>

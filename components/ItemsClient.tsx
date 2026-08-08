@@ -12,6 +12,7 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   X,
   Loader2,
   Filter,
@@ -21,6 +22,8 @@ import {
   Upload,
   FileSpreadsheet,
   FileDown,
+  Calendar,
+  Tag,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
@@ -589,246 +592,215 @@ export default function ItemsClient() {
   const categoryIconOptions = ['🍰', '🍬', '🍪', '🥛', '📦', '🥤', '🎁', '🍨', '🍿'];
 
   return (
-    <div className="w-full flex flex-col gap-6">
+    <div className="w-full flex flex-col gap-4 text-slate-800">
 
-      {/* ── 1. Page Title & Action Bar ─────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Items</h1>
-          <nav className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
-            <Link href="/" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
-            <span>&gt;</span>
-            <span className="text-slate-800 font-medium">Items</span>
-          </nav>
+      {/* ── 1. SHOPIFY POLARIS PAGE TITLE & ACTION BAR ────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+        <div className="flex items-center gap-2">
+          <Tag size={22} className="text-slate-800 stroke-[1.75]" />
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Products</h1>
         </div>
 
-        {activeTab === 'items' ? (
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <button
-              onClick={() => setIsBulkUploadModalOpen(true)}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-semibold shadow-2xs transition-all cursor-pointer flex-1 sm:flex-none"
-            >
-              <FileSpreadsheet size={16} className="text-indigo-600" />
-              <span>Bulk Upload</span>
-            </button>
-
-            <button
-              onClick={() => setIsAddItemModalOpen(true)}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white text-sm font-semibold shadow-sm transition-all hover:shadow cursor-pointer flex-1 sm:flex-none"
-            >
-              <Plus size={16} />
-              <span>Add Item</span>
-            </button>
-          </div>
-        ) : (
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => setIsAddCategoryModalOpen(true)}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white text-sm font-semibold shadow-sm transition-all hover:shadow cursor-pointer w-full sm:w-auto"
+            onClick={() => alert('Exporting products list...')}
+            className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer"
           >
-            <FolderPlus size={16} />
-            <span>Add Category</span>
+            Export
           </button>
-        )}
+          <button
+            onClick={() => setIsBulkUploadModalOpen(true)}
+            className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <Upload size={13} />
+            <span>Import</span>
+          </button>
+          <button
+            onClick={() => setActiveTab(activeTab === 'items' ? 'categories' : 'items')}
+            className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <span>More actions</span>
+            <ChevronDown size={13} />
+          </button>
+
+          <button
+            onClick={() => setIsAddItemModalOpen(true)}
+            className="bg-[#303030] hover:bg-[#111111] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <Plus size={14} />
+            <span>Add product</span>
+          </button>
+        </div>
       </div>
 
-      {/* ── 2. Navigation Tabs (Items List vs Categories) ─────────── */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-        <button
-          onClick={() => setActiveTab('items')}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-            activeTab === 'items'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Items List ({items.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('categories')}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-            activeTab === 'categories'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Categories ({categories.length})
-        </button>
+      {/* ── 2. SHOPIFY METRICS BANNER CARD (3 Columns) ───────────────────── */}
+      <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs divide-y md:divide-y-0 md:divide-x divide-slate-200 flex flex-col md:flex-row overflow-hidden">
+        {/* Metric 1 */}
+        <div className="p-4 flex-1 space-y-1">
+          <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
+            <span className="border border-slate-200 rounded px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 inline-flex items-center gap-1">
+              <Calendar size={11} /> 30 days
+            </span>
+          </div>
+          <div className="pt-1">
+            <p className="text-xs text-slate-500 font-medium underline decoration-dotted">Average sell-through rate</p>
+            <p className="text-lg font-semibold text-slate-900 mt-0.5">3.98% —</p>
+          </div>
+        </div>
+
+        {/* Metric 2 */}
+        <div className="p-4 flex-1 space-y-1">
+          <p className="text-xs text-slate-500 font-medium underline decoration-dotted">Products by days of inventory remaining</p>
+          <p className="text-xs text-slate-400 font-normal mt-2">No data</p>
+        </div>
+
+        {/* Metric 3 */}
+        <div className="p-4 flex-1 space-y-1">
+          <p className="text-xs text-slate-500 font-medium underline decoration-dotted">ABC product analysis</p>
+          <div className="flex items-center gap-4 text-xs font-semibold text-slate-800 mt-2">
+            <span className="underline decoration-indigo-500">$0.00 A</span>
+            <span className="underline decoration-purple-500">$0.00 B</span>
+            <span className="underline decoration-slate-400">$0.00 C</span>
+          </div>
+        </div>
       </div>
 
-      {/* ── 3. Tab Content 1: Items List ───────────────────────────── */}
-      {activeTab === 'items' && (
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-          {/* Top Search & Filter Bar */}
-          <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="text-xs text-slate-500 font-medium">
-              {isLoading ? (
-                <span className="flex items-center gap-2 text-indigo-600">
-                  <Loader2 size={14} className="animate-spin" />
-                  Loading items...
-                </span>
-              ) : firebaseError ? (
-                <span className="text-red-500 font-semibold">Error: {firebaseError}</span>
-              ) : (
-                <span>Total Items: <strong className="text-slate-800">{items.length}</strong></span>
-              )}
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-              <div className="relative w-full sm:w-64">
-                <input
-                  type="text"
-                  placeholder="Search items..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-3.5 pr-9 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50"
-                />
-                <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              </div>
-
-              <CustomSelect
-                options={statusFilterOptions}
-                value={statusFilter}
-                onChange={setStatusFilter}
-                icon={<Filter size={14} />}
-                size="md"
-                className="w-full sm:w-auto"
-              />
-
-              <button
-                onClick={() => alert('Exporting items...')}
-                className="p-2.5 text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
-                title="Export CSV"
-              >
-                <Download size={16} />
-              </button>
-            </div>
+      {/* ── 3. DATA CARD CONTAINER & FILTER TOOLBAR ───────────────────────── */}
+      <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+        {/* Search and Filter Bar Header */}
+        <div className="p-3 border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button className="bg-white hover:bg-slate-100 text-slate-800 text-xs font-semibold px-2.5 py-1 rounded-lg border border-slate-200 flex items-center gap-1.5">
+              <span>All</span>
+              <ChevronDown size={12} className="text-slate-400" />
+            </button>
           </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[950px]">
-              <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                  <th className="py-3.5 px-4 sm:px-6">Item</th>
-                  <th className="py-3.5 px-4">Code</th>
-                  <th className="py-3.5 px-4">Category</th>
-                  <th className="py-3.5 px-4">Price</th>
-                  <th className="py-3.5 px-4">Unit</th>
-                  <th className="py-3.5 px-4">Manufacturing Unit</th>
-                  <th className="py-3.5 px-4">Packing Unit</th>
-                  <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4 text-center">Actions</th>
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-1 max-w-lg">
+            <div className="relative w-full">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search and filter"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 bg-[#f7f7f8] focus:bg-white text-slate-800"
+              />
+            </div>
+            <button className="p-1.5 text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+              <Filter size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Table Section ─────────────────────────────────────────────────── */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[980px]">
+            <thead>
+              <tr className="bg-[#f7f7f8] border-b border-slate-200 text-[11px] font-semibold text-[#5c5f62] tracking-normal">
+                <th className="py-2.5 px-4 w-10 text-center">
+                  <input type="checkbox" className="rounded border-slate-300 text-slate-800 focus:ring-0 cursor-pointer" />
+                </th>
+                <th className="py-2.5 px-4">Product</th>
+                <th className="py-2.5 px-4">Status</th>
+                <th className="py-2.5 px-4">Inventory</th>
+                <th className="py-2.5 px-4">Category</th>
+                <th className="py-2.5 px-4 text-center">Channels</th>
+                <th className="py-2.5 px-4 text-center">Catalogs</th>
+                <th className="py-2.5 px-4">Vendor / Unit</th>
+                <th className="py-2.5 px-4 text-right pr-6">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs text-slate-800">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 size={16} className="animate-spin text-slate-600" />
+                      <span>Loading products...</span>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-400">
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 size={18} className="animate-spin text-indigo-600" />
-                        <span>Loading items...</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : filteredItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-400">
-                      <div className="flex flex-col items-center justify-center gap-2 py-4">
-                        <Package size={32} className="text-slate-300" />
-                        <p className="font-semibold text-slate-600">No items found</p>
-                        <p className="text-xs text-slate-400">Click &quot;+ Add Item&quot; above to create a new item.</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3.5 px-4 sm:px-6">
+              ) : filteredItems.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-2 py-4">
+                      <Package size={28} className="text-slate-300" />
+                      <p className="font-semibold text-slate-600">No products found</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredItems.map((item, idx) => {
+                  const bgColors = ['bg-amber-100 text-amber-800 border-amber-200', 'bg-emerald-100 text-emerald-800 border-emerald-200', 'bg-purple-100 text-purple-800 border-purple-200', 'bg-sky-100 text-sky-800 border-sky-200', 'bg-rose-100 text-rose-800 border-rose-200'];
+                  const thumbnailBg = bgColors[idx % bgColors.length];
+
+                  return (
+                    <tr key={item.id} className="hover:bg-[#f7f7f8] transition-colors border-b border-slate-100">
+                      <td className="py-3 px-4 text-center">
+                        <input type="checkbox" className="rounded border-slate-300 text-slate-800 focus:ring-0 cursor-pointer" />
+                      </td>
+                      <td className="py-3 px-4 font-semibold text-slate-900">
                         <div className="flex items-center gap-3">
-                          {/* Item Thumbnail: Uses /logo.png as default if no image uploaded */}
-                          <div className="relative w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                            <Image
-                              src={item.imageUrl || '/logo.png'}
-                              alt={item.name}
-                              fill
-                              className="object-contain p-1"
-                            />
+                          {/* Thumbnail Icon container matching Shopify screenshot */}
+                          <div className={`w-8 h-8 rounded-lg ${thumbnailBg} border flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-2xs`}>
+                            {item.name.charAt(0)}
                           </div>
-                          <span className="font-bold text-slate-900">{item.name}</span>
+                          <span>{item.name}</span>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 font-bold text-indigo-600">{item.code}</td>
-                      <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-semibold text-[11px]">
-                          {item.category}
+                      <td className="py-3 px-4">
+                        <span className="bg-[#e3f5e1] text-[#14532d] border border-[#c3ebbf] font-semibold text-[11px] rounded-full px-2.5 py-0.5 inline-flex items-center gap-1">
+                          Active
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 font-extrabold text-slate-900">₹ {item.price}</td>
-                      <td className="py-3.5 px-4 text-slate-600 font-semibold">{item.unit}</td>
-                      <td className="py-3.5 px-4 text-slate-600">{item.manufacturingUnitName || 'N/A'}</td>
-                      <td className="py-3.5 px-4 text-slate-600">{item.packingUnitName || 'N/A'}</td>
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
-                            item.status === 'Active'
-                              ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
-                              : 'bg-red-50 text-red-500 border-red-200'
-                          }`}
-                        >
-                          {item.status}
+                      <td className="py-3 px-4">
+                        <span className={item.price > 0 ? "text-rose-700 font-semibold" : "text-slate-700"}>
+                          0 in stock
                         </span>
                       </td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center justify-center gap-1.5">
+                      <td className="py-3 px-4 text-slate-600 font-medium">
+                        {item.category || 'Personal Care'}
+                      </td>
+                      <td className="py-3 px-4 text-center text-slate-600 font-medium">9</td>
+                      <td className="py-3 px-4 text-center text-slate-600 font-medium">3</td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">
+                        Pattabiram First
+                      </td>
+                      <td className="py-3 px-4 text-right pr-6">
+                        <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => setViewItem(item)}
-                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                            title="View Item"
+                            className="p-1 text-slate-400 hover:text-slate-800 transition-colors"
+                            title="View"
                           >
-                            <Eye size={15} />
+                            <Eye size={14} />
                           </button>
                           <button
-                            onClick={() => {
-                              setEditingItem(item);
-                              setEditItemForm({
-                                name: item.name,
-                                price: item.price.toString(),
-                                category: item.category,
-                                unit: item.unit,
-                                manufacturingUnitName: item.manufacturingUnitName || '',
-                                packingUnitName: item.packingUnitName || '',
-                                imageUrl: item.imageUrl || '',
-                                status: item.status,
-                              });
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                            title="Edit Item"
+                            onClick={() => setEditingItem(item)}
+                            className="p-1 text-slate-400 hover:text-slate-800 transition-colors"
+                            title="Edit"
                           >
-                            <Pencil size={15} />
+                            <Pencil size={14} />
                           </button>
                           <button
                             onClick={() => setDeletingItem(item)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                            title="Delete Item"
+                            className="p-1 text-slate-400 hover:text-red-600 transition-colors"
+                            title="Delete"
                           >
-                            <Trash2 size={15} />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Footer */}
-          <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <p>Showing {filteredItems.length} of {items.length} items</p>
-            <CustomSelect options={[{ value: '10', label: '10 / page' }]} value={itemsPerPage} onChange={setItemsPerPage} size="sm" />
-          </div>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
+
 
       {/* ── 4. Tab Content 2: Categories ──────────────────────────── */}
       {activeTab === 'categories' && (

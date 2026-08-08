@@ -2,16 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useRef, useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 import {
   Menu,
   X,
   Bell,
+  Search,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
+  Eye,
   Home,
   ShoppingBag,
   Store,
@@ -27,354 +27,256 @@ import {
   Headphones,
   LogOut,
   User as UserIcon,
-  Sparkles,
 } from 'lucide-react';
-
-const navItems = [
-  { label: 'Dashboard', href: '/', icon: <Home size={20} /> },
-  { label: 'Orders', href: '/orders', icon: <ShoppingBag size={20} /> },
-  { label: 'Store', href: '/store', icon: <Store size={20} /> },
-  { label: 'Manufacturing Unit', href: '/manufacturing', icon: <Factory size={20} /> },
-  { label: 'Packing Unit', href: '/packing', icon: <Package size={20} /> },
-  { label: "Wholesaler's", href: '/wholesalers', icon: <Users size={20} /> },
-  { label: 'Customers', href: '/customers', icon: <UserCheck size={20} /> },
-  { label: 'Price List', href: '/price-list', icon: <ClipboardList size={20} /> },
-  { label: 'Items', href: '/items', icon: <Tag size={20} /> },
-  { label: 'Inventory', href: '/inventory', icon: <Boxes size={20} /> },
-  { label: 'Employees', href: '/employees', icon: <UserCheck size={20} /> },
-  { label: 'Payroll', href: '/payroll', icon: <CreditCard size={20} /> },
-  { label: 'Settings', href: '/settings', icon: <Settings size={20} /> },
-  { label: 'Manufacturing Portal', href: '/manufacturing-portal', icon: <Factory size={20} /> },
-  { label: 'Packing Portal', href: '/packing-portal', icon: <Package size={20} /> },
-  { label: 'Employee Portal', href: '/employee-portal', icon: <UserCheck size={20} /> },
-  { label: 'Support', href: '/support', icon: <Headphones size={20} /> },
-];
 
 export default function Header() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(true);
-
-  const checkScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 5);
-    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 5);
-  };
 
   useEffect(() => {
-    checkScroll();
-    const el = scrollRef.current;
-    el?.addEventListener('scroll', checkScroll);
-    window.addEventListener('resize', checkScroll);
-
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setUserMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-
-    return () => {
-      el?.removeEventListener('scroll', checkScroll);
-      window.removeEventListener('resize', checkScroll);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Close mobile drawer on route change
   useEffect(() => {
-    setIsDrawerOpen(false);
+    setIsMobileDrawerOpen(false);
   }, [pathname]);
 
-  const scroll = (dir: 'left' | 'right') => {
-    scrollRef.current?.scrollBy({ left: dir === 'left' ? -260 : 260, behavior: 'smooth' });
-  };
+  const userDisplayName = user?.email ? user.email.split('@')[0] : 'Admin User';
 
-  const userDisplayName = user?.email || user?.phoneNumber || 'Authenticated User';
-  const userRole = user?.email ? 'SuperAdmin' : 'Staff User';
+  // Grouped Navigation matching Shopify Sidebar Architecture
+  const mainNavItems = [
+    { label: 'Home', href: '/', icon: <Home size={17} /> },
+    { label: 'Orders', href: '/orders', icon: <ShoppingBag size={17} />, count: 15 },
+    { label: 'Products', href: '/items', icon: <Tag size={17} /> },
+    { label: 'Store POS', href: '/store', icon: <Store size={17} /> },
+    { label: 'Inventory', href: '/inventory', icon: <Boxes size={17} /> },
+    { label: 'Price List', href: '/price-list', icon: <ClipboardList size={17} /> },
+  ];
+
+  const managementNavItems = [
+    { label: 'Manufacturing', href: '/manufacturing', icon: <Factory size={17} /> },
+    { label: 'Packing Unit', href: '/packing', icon: <Package size={17} /> },
+    { label: 'Wholesalers', href: '/wholesalers', icon: <Users size={17} /> },
+    { label: 'Customers', href: '/customers', icon: <UserCheck size={17} /> },
+    { label: 'Employees', href: '/employees', icon: <UserCheck size={17} /> },
+    { label: 'Payroll', href: '/payroll', icon: <CreditCard size={17} /> },
+  ];
+
+  const portalNavItems = [
+    { label: 'Mfg Portal', href: '/manufacturing-portal', icon: <Factory size={17} /> },
+    { label: 'Packing Portal', href: '/packing-portal', icon: <Package size={17} /> },
+    { label: 'Employee Portal', href: '/employee-portal', icon: <UserCheck size={17} /> },
+    { label: 'Support', href: '/support', icon: <Headphones size={17} /> },
+  ];
+
+  const renderNavLink = (item: { label: string; href: string; icon: React.ReactNode; count?: number }) => {
+    const isActive = pathname === item.href;
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all ${
+          isActive
+            ? 'bg-white text-slate-900 font-semibold shadow-2xs border border-slate-200/80'
+            : 'text-[#4a4a4a] hover:bg-[#e1e1e2]/70 hover:text-slate-900'
+        }`}
+      >
+        <div className="flex items-center gap-2.5">
+          <span className={isActive ? 'text-slate-900' : 'text-slate-500'}>{item.icon}</span>
+          <span className="truncate">{item.label}</span>
+        </div>
+        {item.count !== undefined && (
+          <span
+            className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+              isActive ? 'bg-slate-100 text-slate-700' : 'bg-slate-200/80 text-slate-600'
+            }`}
+          >
+            {item.count}
+          </span>
+        )}
+      </Link>
+    );
+  };
 
   return (
     <>
-      <div className="bg-white border-b border-slate-200">
-        {/* ── Top Bar ───────────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-3 sm:px-6 h-16 border-b border-slate-100">
-          {/* Left: Hamburger + Logo */}
-          <div className="flex items-center gap-2 sm:gap-4">
+      {/* ── TOP DARK HEADER BAR (Shopify Spring '26 Header) ───────────────────── */}
+      <header className="fixed top-0 left-0 right-0 h-14 bg-[#1a1a1a] text-slate-200 z-50 flex items-center justify-between px-3 sm:px-4 border-b border-[#2c2c2e]">
+        {/* Left: Brand / Logo + Edition Tag */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
+            className="lg:hidden text-slate-300 hover:text-white p-1.5 rounded-md hover:bg-[#2c2c2e] transition-colors cursor-pointer"
+            aria-label="Toggle menu"
+          >
+            <Menu size={20} />
+          </button>
+
+          <Link href="/" className="flex items-center gap-2">
+            <div className="bg-white px-2 py-0.5 rounded flex items-center justify-center">
+              <span className="text-black font-extrabold text-xs tracking-wider uppercase">Pattabiram</span>
+            </div>
+            <span className="text-[11px] font-medium text-slate-400 bg-[#2c2c2e] px-2 py-0.5 rounded-full hidden sm:inline-block">
+              Spring &apos;26
+            </span>
+          </Link>
+        </div>
+
+        {/* Center: Search Bar with Shortcut Badge */}
+        <div className="flex-1 max-w-md mx-4 hidden md:flex items-center">
+          <div className="relative w-full flex items-center">
+            <Search size={14} className="absolute left-3 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search"
+              className="w-full bg-[#2a2a2c] hover:bg-[#323235] focus:bg-[#323235] text-slate-100 placeholder-slate-400 text-xs rounded-lg pl-9 pr-16 py-1.5 border border-[#3a3a3c] focus:outline-none focus:border-slate-400 transition-all"
+            />
+            <div className="absolute right-2 flex items-center gap-1">
+              <kbd className="bg-[#3a3a3c] text-[10px] text-slate-300 font-semibold px-1.5 py-0.5 rounded border border-[#4a4a4c]">
+                CTRL
+              </kbd>
+              <kbd className="bg-[#3a3a3c] text-[10px] text-slate-300 font-semibold px-1.5 py-0.5 rounded border border-[#4a4a4c]">
+                K
+              </kbd>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Actions (View As, Notifications, User Pill) */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button className="hidden sm:flex items-center gap-1.5 bg-[#2a2a2c] hover:bg-[#323235] text-slate-200 text-xs px-2.5 py-1 rounded-lg border border-[#3a3a3c] font-medium transition-colors cursor-pointer">
+            <Eye size={14} className="text-slate-400" />
+            <span>View as</span>
+          </button>
+
+          <button className="relative p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-[#2c2c2e] transition-colors cursor-pointer">
+            <Bell size={18} />
+            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500"></span>
+          </button>
+
+          {/* User Store Pill Dropdown */}
+          <div className="relative" ref={userMenuRef}>
             <button
-              onClick={() => setIsDrawerOpen(true)}
-              className="text-slate-600 hover:text-slate-900 transition-colors p-2 rounded-xl hover:bg-slate-100 cursor-pointer"
-              aria-label="Open Navigation Menu"
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              className="flex items-center gap-2 bg-[#2a2a2c] hover:bg-[#323235] text-white px-2.5 py-1 rounded-lg border border-[#3a3a3c] text-xs font-semibold cursor-pointer transition-colors"
             >
-              <Menu size={22} />
+              <div className="w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center uppercase">
+                {userDisplayName.charAt(0)}
+              </div>
+              <span className="truncate max-w-[120px]">{userDisplayName}</span>
+              <ChevronDown size={12} className="text-slate-400" />
             </button>
 
-            <Link href="/" className="flex items-center">
-              <Image
-                src="/logo.png"
-                alt="Pattabiram Sweets"
-                width={140}
-                height={40}
-                className="h-8 sm:h-9 w-auto object-contain"
-                priority
-              />
-            </Link>
-          </div>
-
-          {/* Right: Notifications + Profile */}
-          <div className="flex items-center gap-2 sm:gap-5">
-            <button className="relative p-2 rounded-full text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
-              <Bell size={20} />
-              <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
-                5
-              </span>
-            </button>
-
-            {/* User Profile Menu */}
-            <div className="relative" ref={userMenuRef}>
-              <button
-                onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-2 sm:gap-3 cursor-pointer group focus:outline-none"
-              >
-                <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold flex items-center justify-center shadow-xs">
-                  <UserIcon size={18} />
+            {userMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-[#2a2a2c] rounded-xl shadow-2xl border border-[#3a3a3c] py-2 z-50 text-slate-200 text-xs animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="px-3 py-2 border-b border-[#3a3a3c]">
+                  <p className="font-bold text-white truncate">{userDisplayName}</p>
+                  <p className="text-[11px] text-slate-400 truncate">{user?.email || 'admin@pattabiram.com'}</p>
                 </div>
-                <div className="hidden sm:block leading-tight text-left max-w-[160px] truncate">
-                  <p className="text-xs sm:text-sm font-semibold text-slate-800 group-hover:text-indigo-600 transition-colors truncate">
-                    {userDisplayName}
-                  </p>
-                  <p className="text-[10px] sm:text-xs text-indigo-600 font-medium">{userRole}</p>
-                </div>
-                <ChevronDown size={14} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
-              </button>
-
-              {/* Dropdown Menu */}
-              {userMenuOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200/80 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
-                    <p className="text-xs font-semibold text-slate-900 truncate">{userDisplayName}</p>
-                    <p className="text-[11px] text-indigo-600 font-medium">{userRole}</p>
-                  </div>
-                  <div className="p-1">
-                    <button
-                      onClick={() => {
-                        setUserMenuOpen(false);
-                        logout();
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-                    >
-                      <LogOut size={16} />
-                      <span>Sign Out</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Desktop & Tablet Secondary Nav Tabs Bar ───────────────── */}
-        <div className="hidden sm:flex items-center justify-between px-2 sm:px-4 h-16 sm:h-[68px] bg-white">
-          {/* Left Arrow Button */}
-          <button
-            onClick={() => scroll('left')}
-            disabled={!canScrollLeft}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-all flex-shrink-0 mr-1 sm:mr-2 ${
-              canScrollLeft
-                ? 'border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer shadow-xs'
-                : 'border-slate-100 text-slate-300 bg-slate-50/50 cursor-not-allowed opacity-40'
-            }`}
-          >
-            <ChevronLeft size={16} />
-          </button>
-
-          {/* Center Evenly Spaced Nav Tabs */}
-          <div
-            ref={scrollRef}
-            className="flex-1 flex items-center justify-between gap-1 sm:gap-3 overflow-x-auto no-scrollbar py-1 scroll-smooth"
-          >
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex flex-col items-center justify-center min-w-[76px] sm:min-w-[84px] px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl transition-all duration-150 flex-shrink-0 relative group ${
-                    isActive
-                      ? 'bg-indigo-50 text-indigo-600 font-semibold shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className={`mb-1 transition-colors ${isActive ? 'text-indigo-600' : 'text-slate-500 group-hover:text-slate-700'}`}>
-                    {item.icon}
-                  </div>
-                  <span className="text-[10px] sm:text-[11px] whitespace-nowrap leading-none tracking-tight">
-                    {item.label}
-                  </span>
-                  {isActive && (
-                    <span className="absolute bottom-1 w-4 h-[2px] rounded-full bg-indigo-600" />
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* Right Arrow Button */}
-          <button
-            onClick={() => scroll('right')}
-            disabled={!canScrollRight}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-all flex-shrink-0 ml-1 sm:ml-2 ${
-              canScrollRight
-                ? 'border-indigo-100 bg-indigo-50/50 text-indigo-600 hover:bg-indigo-100 cursor-pointer shadow-xs'
-                : 'border-slate-100 text-slate-300 bg-slate-50/50 cursor-not-allowed opacity-40'
-            }`}
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
-
-      {/* ── Mobile Side Navigation Drawer ─────────────────────────── */}
-      {isDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex sm:hidden">
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
-            onClick={() => setIsDrawerOpen(false)}
-          />
-
-          {/* Drawer content */}
-          <div className="relative w-full max-w-xs bg-white h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-left duration-200">
-            {/* Drawer Header */}
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
-              <div className="flex items-center gap-2">
-                <Image
-                  src="/logo.png"
-                  alt="Pattabiram Sweets"
-                  width={120}
-                  height={32}
-                  className="h-7 w-auto object-contain"
-                />
-              </div>
-              <button
-                onClick={() => setIsDrawerOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* User Info Bar in Drawer */}
-            <div className="p-4 bg-indigo-50/50 border-b border-indigo-100/60 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center border border-indigo-200">
-                  <UserIcon size={18} />
-                </div>
-                <div className="leading-tight max-w-[170px] truncate">
-                  <p className="text-xs font-bold text-slate-800 truncate">{userDisplayName}</p>
-                  <p className="text-[10px] text-indigo-600 font-medium">{userRole}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setIsDrawerOpen(false);
-                  logout();
-                }}
-                className="p-2 text-red-600 hover:bg-red-100/50 rounded-xl transition-colors"
-                title="Sign Out"
-              >
-                <LogOut size={16} />
-              </button>
-            </div>
-
-            {/* Nav Items List */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-1">
-              <p className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Navigation Modules</p>
-              {navItems.map((item) => {
-                const isActive = pathname === item.href;
-                return (
+                <div className="p-1">
                   <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setIsDrawerOpen(false)}
-                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${
-                      isActive
-                        ? 'bg-indigo-600 text-white font-semibold shadow-sm'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
+                    href="/settings"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-[#3a3a3c] rounded-lg transition-colors"
                   >
-                    <span className={isActive ? 'text-white' : 'text-slate-500'}>{item.icon}</span>
-                    <span>{item.label}</span>
+                    <Settings size={14} />
+                    <span>Store Settings</span>
                   </Link>
-                );
-              })}
-            </div>
+                  <button
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      logout();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-[#3a3a3c] rounded-lg transition-colors text-left cursor-pointer"
+                  >
+                    <LogOut size={14} />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
 
-            {/* Footer */}
-            <div className="p-3 border-t border-slate-100 bg-slate-50 text-[11px] text-slate-400 text-center flex items-center justify-center gap-1">
-              <Sparkles size={13} className="text-indigo-500" />
-              <span>Pattabiram Sweets Management</span>
+      {/* ── DESKTOP LEFT SIDEBAR NAVIGATION ──────────────────────────────────── */}
+      <aside className="hidden lg:flex flex-col fixed top-14 left-0 bottom-0 w-60 bg-[#ebebeb] border-r border-[#dcdcdc] z-40 overflow-y-auto p-3 text-slate-800">
+        <div className="space-y-4">
+          {/* Main Navigation */}
+          <div className="space-y-0.5">
+            {mainNavItems.map(renderNavLink)}
+          </div>
+
+          {/* Category Section: Management */}
+          <div>
+            <p className="px-3 mb-1 text-[11px] font-bold text-[#6d6d6d] uppercase tracking-wider">
+              Management
+            </p>
+            <div className="space-y-0.5">
+              {managementNavItems.map(renderNavLink)}
+            </div>
+          </div>
+
+          {/* Category Section: Operations & Portals */}
+          <div>
+            <p className="px-3 mb-1 text-[11px] font-bold text-[#6d6d6d] uppercase tracking-wider">
+              Portals & Services
+            </p>
+            <div className="space-y-0.5">
+              {portalNavItems.map(renderNavLink)}
+            </div>
+          </div>
+        </div>
+
+        {/* Pinned Bottom Section */}
+        <div className="mt-auto pt-4 border-t border-[#dcdcdc] space-y-0.5">
+          {renderNavLink({ label: 'Settings', href: '/settings', icon: <Settings size={17} /> })}
+        </div>
+      </aside>
+
+      {/* ── MOBILE DRAWER NAVIGATION ────────────────────────────────────────── */}
+      {isMobileDrawerOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsMobileDrawerOpen(false)}
+          />
+          <div className="relative w-64 bg-[#ebebeb] h-full shadow-2xl flex flex-col z-10 p-3 pt-4 overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#dcdcdc] mb-3">
+              <span className="font-bold text-slate-900 text-sm">Pattabiram Sweets</span>
+              <button
+                onClick={() => setIsMobileDrawerOpen(false)}
+                className="p-1 text-slate-500 hover:text-slate-800 rounded-md"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-0.5">{mainNavItems.map(renderNavLink)}</div>
+              <div>
+                <p className="px-3 mb-1 text-[11px] font-bold text-[#6d6d6d] uppercase tracking-wider">Management</p>
+                <div className="space-y-0.5">{managementNavItems.map(renderNavLink)}</div>
+              </div>
+              <div>
+                <p className="px-3 mb-1 text-[11px] font-bold text-[#6d6d6d] uppercase tracking-wider">Portals</p>
+                <div className="space-y-0.5">{portalNavItems.map(renderNavLink)}</div>
+              </div>
+              <div className="pt-2 border-t border-[#dcdcdc]">
+                {renderNavLink({ label: 'Settings', href: '/settings', icon: <Settings size={17} /> })}
+              </div>
             </div>
           </div>
         </div>
       )}
-
-      {/* ── Sticky Mobile Bottom App Navigation Bar ──────────────── */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-2xl px-2 py-1.5 flex justify-around items-center">
-        <Link
-          href="/"
-          className={`flex flex-col items-center py-1 px-3 rounded-xl transition-colors ${
-            pathname === '/' ? 'text-indigo-600 font-semibold' : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Home size={20} />
-          <span className="text-[10px] mt-0.5 font-medium">Home</span>
-        </Link>
-
-        <Link
-          href="/orders"
-          className={`flex flex-col items-center py-1 px-3 rounded-xl transition-colors ${
-            pathname === '/orders' ? 'text-indigo-600 font-semibold' : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <ShoppingBag size={20} />
-          <span className="text-[10px] mt-0.5 font-medium">Orders</span>
-        </Link>
-
-        <Link
-          href="/manufacturing-portal"
-          className={`flex flex-col items-center py-1 px-3 rounded-xl transition-colors ${
-            pathname === '/manufacturing-portal' ? 'text-indigo-600 font-semibold' : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Factory size={20} />
-          <span className="text-[10px] mt-0.5 font-medium">Mfg Portal</span>
-        </Link>
-
-        <Link
-          href="/packing-portal"
-          className={`flex flex-col items-center py-1 px-3 rounded-xl transition-colors ${
-            pathname === '/packing-portal' ? 'text-indigo-600 font-semibold' : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Package size={20} />
-          <span className="text-[10px] mt-0.5 font-medium">Packing</span>
-        </Link>
-
-        <button
-          onClick={() => setIsDrawerOpen(true)}
-          className="flex flex-col items-center py-1 px-3 rounded-xl text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-        >
-          <Menu size={20} />
-          <span className="text-[10px] mt-0.5 font-medium">Menu</span>
-        </button>
-      </div>
     </>
   );
 }

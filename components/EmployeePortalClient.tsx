@@ -684,28 +684,17 @@ export default function EmployeePortalClient() {
   }
 
   return (
-    <div className="w-full flex flex-col gap-6 font-sans pb-12">
+    <div className="w-full flex flex-col gap-4 text-slate-800 font-sans pb-12">
       {/* Top Header & Employee Selector */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-              <UserCheck size={20} />
-            </div>
-            Employee Self-Service Portal
-          </h1>
-          <nav className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
-            <Link href="/" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
-            <ChevronRight size={12} />
-            <Link href="/employees" className="hover:text-indigo-600 transition-colors">Employees</Link>
-            <ChevronRight size={12} />
-            <span className="text-slate-800 font-semibold">{selectedEmp.name}</span>
-          </nav>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <UserCheck size={22} className="text-slate-800 stroke-[1.75]" />
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Employee Portal</h1>
         </div>
 
         {/* Employee Switcher */}
-        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
-          <span className="text-xs font-bold text-slate-600 pl-2">Select Employee View:</span>
+        <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-lg border border-slate-300 shadow-2xs">
+          <span className="text-xs font-semibold text-slate-700">Employee View:</span>
           <CustomSelect
             options={employees.map((emp) => ({ value: emp.id, label: `${emp.name} (${emp.empId})` }))}
             value={selectedEmp.id}

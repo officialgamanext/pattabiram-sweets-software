@@ -247,37 +247,35 @@ export default function StoreClient() {
   ];
 
   return (
-    <div className="w-full flex flex-col gap-6">
+    <div className="w-full flex flex-col gap-4 text-slate-800">
 
-      {/* ── 1. Page Title & Action Bar ─────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Store</h1>
-          <nav className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
-            <Link href="/" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
-            <span>&gt;</span>
-            <span className="text-slate-800 font-medium">Store</span>
-          </nav>
+      {/* ── 1. SHOPIFY POLARIS PAGE TITLE & ACTION BAR ────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <StoreIcon size={22} className="text-slate-800 stroke-[1.75]" />
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Store POS</h1>
         </div>
 
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white text-sm font-semibold shadow-sm transition-all hover:shadow cursor-pointer w-full sm:w-auto"
-        >
-          <Plus size={16} />
-          <span>Add Store</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => alert('Exporting stores...')}
+            className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+          >
+            Export
+          </button>
+
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="bg-[#303030] hover:bg-[#111111] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <Plus size={14} />
+            <span>Add Store</span>
+          </button>
+        </div>
       </div>
 
-      {/* ── 2. View Tab ───────────────────────────────────────────── */}
-      <div className="flex items-center gap-3">
-        <button className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold shadow-xs">
-          Stores List
-        </button>
-      </div>
-
-      {/* ── 3. Main Data Card Container ─────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+      {/* ── 2. DATA CARD CONTAINER & FILTER TOOLBAR ───────────────────────── */}
+      <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
 
         {/* Top Controls: Search, Filter, Export */}
         <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">

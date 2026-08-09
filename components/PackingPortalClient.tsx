@@ -55,6 +55,27 @@ export interface AggregatedPackingSummary {
   }[];
 }
 
+function isOrderEligibleForPacking(order: OrderRecord): boolean {
+  // 1. Exclude POS bills completely
+  const orderType = ((order as any).orderType || (order as any).source || '').toString().toLowerCase();
+  if (orderType.includes('pos') || orderType.includes('walk-in')) {
+    return false;
+  }
+
+  // 2. Ignore Delivered or Cancelled orders
+  const status = (order.orderStatus || (order as any).status || '').toString();
+  if (status === 'Delivered' || status === 'Cancelled') {
+    return false;
+  }
+
+  // 3. Normal orders & Wholesaler orders MUST BE APPROVED before entering packing!
+  if (status === 'Pending' || status === 'Order Created') {
+    return false;
+  }
+
+  return true;
+}
+
 export default function PackingPortalClient() {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [pckUnits, setPckUnits] = useState<DynamicUnit[]>([]);
@@ -141,8 +162,7 @@ export default function PackingPortalClient() {
     const map = new Map<string, AggregatedPackingSummary>();
 
     orders.forEach((order) => {
-      const st = order.orderStatus as string;
-      if (st === 'Delivered' || st === 'Cancelled') return;
+      if (!isOrderEligibleForPacking(order)) return;
 
       (order.items || []).forEach((item) => {
         const itemMfgStatus = item.mfgStatus || (
@@ -228,11 +248,9 @@ export default function PackingPortalClient() {
     return Array.from(map.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
   }, [orders, itemInfoMap, selectedUnit, searchTerm]);
 
-  // Order-wise active packing list
   const filteredOrderWiseList = useMemo(() => {
     return orders.filter((order) => {
-      const st = order.orderStatus as string;
-      if (st === 'Delivered' || st === 'Cancelled') return false;
+      if (!isOrderEligibleForPacking(order)) return false;
 
       // Order must have at least 1 item pending packing
       const hasPendingPackingItem = order.items?.some((item) => {

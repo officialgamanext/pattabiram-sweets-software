@@ -59,6 +59,27 @@ export interface AggregatedItemSummary {
   }[];
 }
 
+function isOrderEligibleForManufacturing(order: OrderRecord): boolean {
+  // 1. Exclude POS bills completely
+  const orderType = ((order as any).orderType || (order as any).source || '').toString().toLowerCase();
+  if (orderType.includes('pos') || orderType.includes('walk-in')) {
+    return false;
+  }
+
+  // 2. Ignore Delivered or Cancelled orders
+  const status = (order.orderStatus || (order as any).status || '').toString();
+  if (status === 'Delivered' || status === 'Cancelled') {
+    return false;
+  }
+
+  // 3. Normal orders & Wholesaler orders MUST BE APPROVED before entering manufacturing!
+  if (status === 'Pending' || status === 'Order Created') {
+    return false;
+  }
+
+  return true;
+}
+
 export default function ManufacturingPortalClient() {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [mfgUnits, setMfgUnits] = useState<DynamicUnit[]>([]);
@@ -75,6 +96,7 @@ export default function ManufacturingPortalClient() {
   const availableMfgDates = useMemo(() => {
     const dateSet = new Set<string>();
     orders.forEach((o) => {
+      if (!isOrderEligibleForManufacturing(o)) return;
       const d = o.manufacturingDate || o.orderDate;
       if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
         dateSet.add(d);
@@ -83,10 +105,11 @@ export default function ManufacturingPortalClient() {
     return Array.from(dateSet).sort().reverse();
   }, [orders]);
 
-  // Filter orders by selected manufacturing date
+  // Filter orders by selected manufacturing date & manufacturing eligibility
   const filteredOrders = useMemo(() => {
-    if (!selectedMfgDate || selectedMfgDate === 'all') return orders;
     return orders.filter((o) => {
+      if (!isOrderEligibleForManufacturing(o)) return false;
+      if (!selectedMfgDate || selectedMfgDate === 'all') return true;
       const d = o.manufacturingDate || o.orderDate;
       return d === selectedMfgDate;
     });

@@ -183,7 +183,7 @@ export default function ManufacturingPortalClient() {
         // If item has already moved to packing, omit it from manufacturing queue!
         if (itemMfgStatus === 'Moved to Packing') return;
 
-        const rawName = item.itemName || 'Unknown Item';
+        const rawName = item.itemName || (item as any).name || 'Unknown Item';
         const key = rawName.toLowerCase().trim();
         const masterInfo = itemInfoMap.get(key);
 
@@ -200,8 +200,8 @@ export default function ManufacturingPortalClient() {
         if (
           searchTerm &&
           !rawName.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !category.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !order.code.toLowerCase().includes(searchTerm.toLowerCase())
+          !(category || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !(order.code || '').toLowerCase().includes(searchTerm.toLowerCase())
         ) {
           return;
         }
@@ -271,19 +271,19 @@ export default function ManufacturingPortalClient() {
 
       if (selectedUnit !== 'all') {
         const hasMatchingItem = order.items?.some((i) => {
-          const key = (i.itemName || '').toLowerCase().trim();
+          const key = (i.itemName || (i as any).name || '').toLowerCase().trim();
           const masterInfo = itemInfoMap.get(key);
           const unit = (i as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
-          return unit.toLowerCase() === selectedUnit.toLowerCase();
+          return (unit || '').toLowerCase() === selectedUnit.toLowerCase();
         });
         if (!hasMatchingItem) return false;
       }
 
       if (searchTerm) {
         return (
-          order.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.items?.some((i) => i.itemName.toLowerCase().includes(searchTerm.toLowerCase()))
+          (order.code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          order.items?.some((i) => (i.itemName || (i as any).name || '').toLowerCase().includes(searchTerm.toLowerCase()))
         );
       }
 
@@ -305,7 +305,9 @@ export default function ManufacturingPortalClient() {
         if (!fullOrder || !fullOrder.items) return;
 
         const updatedItems: OrderItemLine[] = fullOrder.items.map((it) => {
-          if (it.itemName.toLowerCase().trim() === itemSummary.itemName.toLowerCase().trim()) {
+          const name = (it.itemName || (it as any).name || '').toLowerCase().trim();
+          const targetName = (itemSummary.itemName || '').toLowerCase().trim();
+          if (name && targetName && name === targetName) {
             return {
               ...it,
               mfgStatus: targetMfgStatus,
@@ -355,7 +357,9 @@ export default function ManufacturingPortalClient() {
       if (!fullOrder || !fullOrder.items) return;
 
       const updatedItems: OrderItemLine[] = fullOrder.items.map((it) => {
-        if (it.itemName.toLowerCase().trim() === itemNameToUpdate.toLowerCase().trim()) {
+        const name = (it.itemName || (it as any).name || '').toLowerCase().trim();
+        const targetName = (itemNameToUpdate || '').toLowerCase().trim();
+        if (name && targetName && name === targetName) {
           return {
             ...it,
             mfgStatus: targetMfgStatus,

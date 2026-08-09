@@ -255,19 +255,19 @@ export default function PackingPortalClient() {
 
       if (selectedUnit !== 'all') {
         const hasMatchingItem = order.items?.some((i) => {
-          const key = (i.itemName || '').toLowerCase().trim();
+          const key = (i.itemName || (i as any).name || '').toLowerCase().trim();
           const masterInfo = itemInfoMap.get(key);
           const unit = (i as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
-          return unit.toLowerCase() === selectedUnit.toLowerCase();
+          return (unit || '').toLowerCase() === selectedUnit.toLowerCase();
         });
         if (!hasMatchingItem) return false;
       }
 
       if (searchTerm) {
         return (
-          order.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.items?.some((i) => i.itemName.toLowerCase().includes(searchTerm.toLowerCase()))
+          (order.code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          order.items?.some((i) => (i.itemName || (i as any).name || '').toLowerCase().includes(searchTerm.toLowerCase()))
         );
       }
 
@@ -288,7 +288,9 @@ export default function PackingPortalClient() {
         if (!fullOrder || !fullOrder.items) return;
 
         const updatedItems: OrderItemLine[] = fullOrder.items.map((it) => {
-          if (it.itemName.toLowerCase().trim() === itemSummary.itemName.toLowerCase().trim()) {
+          const name = (it.itemName || (it as any).name || '').toLowerCase().trim();
+          const targetName = (itemSummary.itemName || '').toLowerCase().trim();
+          if (name && targetName && name === targetName) {
             return {
               ...it,
               pckStatus: targetPckStatus
@@ -337,7 +339,9 @@ export default function PackingPortalClient() {
       if (!fullOrder || !fullOrder.items) return;
 
       const updatedItems: OrderItemLine[] = fullOrder.items.map((it) => {
-        if (it.itemName.toLowerCase().trim() === itemNameToUpdate.toLowerCase().trim()) {
+        const name = (it.itemName || (it as any).name || '').toLowerCase().trim();
+        const targetName = (itemNameToUpdate || '').toLowerCase().trim();
+        if (name && targetName && name === targetName) {
           return {
             ...it,
             pckStatus: targetPckStatus

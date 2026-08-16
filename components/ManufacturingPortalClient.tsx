@@ -18,6 +18,7 @@ import {
   ChefHat,
   Building2,
   Calendar,
+  X,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, updateDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
@@ -103,7 +104,14 @@ export default function ManufacturingPortalClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUnit, setSelectedUnit] = useState('all');
-  const [selectedMfgDate, setSelectedMfgDate] = useState<string>('all');
+  const [selectedMfgDate, setSelectedMfgDate] = useState<string>(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  });
+  const [isAlertDismissed, setIsAlertDismissed] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'item_wise' | 'order_wise'>('item_wise');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
@@ -201,37 +209,41 @@ export default function ManufacturingPortalClient() {
     return opts;
   }, [mfgUnits]);
 
-  // Calculate Today and Tomorrow Date Strings (YYYY-MM-DD)
-  const todayDateStr = useMemo(() => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }, []);
-
-  const tomorrowDateStr = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }, []);
-
-  // Compute items that require 1-day advance intimation for tomorrow's manufacturing date (1 day prior only)
-  const tomorrowIntimationAlerts = useMemo(() => {
-    // Only show advance alert when viewing "All Dates" or "Today".
-    // If the user has selected the same date (e.g. tomorrow) in the Mfg Date picker, do not display duplicate advance banner.
-    if (selectedMfgDate && selectedMfgDate !== 'all' && selectedMfgDate !== todayDateStr) {
-      return [];
+  // The date currently being viewed in the Manufacturing Portal
+  const activeViewingDateStr = useMemo(() => {
+    if (selectedMfgDate && selectedMfgDate !== 'all' && /^\d{4}-\d{2}-\d{2}$/.test(selectedMfgDate)) {
+      return selectedMfgDate;
     }
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, [selectedMfgDate]);
 
-    // Find all active orders scheduled for manufacturing tomorrow (1 day prior)
-    const tomorrowOrders = orders.filter((o) => {
+  // Target Next Day relative to the active viewing date (1 day in advance)
+  const nextDayDateStr = useMemo(() => {
+    const [y, m, d] = activeViewingDateStr.split('-').map(Number);
+    const nextD = new Date(y, m - 1, d);
+    nextD.setDate(nextD.getDate() + 1);
+    const ny = nextD.getFullYear();
+    const nm = String(nextD.getMonth() + 1).padStart(2, '0');
+    const nd = String(nextD.getDate()).padStart(2, '0');
+    return `${ny}-${nm}-${nd}`;
+  }, [activeViewingDateStr]);
+
+  // Reset dismissed state when viewed date changes
+  useEffect(() => {
+    setIsAlertDismissed(false);
+  }, [activeViewingDateStr]);
+
+  // Compute items that require 1-day advance intimation for the next day relative to current view
+  const tomorrowIntimationAlerts = useMemo(() => {
+    // Find all active orders scheduled specifically for NEXT DAY's manufacturing date
+    const nextDayOrders = orders.filter((o) => {
       if (!isOrderEligibleForManufacturing(o)) return false;
       const d = getOrderEffectiveMfgDate(o);
-      return d === tomorrowDateStr;
+      return d === nextDayDateStr;
     });
 
     const map = new Map<string, {
@@ -245,7 +257,7 @@ export default function ManufacturingPortalClient() {
       orderCodes: string[];
     }>();
 
-    tomorrowOrders.forEach((order) => {
+    nextDayOrders.forEach((order) => {
       (order.items || []).forEach((item) => {
         const name = (item.itemName || (item as any).name || '').trim();
         if (!name) return;
@@ -292,7 +304,7 @@ export default function ManufacturingPortalClient() {
     });
 
     return Array.from(map.values());
-  }, [orders, itemInfoMap, tomorrowDateStr, selectedUnit]);
+  }, [orders, itemInfoMap, nextDayDateStr, selectedUnit]);
 
   // Aggregate items across active orders that are still pending cooking in Manufacturing (mfgStatus !== 'Moved to Packing')
   const aggregatedItems = useMemo(() => {
@@ -602,7 +614,7 @@ export default function ManufacturingPortalClient() {
       </div>
 
       {/* Advance Preparation Alert Banner for Tomorrow's Manufacturing */}
-      {tomorrowIntimationAlerts.length > 0 && (
+      {tomorrowIntimationAlerts.length > 0 && !isAlertDismissed && (
         <div className="bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 border-2 border-amber-400/90 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 relative overflow-hidden animate-in fade-in slide-in-from-top-3 duration-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start sm:items-center gap-3">
@@ -612,7 +624,7 @@ export default function ManufacturingPortalClient() {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-sm sm:text-base font-black text-amber-950 tracking-tight">
-                    ⚡ Advance Preparation Alert — Tomorrow&apos;s Production ({new Date(tomorrowDateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })})
+                    ⚡ Advance Preparation Alert — Tomorrow&apos;s Production ({new Date(nextDayDateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })})
                   </h3>
                   <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs uppercase tracking-wider">
                     {tomorrowIntimationAlerts.length} {tomorrowIntimationAlerts.length === 1 ? 'Item' : 'Items'}
@@ -623,6 +635,14 @@ export default function ManufacturingPortalClient() {
                 </p>
               </div>
             </div>
+
+            <button
+              onClick={() => setIsAlertDismissed(true)}
+              className="self-end sm:self-center p-1.5 rounded-lg text-amber-700 hover:text-amber-950 hover:bg-amber-100 transition-colors cursor-pointer"
+              title="Dismiss Alert"
+            >
+              <X size={18} />
+            </button>
           </div>
 
           {/* Cards Grid of Items to prepare */}

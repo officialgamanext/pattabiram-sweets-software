@@ -191,8 +191,8 @@ const ALL_ORDER_STATUSES: OrderStatus[] = [
   'Pending',
 ];
 
-export function getOrderStatusBadgeStyle(status: string) {
-  switch (status) {
+export function getOrderStatusBadgeStyle(status?: string) {
+  switch (status || '') {
     case 'Order Created':
       return { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' };
     case 'Moved to Manufacturing':
@@ -953,10 +953,22 @@ export default function OrdersClient() {
   // Calculate Order Statistics for Summary Bar from filtered orders
   const totalOrdersCount = filteredOrders.length;
   const totalAmountSum = filteredOrders.reduce((acc, o) => acc + (o.totalAmount || 0), 0);
-  const confirmedCount = filteredOrders.filter((o) => o.orderStatus === 'Confirmed' || o.orderStatus === 'Order Created').length;
-  const pendingCount = filteredOrders.filter((o) => o.orderStatus === 'Pending' || o.paymentStatus === 'Pending').length;
-  const processingCount = filteredOrders.filter((o) => o.orderStatus === 'Processing' || o.orderStatus.includes('Started')).length;
-  const deliveredCount = filteredOrders.filter((o) => o.orderStatus === 'Delivered').length;
+  const confirmedCount = filteredOrders.filter((o) => {
+    const s = o.orderStatus || (o as any).status || '';
+    return s === 'Confirmed' || s === 'Order Created';
+  }).length;
+  const pendingCount = filteredOrders.filter((o) => {
+    const s = o.orderStatus || (o as any).status || '';
+    return s === 'Pending' || o.paymentStatus === 'Pending';
+  }).length;
+  const processingCount = filteredOrders.filter((o) => {
+    const s = (o.orderStatus || (o as any).status || '').toString();
+    return s === 'Processing' || s.includes('Started');
+  }).length;
+  const deliveredCount = filteredOrders.filter((o) => {
+    const s = o.orderStatus || (o as any).status || '';
+    return s === 'Delivered';
+  }).length;
 
   const orderStatusOptions: CustomSelectOption[] = [
     { value: 'All', label: 'All Order Statuses' },

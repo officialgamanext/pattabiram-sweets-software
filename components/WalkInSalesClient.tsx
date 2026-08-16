@@ -173,28 +173,40 @@ export default function WalkInSalesClient() {
 
   const { isConnected: isPrinterConnected, printerType, printReceipt, printWindow } = usePrinter();
 
-  const triggerPrintReceipt = async () => {
-    if (activeOrderModal && isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
+  const printSaleReceipt = async (targetSale: WalkInOrder) => {
+    if (!targetSale) return;
+    if (isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
       await printReceipt({
         storeName: 'PATTABIRAM SWEETS',
         storeAddress: '12, Main Road, Pattabiram, Chennai - 600072',
-        billNo: activeOrderModal.orderId,
-        customerName: activeOrderModal.customerName,
-        customerPhone: activeOrderModal.customerMobile,
-        paymentMode: activeOrderModal.paymentMode,
-        orderType: 'Walk-in POS',
-        items: (activeOrderModal.items || []).map((it: any) => ({
-          name: it.name,
+        storePhone: '+91 98765 43210',
+        billNo: targetSale.orderId || targetSale.id,
+        customerName: targetSale.customerName || 'Walk-in Customer',
+        customerPhone: targetSale.customerMobile || '-',
+        paymentMode: targetSale.paymentMode,
+        orderType: targetSale.orderType || 'Walk-in POS',
+        items: (targetSale.items || []).map((it: any) => ({
+          name: it.name || it.itemName || 'Item',
           qty: it.quantity || 1,
-          unit: it.unit || 'unit',
+          unit: it.unit || 'kg',
           price: it.price || 0,
           total: it.amount || (it.quantity || 1) * (it.price || 0),
         })),
-        subtotal: activeOrderModal.subtotal || activeOrderModal.totalAmount,
-        tax: activeOrderModal.tax || 0,
-        grandTotal: activeOrderModal.totalAmount,
+        subtotal: targetSale.subtotal || targetSale.totalAmount,
+        tax: targetSale.tax || 0,
+        discount: targetSale.discount || 0,
+        grandTotal: targetSale.totalAmount,
         footerNote: 'Thank you for visiting Pattabiram Sweets! Have a sweet day!',
       });
+    } else {
+      setActiveOrderModal(targetSale);
+      setTimeout(printWindow, 150);
+    }
+  };
+
+  const triggerPrintReceipt = async () => {
+    if (activeOrderModal) {
+      await printSaleReceipt(activeOrderModal);
     } else {
       printWindow();
     }
@@ -387,10 +399,7 @@ export default function WalkInSalesClient() {
                           <Eye size={13} /> View
                         </button>
                         <button
-                          onClick={() => {
-                            setActiveOrderModal(sale);
-                            setTimeout(triggerPrintReceipt, 200);
-                          }}
+                          onClick={() => printSaleReceipt(sale)}
                           className="h-7 px-2.5 text-xs font-semibold rounded bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 shadow-2xs transition-colors cursor-pointer flex items-center gap-1"
                         >
                           <Printer size={13} /> Print

@@ -607,6 +607,32 @@ export default function PosClient() {
     setLastSettledBill(settledBill);
     setShowReceiptModal(true);
 
+    // Auto-trigger ESC/POS print if thermal printer is connected
+    if (isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
+      printReceipt({
+        storeName: 'PATTABIRAM SWEETS',
+        storeAddress: '12, Main Road, Pattabiram, Chennai - 600072',
+        storePhone: '+91 98765 43210',
+        billNo: settledBill.billNo,
+        customerName: settledBill.customerName,
+        customerPhone: settledBill.customerPhone,
+        paymentMode: settledBill.paymentMode,
+        orderType: 'Walk-in POS',
+        items: settledBill.items.map((it) => ({
+          name: it.name,
+          qty: it.quantity,
+          unit: it.unit,
+          price: it.price,
+          total: it.totalAmount,
+        })),
+        subtotal: settledBill.subtotal,
+        tax: settledBill.tax,
+        discount: settledBill.discount,
+        grandTotal: settledBill.total,
+        footerNote: 'Thank you for visiting Pattabiram Sweets! Have a sweet day!',
+      }).catch((err) => console.error('Auto thermal print error:', err));
+    }
+
     // Reset Cart & States
     setCart([]);
     setSelectedCustomer(null);

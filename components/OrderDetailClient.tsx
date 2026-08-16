@@ -34,6 +34,7 @@ import {
   Smartphone,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
+import { usePrinter } from '@/context/PrinterContext';
 import {
   doc,
   onSnapshot,
@@ -253,6 +254,48 @@ export default function OrderDetailClient({ orderId }: Props) {
     return () => unsub();
   }, [orderId]);
 
+  const { isConnected: isPrinterConnected, printerType, printReceipt, printWindow } = usePrinter();
+
+  const handleThermalPrint = async () => {
+    if (!order) return;
+    const orderItems = (order.items || []).map((it: any) => ({
+      name: it.itemName || it.name || 'Item',
+      qty: it.quantity || 1,
+      unit: it.unit || 'kg',
+      price: it.price || 0,
+      total: it.amount || it.total || (it.quantity || 1) * (it.price || 0),
+    }));
+
+    if (isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
+      await printReceipt({
+        storeName: 'PATTABIRAM SWEETS',
+        storeAddress: '12, Main Road, Pattabiram, Chennai - 600072',
+        storePhone: '+91 98765 43210',
+        billNo: order.code || (order as any).orderId || order.id,
+        customerName: order.customerName,
+        customerPhone: order.customerMobile,
+        dateStr: order.orderDate,
+        timeStr: order.orderTime,
+        slot: order.slot,
+        deliveryDate: order.expectedDeliveryDate || order.manufacturingDate,
+        orderType: order.isCustomisation ? 'Custom Box Order' : 'Standard Order',
+        paymentMode: order.paymentMode,
+        paymentStatus: order.paymentStatus,
+        items: orderItems,
+        subtotal: order.subTotal || order.totalAmount,
+        discount: order.discountAmount || 0,
+        tax: 0,
+        packingCharges: order.packingCharges || 0,
+        boxCharges: order.boxChargesTotal || 0,
+        additionalCharges: (order.additionalCharges || 0) + (order.packetChargesTotal || 0) + (order.stickerChargesTotal || 0) + (order.shrinkChargesTotal || 0),
+        grandTotal: order.totalAmount,
+        footerNote: 'Order verified & recorded. Thank you!',
+      });
+    } else {
+      window.print();
+    }
+  };
+
   // ── Order Status Update ──────────────────────────────────────────
   const handleStatusUpdate = async () => {
     if (!order) return;
@@ -457,7 +500,7 @@ export default function OrderDetailClient({ orderId }: Props) {
             Manage Payment
           </button>
           <button
-            onClick={() => window.print()}
+            onClick={handleThermalPrint}
             className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-white border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
           >
             <Printer size={14} /> Print

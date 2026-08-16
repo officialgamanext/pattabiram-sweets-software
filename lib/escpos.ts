@@ -24,10 +24,16 @@ export interface ReceiptData {
   customerPhone?: string;
   orderType?: string;
   paymentMode?: string;
+  paymentStatus?: string;
+  slot?: string;
+  deliveryDate?: string;
   items: ReceiptItem[];
   subtotal: number;
   tax?: number;
   discount?: number;
+  packingCharges?: number;
+  additionalCharges?: number;
+  boxCharges?: number;
   grandTotal: number;
   footerNote?: string;
   cashierName?: string;
@@ -300,8 +306,15 @@ export function generateReceiptEscPos(
   if (data.customerName || data.customerPhone) {
     builder.textLine(`Customer: ${data.customerName || 'Walk-in'} (${data.customerPhone || 'N/A'})`);
   }
-  if (data.paymentMode) {
-    builder.textLine(`Payment: ${data.paymentMode} | Order: ${data.orderType || 'POS Counter'}`);
+  if (data.slot || data.deliveryDate) {
+    const slotStr = data.slot ? `Slot: ${data.slot}` : '';
+    const delivStr = data.deliveryDate ? `Delivery: ${data.deliveryDate}` : '';
+    builder.textLine([slotStr, delivStr].filter(Boolean).join(' | '));
+  }
+  if (data.paymentMode || data.paymentStatus) {
+    const payStr = data.paymentMode ? `Payment: ${data.paymentMode}` : '';
+    const statusStr = data.paymentStatus ? `Status: ${data.paymentStatus}` : '';
+    builder.textLine([payStr, statusStr, `Type: ${data.orderType || 'POS'}`].filter(Boolean).join(' | '));
   }
 
   builder
@@ -328,6 +341,18 @@ export function generateReceiptEscPos(
 
   if (data.tax && data.tax > 0) {
     builder.row2('Tax / GST:', `Rs.${data.tax.toFixed(2)}`);
+  }
+
+  if (data.packingCharges && data.packingCharges > 0) {
+    builder.row2('Packing Charges:', `Rs.${data.packingCharges.toFixed(2)}`);
+  }
+
+  if (data.boxCharges && data.boxCharges > 0) {
+    builder.row2('Box Charges:', `Rs.${data.boxCharges.toFixed(2)}`);
+  }
+
+  if (data.additionalCharges && data.additionalCharges > 0) {
+    builder.row2('Other Charges:', `Rs.${data.additionalCharges.toFixed(2)}`);
   }
 
   builder

@@ -31,11 +31,13 @@ import {
   Check,
   Building2,
   UserPlus,
+  Printer,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
 import CustomDatePicker from '@/components/CustomDatePicker';
 import Pagination from '@/components/Pagination';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
+import { usePrinter } from '@/context/PrinterContext';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -251,6 +253,48 @@ export default function OrdersClient() {
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
   const [itemsPerPage, setItemsPerPage] = useState('10');
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
+
+  const { isConnected: isPrinterConnected, printerType, printReceipt } = usePrinter();
+
+  const handlePrintOrderSlip = async (order: OrderRecord) => {
+    if (!order) return;
+    const orderItems = (order.items || []).map((it: any) => ({
+      name: it.itemName || it.name || 'Item',
+      qty: it.quantity || 1,
+      unit: it.unit || 'kg',
+      price: it.price || 0,
+      total: it.amount || it.total || (it.quantity || 1) * (it.price || 0),
+    }));
+
+    if (isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
+      await printReceipt({
+        storeName: 'PATTABIRAM SWEETS',
+        storeAddress: '12, Main Road, Pattabiram, Chennai - 600072',
+        storePhone: '+91 98765 43210',
+        billNo: order.code || (order as any).orderId || order.id,
+        customerName: order.customerName,
+        customerPhone: order.customerMobile,
+        dateStr: order.orderDate,
+        timeStr: order.orderTime,
+        slot: order.slot,
+        deliveryDate: order.expectedDeliveryDate || order.manufacturingDate,
+        orderType: order.isCustomisation ? 'Custom Box Order' : 'Standard Order',
+        paymentMode: order.paymentMode,
+        paymentStatus: order.paymentStatus,
+        items: orderItems,
+        subtotal: order.subTotal || order.totalAmount,
+        discount: order.discountAmount || 0,
+        tax: 0,
+        packingCharges: order.packingCharges || 0,
+        boxCharges: order.boxChargesTotal || 0,
+        additionalCharges: (order.additionalCharges || 0) + (order.packetChargesTotal || 0) + (order.stickerChargesTotal || 0) + (order.shrinkChargesTotal || 0),
+        grandTotal: order.totalAmount,
+        footerNote: 'Order verified & recorded. Thank you!',
+      });
+    } else {
+      alert(`Thermal Printer not connected. Please connect USB/Bluetooth printer in the top Header to print ${order.code || 'Order'}.`);
+    }
+  };
 
   const getOrderDateStr = (order: OrderRecord): string => {
     if (order.orderDate && /^\d{4}-\d{2}-\d{2}$/.test(order.orderDate)) {
@@ -1302,18 +1346,26 @@ export default function OrdersClient() {
                           <div className="flex items-center gap-1.5">
                             <button
                               onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-600 transition-colors cursor-pointer border border-indigo-100 shadow-2xs"
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-600 transition-colors cursor-pointer border border-indigo-100 shadow-2xs"
                               title="View Order Details"
                             >
-                              <Eye size={13} />
+                              <Eye size={12} />
                               <span>View</span>
                             </button>
                             <button
+                              onClick={(e) => { e.stopPropagation(); handlePrintOrderSlip(order); }}
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-teal-50 hover:bg-teal-100 text-teal-700 transition-colors cursor-pointer border border-teal-200 shadow-2xs"
+                              title="Print Thermal Receipt Slip"
+                            >
+                              <Printer size={12} />
+                              <span>Print</span>
+                            </button>
+                            <button
                               onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer border border-slate-200/80 shadow-2xs"
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer border border-slate-200/80 shadow-2xs"
                               title="Edit Order"
                             >
-                              <Pencil size={13} />
+                              <Pencil size={12} />
                               <span>Edit</span>
                             </button>
                           </div>
@@ -1410,6 +1462,14 @@ export default function OrdersClient() {
                           >
                             <Eye size={13} />
                             <span>View</span>
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handlePrintOrderSlip(order); }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-700 transition-colors cursor-pointer border border-teal-200 shadow-2xs"
+                            title="Print Thermal Receipt Slip"
+                          >
+                            <Printer size={13} />
+                            <span>Print</span>
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}

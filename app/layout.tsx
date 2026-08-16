@@ -5,6 +5,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { PrinterProvider } from "@/context/PrinterContext";
 import { ToastProvider } from "@/context/ToastContext";
 import AuthGuard from "@/components/AuthGuard";
+import GlobalInputBehavior from "@/components/GlobalInputBehavior";
 
 const sora = Sora({
   subsets: ["latin"],
@@ -32,6 +33,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={sora.variable}>
       <body className="min-h-screen bg-[#f6f6f7] font-sans antialiased text-[#1a1a1a]">
+        <GlobalInputBehavior />
         <ToastProvider>
           <AuthProvider>
             <PrinterProvider>

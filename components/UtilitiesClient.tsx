@@ -172,7 +172,7 @@ export default function UtilitiesClient() {
   const openAddModal = () => {
     setEditingItem(null);
     setFormName('');
-    setFormPrice('0');
+    setFormPrice('');
     setFormStatus('Active');
     setFormDescription('');
     setFormError('');

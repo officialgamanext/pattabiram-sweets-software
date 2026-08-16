@@ -433,13 +433,13 @@ export default function OrdersClient() {
   const [boxImageUrl, setBoxImageUrl] = useState<string>('');
   const [shrinkType, setShrinkType] = useState<string>('None');
   const [stickerType, setStickerType] = useState<string>('None');
-  const [packingCharges, setPackingCharges] = useState<string>('0');
-  const [additionalCharges, setAdditionalCharges] = useState<string>('0');
-  const [discountAmount, setDiscountAmount] = useState<string>('0');
+  const [packingCharges, setPackingCharges] = useState<string>('');
+  const [additionalCharges, setAdditionalCharges] = useState<string>('');
+  const [discountAmount, setDiscountAmount] = useState<string>('');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [orderItems, setOrderItems] = useState<OrderItemLine[]>([]);
-  const [receivedAmount, setReceivedAmount] = useState<string>('0');
+  const [receivedAmount, setReceivedAmount] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'Card' | 'UPI'>('UPI');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Pending');
   const [orderStatus, setOrderStatus] = useState<OrderStatus>('Order Created');
@@ -678,13 +678,13 @@ export default function OrdersClient() {
     setBoxImageUrl('');
     setShrinkType('None');
     setStickerType('None');
-    setPackingCharges('0');
-    setAdditionalCharges('0');
-    setDiscountAmount('0');
+    setPackingCharges('');
+    setAdditionalCharges('');
+    setDiscountAmount('');
     setSelectedCustomer(null);
     setCustomerSearchTerm('');
     setOrderItems([]);
-    setReceivedAmount('0');
+    setReceivedAmount('');
     setPaymentMode('UPI');
     setPaymentStatus('Pending');
     setOrderStatus('Order Created');
@@ -711,9 +711,10 @@ export default function OrdersClient() {
       setShrinkType('None');
       setStickerType('None');
     }
-    setPackingCharges(String(order.packingCharges || 0));
-    setAdditionalCharges(String(order.additionalCharges || 0));
-    setDiscountAmount(String(order.discountAmount || 0));
+    setPackingCharges(order.packingCharges ? String(order.packingCharges) : '');
+    setAdditionalCharges(order.additionalCharges ? String(order.additionalCharges) : '');
+    setDiscountAmount(order.discountAmount ? String(order.discountAmount) : '');
+    setReceivedAmount(order.receivedAmount ? String(order.receivedAmount) : '');
     setSelectedCustomer({
       id: order.customerId || '',
       code: 'CUST-000',

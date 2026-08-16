@@ -636,45 +636,31 @@ export default function ManufacturingPortalClient() {
               </div>
             </div>
 
-            <button
+            {/* <button
               onClick={() => setIsAlertDismissed(true)}
               className="self-end sm:self-center p-1.5 rounded-lg text-amber-700 hover:text-amber-950 hover:bg-amber-100 transition-colors cursor-pointer"
               title="Dismiss Alert"
             >
               <X size={18} />
-            </button>
+            </button> */}
           </div>
 
-          {/* Cards Grid of Items to prepare */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-1">
+          {/* Cards Grid: Mobile 2 in a row, Tablet 3 in a row, Desktop 4 in a row */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3 pt-1">
             {tomorrowIntimationAlerts.map((alertItem) => (
               <div
                 key={alertItem.itemName}
-                className="bg-white/95 rounded-xl p-3.5 border border-amber-300 shadow-2xs flex flex-col justify-between hover:border-amber-500 transition-all hover:shadow-xs"
+                className="bg-white/95 rounded-xl p-3 sm:p-3.5 border border-amber-300 shadow-2xs flex flex-col justify-center hover:border-amber-500 transition-all hover:shadow-xs"
               >
-                <div>
-                  <div className="flex items-start justify-between gap-1.5 mb-1.5">
-                    <h4 className="text-xs font-black text-slate-900 leading-tight truncate" title={alertItem.itemName}>
-                      {alertItem.itemName}
-                    </h4>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 flex-shrink-0">
-                      {alertItem.category}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-1.5 my-1">
-                    <span className="text-xl font-black text-amber-600">
-                      {alertItem.totalQuantity.toLocaleString('en-IN')}
-                    </span>
-                    <span className="text-xs font-bold text-slate-600 uppercase">
-                      {alertItem.unit}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-amber-100 flex items-center justify-between text-[10px] text-slate-500 font-semibold mt-2">
-                  <span>📦 {alertItem.ordersCount} {alertItem.ordersCount === 1 ? 'Order' : 'Orders'}</span>
-                  <span className="text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-mono truncate max-w-[120px]" title={alertItem.slots.join(', ')}>
-                    {alertItem.slots.join(', ')}
+                <h4 className="text-xs sm:text-sm font-black text-slate-900 leading-tight truncate mb-1" title={alertItem.itemName}>
+                  {alertItem.itemName}
+                </h4>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl sm:text-2xl font-black text-amber-600 tracking-tight">
+                    {alertItem.totalQuantity.toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-xs font-bold text-slate-600 uppercase">
+                    {alertItem.unit}
                   </span>
                 </div>
               </div>

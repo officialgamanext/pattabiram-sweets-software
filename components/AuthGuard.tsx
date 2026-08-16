@@ -130,7 +130,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
             <div className="pt-2">
               <Link
                 href="/employee-portal"
-                className="h-9 px-5 text-xs font-semibold rounded-lg bg-[#303030] hover:bg-[#111111] text-white shadow-2xs inline-flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                className="h-9 px-5 text-xs font-semibold rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs inline-flex items-center justify-center gap-2 cursor-pointer transition-colors"
               >
                 <ArrowLeft size={14} />
                 <span>Return to My Employee Portal</span>

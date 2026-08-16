@@ -32,6 +32,7 @@ import {
   Check,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
+import { usePrinter } from '@/context/PrinterContext';
 import {
   collection,
   onSnapshot,
@@ -123,10 +124,18 @@ export default function PosClient() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Hardware Connection State
-  const [isPrinterConnected, setIsPrinterConnected] = useState<boolean>(false);
-  const [printerDeviceName, setPrinterDeviceName] = useState<string>('');
-  const [printerType, setPrinterType] = useState<'USB' | 'Bluetooth' | 'Standard'>('Standard');
+  // Global Thermal Printer Subsystem Context
+  const {
+    isConnected: isPrinterConnected,
+    printerType,
+    printerName: printerDeviceName,
+    connectUsbPrinter: handleConnectUsbPrinter,
+    connectBluetoothPrinter: handleConnectBluetoothPrinter,
+    printReceipt,
+    printWindow,
+  } = usePrinter();
+
+  // Barcode State
   const [isBarcodeActive, setIsBarcodeActive] = useState<boolean>(true);
   const [barcodeInput, setBarcodeInput] = useState<string>('');
 
@@ -610,50 +619,34 @@ export default function PosClient() {
     setActiveBillNo(`POS-${Date.now().toString().slice(-6)}`);
   };
 
-  // Bluetooth Thermal Printer Pairing
-  const handleConnectBluetoothPrinter = async () => {
-    try {
-      if (!(navigator as any).bluetooth) {
-        alert('Web Bluetooth API is not supported in this browser. Use Google Chrome or Edge.');
-        return;
-      }
-      const device = await (navigator as any).bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb'],
+  // Thermal Receipt Print Execution
+  const triggerPrintReceipt = async () => {
+    if (lastSettledBill && isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
+      await printReceipt({
+        storeName: 'PATTABIRAM SWEETS',
+        storeAddress: '12, Main Road, Pattabiram, Chennai - 600072',
+        storePhone: '+91 98765 43210',
+        billNo: lastSettledBill.billNo,
+        customerName: lastSettledBill.customerName,
+        customerPhone: lastSettledBill.customerPhone,
+        paymentMode: lastSettledBill.paymentMode,
+        orderType: 'Walk-in POS',
+        items: lastSettledBill.items.map((it) => ({
+          name: it.name,
+          qty: it.quantity,
+          unit: it.unit,
+          price: it.price,
+          total: it.totalAmount,
+        })),
+        subtotal: lastSettledBill.subtotal,
+        tax: lastSettledBill.tax,
+        discount: lastSettledBill.discount,
+        grandTotal: lastSettledBill.total,
+        footerNote: 'Thank you for visiting Pattabiram Sweets! Have a sweet day!',
       });
-      setPrinterDeviceName(device.name || 'Bluetooth Thermal Printer');
-      setIsPrinterConnected(true);
-      setPrinterType('Bluetooth');
-      alert(`Connected to Bluetooth printer: ${device.name || 'Thermal Device'}`);
-    } catch (err: any) {
-      console.error('Bluetooth connection error:', err);
+    } else {
+      printWindow();
     }
-  };
-
-  // USB Printer Connection
-  const handleConnectUsbPrinter = async () => {
-    try {
-      if (!(navigator as any).serial) {
-        setPrinterDeviceName('USB Thermal Printer (Ready)');
-        setIsPrinterConnected(true);
-        setPrinterType('USB');
-        alert('USB Thermal Printer port ready.');
-        return;
-      }
-      const port = await (navigator as any).serial.requestPort();
-      await port.open({ baudRate: 9600 });
-      setPrinterDeviceName('USB Serial Receipt Printer');
-      setIsPrinterConnected(true);
-      setPrinterType('USB');
-      alert('Connected to USB Thermal Receipt Printer.');
-    } catch (err: any) {
-      console.error('USB Serial error:', err);
-    }
-  };
-
-  // Native Print Execution
-  const triggerPrintReceipt = () => {
-    window.print();
   };
 
   return (
@@ -774,8 +767,8 @@ export default function PosClient() {
                 onClick={() => setSelectedCategory(cat)}
                 className={`h-7 px-3 text-xs font-semibold rounded-lg transition-all flex-shrink-0 cursor-pointer ${
                   selectedCategory === cat
-                    ? 'bg-[#303030] text-white shadow-2xs'
-                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                    ? 'bg-[#02626D] text-white shadow-2xs'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/90'
                 }`}
               >
                 {cat}
@@ -866,8 +859,8 @@ export default function PosClient() {
                       <div
                         className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors shadow-2xs ${
                           isInCart
-                            ? 'bg-emerald-600 text-white font-bold'
-                            : 'bg-[#303030] text-white group-hover:bg-[#111111]'
+                            ? 'bg-[#02626D] text-white'
+                            : 'bg-[#02626D] text-white group-hover:bg-[#014d56]'
                         }`}
                       >
                         {isInCart ? <Check size={14} /> : <Plus size={14} />}
@@ -1094,7 +1087,7 @@ export default function PosClient() {
               <button
                 onClick={handleSettleBill}
                 disabled={cart.length === 0}
-                className="h-9 px-3 text-xs font-semibold rounded-lg bg-[#303030] hover:bg-[#111111] disabled:bg-slate-400 text-white shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                className="h-9 px-3 text-xs font-semibold rounded-lg bg-[#02626D] hover:bg-[#014d56] disabled:bg-slate-400 text-white shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 <CheckCircle2 size={15} /> Settle &amp; Print
               </button>
@@ -1143,7 +1136,7 @@ export default function PosClient() {
                       onClick={() => handleApplyPresetWeight(preset.kg)}
                       className={`h-8 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
                         isSelected
-                          ? 'bg-[#303030] text-white border-[#303030] shadow-2xs font-bold ring-2 ring-slate-900/10'
+                          ? 'bg-[#02626D] text-white border-[#02626D] shadow-2xs font-bold ring-2 ring-[#02626D]/20'
                           : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200/80'
                       }`}
                     >
@@ -1194,7 +1187,7 @@ export default function PosClient() {
               </button>
               <button
                 onClick={handleConfirmWeightItem}
-                className="h-8 px-4 text-xs font-semibold rounded-lg bg-[#303030] hover:bg-[#111111] text-white shadow-2xs cursor-pointer"
+                className="h-8 px-4 text-xs font-semibold rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs cursor-pointer"
               >
                 {editingCartItemIndex !== null ? 'Update Weight' : 'Add to Cart'}
               </button>
@@ -1330,7 +1323,7 @@ export default function PosClient() {
 
               <button
                 onClick={triggerPrintReceipt}
-                className="h-8 text-xs font-semibold rounded-lg bg-[#303030] hover:bg-[#111111] text-white shadow-2xs cursor-pointer flex items-center justify-center gap-1.5"
+                className="h-8 text-xs font-semibold rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Printer size={14} /> Print Receipt
               </button>

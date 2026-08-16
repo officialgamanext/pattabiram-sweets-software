@@ -827,7 +827,7 @@ export default function PayrollClient() {
                             className={`h-8 px-3 rounded-lg text-xs font-semibold transition-all shadow-2xs inline-flex items-center gap-1.5 cursor-pointer ${
                               isPresent
                                 ? 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-300'
-                                : 'bg-[#303030] hover:bg-[#111111] text-white'
+                                : 'bg-[#02626D] hover:bg-[#014d56] text-white'
                             }`}
                           >
                             <UserCheck size={13} />

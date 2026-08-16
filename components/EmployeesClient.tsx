@@ -405,7 +405,7 @@ export default function EmployeesClient() {
           </button>
           <button
             onClick={() => handleOpenModal()}
-            className="bg-[#303030] hover:bg-[#111111] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
+            className="bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
           >
             <Plus size={14} />
             <span>Add employee</span>
@@ -1011,7 +1011,7 @@ export default function EmployeesClient() {
                   className={`px-4 py-1 h-8 rounded-lg text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 ${
                     isSaving
                       ? 'bg-slate-700 cursor-not-allowed'
-                      : 'bg-[#303030] hover:bg-[#111111]'
+                      : 'bg-[#02626D] hover:bg-[#014d56]'
                   }`}
                 >
                   {isSaving ? (

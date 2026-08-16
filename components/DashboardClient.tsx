@@ -233,7 +233,7 @@ export default function DashboardClient() {
           </div>
 
           {/* Quick Action Button */}
-          <button className="bg-[#303030] hover:bg-[#111111] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5">
+          <button className="bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5">
             <Plus size={14} />
             <span>Add order</span>
           </button>

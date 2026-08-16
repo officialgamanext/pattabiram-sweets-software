@@ -22,6 +22,7 @@ import {
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import CustomDatePicker from '@/components/CustomDatePicker';
+import { usePrinter } from '@/context/PrinterContext';
 
 export interface WalkInOrder {
   id: string;
@@ -170,8 +171,33 @@ export default function WalkInSalesClient() {
     return filteredSales.length > 0 ? Math.round(totalRevenue / filteredSales.length) : 0;
   }, [totalRevenue, filteredSales]);
 
-  const triggerPrintReceipt = () => {
-    window.print();
+  const { isConnected: isPrinterConnected, printerType, printReceipt, printWindow } = usePrinter();
+
+  const triggerPrintReceipt = async () => {
+    if (activeOrderModal && isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
+      await printReceipt({
+        storeName: 'PATTABIRAM SWEETS',
+        storeAddress: '12, Main Road, Pattabiram, Chennai - 600072',
+        billNo: activeOrderModal.orderId,
+        customerName: activeOrderModal.customerName,
+        customerPhone: activeOrderModal.customerMobile,
+        paymentMode: activeOrderModal.paymentMode,
+        orderType: 'Walk-in POS',
+        items: (activeOrderModal.items || []).map((it: any) => ({
+          name: it.name,
+          qty: it.quantity || 1,
+          unit: it.unit || 'unit',
+          price: it.price || 0,
+          total: it.amount || (it.quantity || 1) * (it.price || 0),
+        })),
+        subtotal: activeOrderModal.subtotal || activeOrderModal.totalAmount,
+        tax: activeOrderModal.tax || 0,
+        grandTotal: activeOrderModal.totalAmount,
+        footerNote: 'Thank you for visiting Pattabiram Sweets! Have a sweet day!',
+      });
+    } else {
+      printWindow();
+    }
   };
 
   return (
@@ -186,7 +212,7 @@ export default function WalkInSalesClient() {
         <div className="flex items-center gap-2">
           <Link
             href="/pos"
-            className="h-8 px-3 text-xs font-semibold rounded-lg bg-[#303030] hover:bg-[#111111] text-white shadow-2xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+            className="h-8 px-3 text-xs font-semibold rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
           >
             <Receipt size={14} />
             <span>Open POS Counter</span>
@@ -446,7 +472,7 @@ export default function WalkInSalesClient() {
 
               <button
                 onClick={triggerPrintReceipt}
-                className="h-8 text-xs font-semibold rounded-lg bg-[#303030] hover:bg-[#111111] text-white shadow-2xs cursor-pointer flex items-center justify-center gap-1.5"
+                className="h-8 text-xs font-semibold rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Printer size={14} /> Print Receipt
               </button>

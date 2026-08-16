@@ -347,7 +347,7 @@ export default function WholesalerOrdersClient() {
             setSelectedWholesaler(null);
             setOrderItems([]);
           }}
-          className="h-8 px-3 text-xs font-semibold rounded-lg bg-[#303030] hover:bg-[#111111] text-white shadow-2xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+          className="h-8 px-3 text-xs font-semibold rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
         >
           <Plus size={14} />
           <span>Add Wholesaler Order</span>
@@ -596,7 +596,7 @@ export default function WholesalerOrdersClient() {
                   type="button"
                   onClick={handleSaveOrder}
                   disabled={isSavingOrder || !selectedWholesaler}
-                  className="h-8 px-4 text-xs font-semibold rounded-lg bg-[#303030] hover:bg-[#111111] disabled:bg-slate-300 text-white shadow-2xs cursor-pointer flex items-center gap-1.5"
+                  className="h-8 px-4 text-xs font-semibold rounded-lg bg-[#02626D] hover:bg-[#014d56] disabled:bg-slate-300 text-white shadow-2xs cursor-pointer flex items-center gap-1.5"
                 >
                   {isSavingOrder ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
                   <span>Save B2B Order</span>

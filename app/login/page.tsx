@@ -164,16 +164,16 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#f6f6f7] flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden font-sans text-slate-800">
       {/* Background design accents */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-[#1a1a1a]" />
+      <div className="absolute top-0 left-0 right-0 h-1 bg-[#02626D]" />
 
       {/* Main card matching Shopify Polaris light theme */}
       <div className="w-full max-w-md bg-white border border-slate-200/90 rounded-2xl shadow-xl overflow-hidden relative z-10">
         
         {/* Header Branding */}
         <div className="p-6 sm:p-8 pb-5 text-center border-b border-slate-100 bg-white">
-          <div className="inline-flex items-center gap-2 bg-[#1a1a1a] text-white px-3 py-1.5 rounded-lg mb-4 shadow-2xs">
+          <div className="inline-flex items-center gap-2 bg-[#02626D] text-white px-3 py-1.5 rounded-lg mb-4 shadow-2xs">
             <span className="font-extrabold text-xs tracking-wider uppercase">Pattabiram</span>
-            <span className="text-[10px] text-slate-400 font-medium bg-[#2a2a2c] px-2 py-0.5 rounded-full">
+            <span className="text-[10px] text-teal-100 font-medium bg-[#024f58] px-2 py-0.5 rounded-full border border-[#014047]">
               Spring &apos;26
             </span>
           </div>
@@ -266,7 +266,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={emailLoading}
-                className="w-full mt-2 h-9 bg-[#303030] hover:bg-[#111111] disabled:bg-slate-400 text-white font-semibold text-xs rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full mt-2 h-9 bg-[#02626D] hover:bg-[#014d56] disabled:bg-slate-400 text-white font-semibold text-xs rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 {emailLoading ? (
                   <>
@@ -316,7 +316,7 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     disabled={phoneLoading}
-                    className="w-full mt-2 h-9 bg-[#303030] hover:bg-[#111111] disabled:bg-slate-400 text-white font-semibold text-xs rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full mt-2 h-9 bg-[#02626D] hover:bg-[#014d56] disabled:bg-slate-400 text-white font-semibold text-xs rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {phoneLoading ? (
                       <>
@@ -365,7 +365,7 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     disabled={phoneLoading}
-                    className="w-full h-9 bg-[#303030] hover:bg-[#111111] disabled:bg-slate-400 text-white font-semibold text-xs rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full h-9 bg-[#02626D] hover:bg-[#014d56] disabled:bg-slate-400 text-white font-semibold text-xs rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {phoneLoading ? (
                       <>

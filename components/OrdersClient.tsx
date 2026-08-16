@@ -43,6 +43,7 @@ import Pagination from '@/components/Pagination';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 import { usePrinter } from '@/context/PrinterContext';
 import { useAuth } from '@/context/AuthContext';
+import { toast } from '@/context/ToastContext';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -87,10 +88,12 @@ export interface CustomisationDetails {
   boxType: string;
   boxPrice: number;
   boxImageUrl?: string;
-  hasSticker?: boolean;
-  stickerPrice?: number;
-  hasShrink?: boolean;
+  shrinkType?: string;
   shrinkPrice?: number;
+  hasShrink?: boolean;
+  stickerType?: string;
+  stickerPrice?: number;
+  hasSticker?: boolean;
 }
 
 export interface OrderItemLine {
@@ -329,7 +332,7 @@ export default function OrdersClient() {
         footerNote: 'Order verified & recorded. Thank you!',
       });
     } else {
-      alert(`Thermal Printer not connected. Please connect USB/Bluetooth printer in the top Header to print ${order.code || 'Order'}.`);
+      toast.warning('Printer Not Connected', `Please connect USB/Bluetooth printer in the top Header to print ${order.code || 'Order'}.`);
     }
   };
 
@@ -627,6 +630,25 @@ export default function OrdersClient() {
     return () => unsubUtils();
   }, []);
 
+  // Global utilities settings
+  const [globalSettings, setGlobalSettings] = useState<{ individualItemPackingCost: number; globalPackingBoxPrice: number }>({
+    individualItemPackingCost: 5,
+    globalPackingBoxPrice: 0,
+  });
+
+  useEffect(() => {
+    const unsubGlobal = onSnapshot(doc(db, 'utilities', 'global_settings'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setGlobalSettings({
+          individualItemPackingCost: typeof data.individualItemPackingCost === 'number' ? data.individualItemPackingCost : (parseFloat(data.individualItemPackingCost) || 5),
+          globalPackingBoxPrice: typeof data.globalPackingBoxPrice === 'number' ? data.globalPackingBoxPrice : (parseFloat(data.globalPackingBoxPrice) || 0),
+        });
+      }
+    });
+    return () => unsubGlobal();
+  }, []);
+
   // Compute active utilities lists (strictly manually created in Utilities setup)
   const activeBoxes = useMemo(() => {
     return utilitiesMaster.filter((u) => u.type === 'box' && u.status === 'Active');
@@ -746,9 +768,10 @@ export default function OrdersClient() {
         address: '',
         status: 'Active',
       });
+      toast.success('Customer Created', `Customer "${newlyCreatedCustomer.name}" added successfully.`);
     } catch (err: any) {
       console.error('Failed to quick add customer:', err);
-      alert('Failed to save customer. Please try again.');
+      toast.error('Customer Creation Failed', 'Failed to save customer. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -813,9 +836,10 @@ export default function OrdersClient() {
 
   const subTotal = orderItems.reduce((acc, curr) => acc + curr.lineTotal, 0);
 
-  // Packet charges: ₹5 per box for each item line where packet is selected (ONLY when Customisation is enabled!)
+  // Packet charges: ₹ per box for each item line where packet is selected (ONLY when Customisation is enabled!)
+  const packetCostPerBox = globalSettings.individualItemPackingCost;
   const packetChargesTotal = isCustomisation
-    ? orderItems.reduce((acc, curr) => acc + (curr.hasPacket ? Math.max(0, noOfBoxes) * 5 : 0), 0)
+    ? orderItems.reduce((acc, curr) => acc + (curr.hasPacket ? Math.max(0, noOfBoxes) * packetCostPerBox : 0), 0)
     : 0;
 
   const boxChargesTotal = isCustomisation ? Math.max(0, noOfBoxes) * selectedBoxPrice : 0;
@@ -846,23 +870,23 @@ export default function OrdersClient() {
   const handleCreateOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) {
-      alert('Please search and select a customer or wholesaler.');
+      toast.warning('Customer Required', 'Please search and select a customer or wholesaler.');
       return;
     }
     if (orderItems.length === 0) {
-      alert('Please add at least one item to the order.');
+      toast.warning('Items Required', 'Please add at least one item to the order.');
       return;
     }
 
     const validItems = orderItems.filter((i) => i.itemName.trim().length > 0);
     if (validItems.length === 0) {
-      alert('Please select a valid product for at least one item row.');
+      toast.warning('Invalid Items', 'Please select a valid product for at least one item row.');
       return;
     }
 
     const recv = parseFloat(receivedAmount) || 0;
     if (recv > grandTotal) {
-      alert(`Received amount (₹${recv}) cannot exceed the order total of ₹${grandTotal.toFixed(2)}.`);
+      toast.error('Invalid Payment Amount', `Received amount (₹${recv}) cannot exceed the order total of ₹${grandTotal.toFixed(2)}.`);
       return;
     }
 
@@ -998,11 +1022,17 @@ export default function OrdersClient() {
         }
       }
 
+      toast.success(
+        editingOrder ? 'Order Updated' : 'Order Created',
+        editingOrder ? `Order #${editingOrder.code} updated successfully.` : 'New order recorded in system.'
+      );
+
       setEditingOrder(null);
       setIsAddOrderModalOpen(false);
     } catch (err: any) {
       console.error('Failed to save order:', err);
       setFirebaseError(err?.message || 'Failed to save order');
+      toast.error('Order Save Failed', err?.message || 'Failed to save order to Firebase.');
     } finally {
       setIsSubmitting(false);
     }
@@ -1016,9 +1046,11 @@ export default function OrdersClient() {
         orderStatus: newStatus,
         updatedAt: serverTimestamp(),
       });
+      toast.success('Status Updated', `Order status changed to ${newStatus}`);
       setUpdatingStatusOrder(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to update status:', err);
+      toast.error('Update Failed', err?.message || 'Could not update order status.');
     }
   };
 
@@ -1169,6 +1201,12 @@ export default function OrdersClient() {
     );
   });
 
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * 45;
+    return filteredOrders.slice(start, start + 45);
+  }, [filteredOrders, currentPage]);
+
   // Calculate Order Statistics for Summary Bar from filtered orders
   const totalOrdersCount = filteredOrders.length;
   const totalAmountSum = filteredOrders.reduce((acc, o) => acc + (o.totalAmount || 0), 0);
@@ -1214,7 +1252,7 @@ export default function OrdersClient() {
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => alert('Exporting orders...')}
+              onClick={() => toast.info('Exporting Orders', 'Generating orders CSV / Excel export...')}
               className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer"
             >
               Export
@@ -2136,7 +2174,7 @@ export default function OrdersClient() {
                                 <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 bg-white p-2 rounded-xl border border-slate-100">
                                   <div className="flex flex-col">
                                     <span className="text-[11px] font-bold text-slate-800">Individual Packet</span>
-                                    <span className="text-[10px] text-slate-400">₹5/box ({noOfBoxes} boxes = ₹{noOfBoxes * 5})</span>
+                                    <span className="text-[10px] text-slate-400">₹{packetCostPerBox}/box ({noOfBoxes} boxes = ₹{noOfBoxes * packetCostPerBox})</span>
                                   </div>
                                   <button
                                     type="button"
@@ -2148,7 +2186,7 @@ export default function OrdersClient() {
                                     }`}
                                   >
                                     {item.hasPacket ? <Check size={12} /> : <X size={12} />}
-                                    <span>{item.hasPacket ? `Yes (+₹${noOfBoxes * 5})` : 'No'}</span>
+                                    <span>{item.hasPacket ? `Yes (+₹${noOfBoxes * packetCostPerBox})` : 'No'}</span>
                                   </button>
                                 </div>
                               )}
@@ -2184,7 +2222,7 @@ export default function OrdersClient() {
                               <th className="py-3 px-3">Price (₹)</th>
                               <th className="py-3 px-3 w-24">Qty</th>
                               <th className="py-3 px-3">Total (₹)</th>
-                              {isCustomisation && <th className="py-3 px-3 text-center">Packet (₹5/box)</th>}
+                              {isCustomisation && <th className="py-3 px-3 text-center">Packet (₹{packetCostPerBox}/box)</th>}
                               <th className="py-3 px-3">Mfg Instructions</th>
                               <th className="py-3 px-3">Packing Instructions</th>
                               <th className="py-3 px-3 text-center">Action</th>
@@ -2268,17 +2306,17 @@ export default function OrdersClient() {
                                               ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
                                               : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
                                           }`}
-                                          title={`Packet charge ₹5 per box (${noOfBoxes} boxes = ₹${noOfBoxes * 5})`}
+                                          title={`Packet charge ₹${packetCostPerBox} per box (${noOfBoxes} boxes = ₹${noOfBoxes * packetCostPerBox})`}
                                         >
                                           {item.hasPacket ? (
                                             <>
                                               <Check size={13} />
-                                              <span>₹{noOfBoxes * 5}</span>
+                                              <span>₹{noOfBoxes * packetCostPerBox}</span>
                                             </>
                                           ) : (
                                             <>
                                               <X size={13} />
-                                              <span>₹5</span>
+                                              <span>₹{packetCostPerBox}</span>
                                             </>
                                           )}
                                         </button>
@@ -2382,7 +2420,7 @@ export default function OrdersClient() {
 
                         <div className="flex justify-between py-1 border-b border-slate-50">
                           <span className="text-slate-500 font-semibold">
-                            Packet Charges ({orderItems.filter((i) => i.hasPacket).length} items × {noOfBoxes} boxes × ₹5):
+                            Packet Charges ({orderItems.filter((i) => i.hasPacket).length} items × {noOfBoxes} boxes × ₹{packetCostPerBox}):
                           </span>
                           <span className="font-bold text-slate-800">
                             + ₹ {packetChargesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}

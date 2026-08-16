@@ -30,6 +30,7 @@ import {
   Lock
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
+import { toast } from '@/context/ToastContext';
 import { collection, onSnapshot, addDoc, serverTimestamp, query } from 'firebase/firestore';
 import { EmployeeRecord } from './EmployeesClient';
 import { AttendanceRecord } from './PayrollClient';
@@ -303,13 +304,13 @@ export default function EmployeePortalClient() {
           }
         },
         (error) => {
-          alert('Geolocation failed or permission denied: ' + error.message);
+          toast.error('GPS Failed', 'Geolocation failed or permission denied: ' + error.message);
           setVerificationStep('idle');
         },
         { enableHighAccuracy: true }
       );
     } else {
-      alert('Geolocation is not supported by your browser.');
+      toast.warning('Not Supported', 'Geolocation is not supported by your browser.');
       setVerificationStep('idle');
     }
   };

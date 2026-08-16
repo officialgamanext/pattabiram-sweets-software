@@ -17,20 +17,25 @@ import {
   Sparkles,
   Sliders,
   Package,
+  Globe,
+  Settings2,
+  Check,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
+import { toast } from '@/context/ToastContext';
 import {
   collection,
   onSnapshot,
   addDoc,
   updateDoc,
   deleteDoc,
+  setDoc,
   doc,
   query,
   serverTimestamp,
 } from 'firebase/firestore';
 
-export type UtilityType = 'box' | 'shrink' | 'sticker';
+export type UtilityType = 'box' | 'shrink' | 'sticker' | 'global';
 
 export interface UtilityItem {
   id: string;
@@ -48,6 +53,11 @@ export default function UtilitiesClient() {
   const [items, setItems] = useState<UtilityItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
+
+  // Global Settings State
+  const [individualItemPackingCost, setIndividualItemPackingCost] = useState<string>('5');
+  const [globalPackingBoxPrice, setGlobalPackingBoxPrice] = useState<string>('0');
+  const [isSavingGlobal, setIsSavingGlobal] = useState<boolean>(false);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -80,15 +90,17 @@ export default function UtilitiesClient() {
     return clean;
   };
 
-  // 1. Subscribe to Firestore `utilities` collection (pure listener, no auto-creation)
+  // 1. Subscribe to Firestore `utilities` collection
   useEffect(() => {
     const unsub = onSnapshot(
       query(collection(db, 'utilities')),
       (snapshot) => {
-        const fetched: UtilityItem[] = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<UtilityItem, 'id'>),
-        }));
+        const fetched: UtilityItem[] = snapshot.docs
+          .filter((d) => d.id !== 'global_settings')
+          .map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<UtilityItem, 'id'>),
+          }));
 
         setItems(fetched);
         setIsLoading(false);
@@ -101,6 +113,43 @@ export default function UtilitiesClient() {
 
     return () => unsub();
   }, []);
+
+  // 2. Subscribe to Firestore `utilities/global_settings`
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'utilities', 'global_settings'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.individualItemPackingCost !== undefined) {
+          setIndividualItemPackingCost(String(data.individualItemPackingCost));
+        }
+        if (data.globalPackingBoxPrice !== undefined) {
+          setGlobalPackingBoxPrice(String(data.globalPackingBoxPrice));
+        }
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Save Global Settings
+  const handleSaveGlobalSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingGlobal(true);
+    try {
+      const itemCost = parseFloat(individualItemPackingCost) || 0;
+      const boxPrice = parseFloat(globalPackingBoxPrice) || 0;
+      await setDoc(doc(db, 'utilities', 'global_settings'), {
+        individualItemPackingCost: itemCost,
+        globalPackingBoxPrice: boxPrice,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      toast.success('Global Settings Saved', 'Packaging and item rates updated across the system.');
+    } catch (err: any) {
+      console.error('Failed to save global utility settings:', err);
+      toast.error('Save Failed', err?.message || 'Could not update global settings.');
+    } finally {
+      setIsSavingGlobal(false);
+    }
+  };
 
   // Filter items by active tab and search query
   const filteredItems = useMemo(() => {
@@ -179,9 +228,14 @@ export default function UtilitiesClient() {
 
       setIsModalOpen(false);
       setEditingItem(null);
+      toast.success(
+        editingItem ? 'Item Updated' : 'Item Created',
+        `${trimmedName} saved to ${getTabPlural(activeTab)}.`
+      );
     } catch (err: any) {
       console.error('Failed to save utility item:', err);
       setFormError(err?.message || 'Failed to save utility item. Please try again.');
+      toast.error('Save Failed', err?.message || 'Could not save item.');
     } finally {
       setIsSaving(false);
     }
@@ -192,10 +246,11 @@ export default function UtilitiesClient() {
     setIsDeleting(true);
     try {
       await deleteDoc(doc(db, 'utilities', deletingItem.id));
+      toast.success('Item Deleted', `${deletingItem.name} removed from Utilities.`);
       setDeletingItem(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete utility item:', err);
-      alert('Failed to delete item. Please check your connection.');
+      toast.error('Delete Failed', err?.message || 'Failed to delete item. Please check your connection.');
     } finally {
       setIsDeleting(false);
     }
@@ -206,6 +261,7 @@ export default function UtilitiesClient() {
       case 'box': return 'Box';
       case 'shrink': return 'Shrink';
       case 'sticker': return 'Sticker';
+      case 'global': return 'Global';
     }
   };
 
@@ -214,6 +270,7 @@ export default function UtilitiesClient() {
       case 'box': return 'Boxes';
       case 'shrink': return 'Shrink Wrapping';
       case 'sticker': return 'Stickers';
+      case 'global': return 'Global Settings';
     }
   };
 
@@ -229,23 +286,25 @@ export default function UtilitiesClient() {
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Utilities Setup</h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Manage custom order packaging options: Boxes, Shrink wrap, and Stickers
+              Manage custom order packaging options: Boxes, Shrink wrap, Stickers, and Global packaging rates
             </p>
           </div>
         </div>
 
-        <button
-          onClick={openAddModal}
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#02626D] hover:bg-[#024f58] text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
-        >
-          <Plus size={15} />
-          <span>Add {getTabLabel(activeTab)}</span>
-        </button>
+        {activeTab !== 'global' && (
+          <button
+            onClick={openAddModal}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#02626D] hover:bg-[#024f58] text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
+          >
+            <Plus size={15} />
+            <span>Add {getTabLabel(activeTab)}</span>
+          </button>
+        )}
       </div>
 
       {/* ── 2. TAB SWITCHER ────────────────────────────────────────── */}
-      <div className="flex items-center justify-between border-b border-slate-200/90 pb-2">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between border-b border-slate-200/90 pb-2 overflow-x-auto">
+        <div className="flex items-center gap-2 min-w-max">
           <button
             onClick={() => { setActiveTab('box'); setSearchTerm(''); }}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -281,107 +340,204 @@ export default function UtilitiesClient() {
             <Tag size={14} />
             <span>Stickers ({stickersCount})</span>
           </button>
+
+          <button
+            onClick={() => { setActiveTab('global'); setSearchTerm(''); }}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'global'
+                ? 'bg-[#02626D] text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Globe size={14} />
+            <span>Global Settings</span>
+          </button>
         </div>
       </div>
 
       {/* ── 3. MAIN CONTENT CONTAINER ──────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-        
-        {/* Search & Filter Bar */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white">
-          <div className="relative w-full sm:w-80">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={`Search ${getTabPlural(activeTab).toLowerCase()}...`}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-[#02626D] transition-all"
-            />
+      {activeTab === 'global' ? (
+        /* Global Settings Tab Content */
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 sm:p-8 max-w-3xl">
+          <div className="border-b border-slate-100 pb-4 mb-6">
+            <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <Settings2 size={18} className="text-[#02626D]" />
+              <span>Global Packaging &amp; Item Rates</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Configure system-wide packing defaults used during order creation, POS billing, and custom box packing.
+            </p>
           </div>
 
-          <span className="text-xs font-bold text-slate-500 self-start sm:self-auto">
-            Showing {filteredItems.length} {getTabPlural(activeTab).toLowerCase()}
-          </span>
-        </div>
+          <form onSubmit={handleSaveGlobalSettings} className="space-y-6">
+            {/* Field 1: Individual Item Packing Cost */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/80 border border-slate-200/90 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800">
+                  Individual Item Packing Cost (₹) *
+                </label>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Customisation Box
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-snug">
+                This amount is multiplied per item line per box when the individual packet option is checked in customisation orders (e.g. 10 boxes × ₹5 = ₹50/item).
+              </p>
+              <div className="relative max-w-xs pt-1">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">₹</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  value={individualItemPackingCost}
+                  onChange={(e) => setIndividualItemPackingCost(e.target.value)}
+                  placeholder="5.00"
+                  className="w-full pl-8 pr-3.5 py-2 text-xs sm:text-sm font-bold border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-[#02626D] bg-white shadow-2xs"
+                />
+              </div>
+            </div>
 
-        {/* Utilities Table */}
-        <div className="overflow-x-auto">
-          {isLoading ? (
-            <div className="py-16 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs font-medium">
-              <Loader2 size={24} className="animate-spin text-[#02626D]" />
-              <span>Loading {getTabPlural(activeTab)}...</span>
+            {/* Field 2: Global Packing Box Price */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/80 border border-slate-200/90 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800">
+                  Global Packing Box Price (₹) *
+                </label>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  Default Billing
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-snug">
+                Default packaging box rate or base packing charge for regular sales and non-customized packaging.
+              </p>
+              <div className="relative max-w-xs pt-1">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">₹</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  value={globalPackingBoxPrice}
+                  onChange={(e) => setGlobalPackingBoxPrice(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full pl-8 pr-3.5 py-2 text-xs sm:text-sm font-bold border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-[#02626D] bg-white shadow-2xs"
+                />
+              </div>
             </div>
-          ) : filteredItems.length === 0 ? (
-            <div className="py-16 text-center text-slate-400 text-xs font-medium space-y-2">
-              <Package size={32} className="mx-auto text-slate-300 stroke-[1.5]" />
-              <p className="text-slate-600 font-bold text-sm">No {getTabPlural(activeTab)} found</p>
-              <p>Click &quot;Add {getTabLabel(activeTab)}&quot; to configure your first option.</p>
+
+            {/* Submit Action */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
+              <button
+                type="submit"
+                disabled={isSavingGlobal}
+                className="flex items-center gap-2 px-5 py-2.5 bg-[#02626D] hover:bg-[#024f58] text-white text-xs sm:text-sm font-bold rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {isSavingGlobal ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                <span>Save Global Settings</span>
+              </button>
             </div>
-          ) : (
-            <table className="w-full text-left border-collapse min-w-[650px]">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-600 uppercase">
-                  <th className="py-3.5 px-4 sm:px-6">Name</th>
-                  <th className="py-3.5 px-4">Price (₹)</th>
-                  <th className="py-3.5 px-4">Description</th>
-                  <th className="py-3.5 px-4 text-center">Status</th>
-                  <th className="py-3.5 px-4 sm:pr-6 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {filteredItems.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-3.5 px-4 sm:px-6 font-bold text-slate-900 flex items-center gap-2">
-                      <span className="w-7 h-7 rounded-lg bg-teal-50 text-[#02626D] flex items-center justify-center flex-shrink-0 font-bold text-xs border border-teal-100">
-                        {activeTab === 'box' ? '📦' : activeTab === 'shrink' ? '🔲' : '🏷'}
-                      </span>
-                      <span>{item.name}</span>
-                    </td>
-                    <td className="py-3.5 px-4 font-extrabold text-slate-900">
-                      ₹ {item.price.toFixed(2)}
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-500 max-w-xs truncate">
-                      {item.description || '—'}
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                          item.status === 'Active'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-slate-100 text-slate-600 border-slate-200'
-                        }`}
-                      >
-                        {item.status === 'Active' ? <CheckCircle2 size={11} /> : <XCircle size={11} />}
-                        {item.status}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 sm:pr-6 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => openEditModal(item)}
-                          className="flex items-center justify-center h-7 w-7 rounded-lg text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200/80 transition-colors cursor-pointer shadow-2xs"
-                          title="Edit Item"
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          onClick={() => setDeletingItem(item)}
-                          className="flex items-center justify-center h-7 w-7 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 transition-colors cursor-pointer shadow-2xs"
-                          title="Delete Item"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
+          </form>
+        </div>
+      ) : (
+        /* Box / Shrink / Sticker Tables */
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+          
+          {/* Search & Filter Bar */}
+          <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white">
+            <div className="relative w-full sm:w-80">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={`Search ${getTabPlural(activeTab).toLowerCase()}...`}
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-[#02626D] transition-all"
+              />
+            </div>
+
+            <span className="text-xs font-bold text-slate-500 self-start sm:self-auto">
+              Showing {filteredItems.length} {getTabPlural(activeTab).toLowerCase()}
+            </span>
+          </div>
+
+          {/* Utilities Table */}
+          <div className="overflow-x-auto">
+            {isLoading ? (
+              <div className="py-16 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs font-medium">
+                <Loader2 size={24} className="animate-spin text-[#02626D]" />
+                <span>Loading {getTabPlural(activeTab)}...</span>
+              </div>
+            ) : filteredItems.length === 0 ? (
+              <div className="py-16 text-center text-slate-400 text-xs font-medium space-y-2">
+                <Package size={32} className="mx-auto text-slate-300 stroke-[1.5]" />
+                <p className="text-slate-600 font-bold text-sm">No {getTabPlural(activeTab)} found</p>
+                <p>Click &quot;Add {getTabLabel(activeTab)}&quot; to configure your first option.</p>
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse min-w-[650px]">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-600 uppercase">
+                    <th className="py-3.5 px-4 sm:px-6">Name</th>
+                    <th className="py-3.5 px-4">Price (₹)</th>
+                    <th className="py-3.5 px-4">Description</th>
+                    <th className="py-3.5 px-4 text-center">Status</th>
+                    <th className="py-3.5 px-4 sm:pr-6 text-center">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {filteredItems.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3.5 px-4 sm:px-6 font-bold text-slate-900 flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-lg bg-teal-50 text-[#02626D] flex items-center justify-center flex-shrink-0 font-bold text-xs border border-teal-100">
+                          {activeTab === 'box' ? '📦' : activeTab === 'shrink' ? '🔲' : '🏷'}
+                        </span>
+                        <span>{item.name}</span>
+                      </td>
+                      <td className="py-3.5 px-4 font-extrabold text-slate-900">
+                        ₹ {item.price.toFixed(2)}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-500 max-w-xs truncate">
+                        {item.description || '-'}
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                            item.status === 'Active'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-500 border border-slate-200'
+                          }`}
+                        >
+                          {item.status === 'Active' ? <CheckCircle2 size={11} /> : <XCircle size={11} />}
+                          <span>{item.status}</span>
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 sm:pr-6 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => openEditModal(item)}
+                            className="p-1.5 text-slate-400 hover:text-[#02626D] hover:bg-teal-50 rounded-lg transition-colors cursor-pointer"
+                            title="Edit"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => setDeletingItem(item)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
-
-      </div>
+      )}
 
       {/* ── 4. ADD / EDIT UTILITY MODAL ────────────────────────────── */}
       {isModalOpen && (

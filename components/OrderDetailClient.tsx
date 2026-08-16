@@ -35,6 +35,8 @@ import {
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { usePrinter } from '@/context/PrinterContext';
+import { useAuth } from '@/context/AuthContext';
+import { toast } from '@/context/ToastContext';
 import {
   doc,
   onSnapshot,
@@ -353,7 +355,7 @@ export default function OrderDetailClient({ orderId }: Props) {
 
     const remainingBalance = (order.totalAmount || 0) - displayReceived;
     if (amount > remainingBalance + 0.001) {
-      alert(`Payment amount (₹${amount.toFixed(2)}) cannot exceed the remaining balance due of ₹${Math.max(0, remainingBalance).toFixed(2)}.`);
+      toast.error('Invalid Payment Amount', `Payment amount (₹${amount.toFixed(2)}) cannot exceed the remaining balance due of ₹${Math.max(0, remainingBalance).toFixed(2)}.`);
       return;
     }
 
@@ -371,12 +373,14 @@ export default function OrderDetailClient({ orderId }: Props) {
       const updatedList = [...currentList, newEntry];
 
       await savePaymentsToFirebase(updatedList);
+      toast.success('Payment Recorded', `Payment of ₹${amount.toFixed(2)} recorded successfully.`);
 
       setPayAmount('');
       setPayNote('');
       setPayMode('Cash');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to add payment:', e);
+      toast.error('Payment Failed', e?.message || 'Could not record payment.');
     } finally {
       setIsSavingPayment(false);
     }
@@ -403,7 +407,7 @@ export default function OrderDetailClient({ orderId }: Props) {
 
     const maxAllowed = (order.totalAmount || 0) - otherPaymentsTotal;
     if (amount > maxAllowed + 0.001) {
-      alert(`Payment amount (₹${amount.toFixed(2)}) cannot exceed the maximum allowed balance of ₹${Math.max(0, maxAllowed).toFixed(2)}.`);
+      toast.error('Invalid Payment Amount', `Payment amount (₹${amount.toFixed(2)}) cannot exceed the maximum allowed balance of ₹${Math.max(0, maxAllowed).toFixed(2)}.`);
       return;
     }
 
@@ -416,9 +420,11 @@ export default function OrderDetailClient({ orderId }: Props) {
       );
 
       await savePaymentsToFirebase(updatedList);
+      toast.success('Payment Updated', 'Payment record updated successfully.');
       setEditingPayment(null);
-    } catch (e) {
-      console.error('Failed to edit payment:', e);
+    } catch (e: any) {
+      console.error('Failed to save edited payment:', e);
+      toast.error('Update Failed', e?.message || 'Could not update payment.');
     } finally {
       setIsSavingPayment(false);
     }

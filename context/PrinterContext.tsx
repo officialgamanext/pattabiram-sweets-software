@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { generateTestReceipt, generateReceiptEscPos, ReceiptData } from '@/lib/escpos';
+import { toast } from '@/context/ToastContext';
 
 export type PrinterType = 'USB' | 'Bluetooth' | 'None';
 export type PaperWidth = '58mm' | '80mm';
@@ -172,7 +173,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const errMsg = 'Web USB / Web Serial API is not supported in this browser. Use Google Chrome or Microsoft Edge for direct hardware printing.';
       setLastError(errMsg);
       setStatusMessage(errMsg);
-      alert(errMsg);
+      toast.warning('Browser Not Supported', errMsg);
       return false;
     } catch (err: any) {
       if (err.name === 'NotFoundError' || err.message?.includes('No port selected') || err.message?.includes('cancelled')) {
@@ -183,6 +184,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const msg = err.message || 'Failed to connect USB thermal printer.';
       setLastError(msg);
       setStatusMessage(`USB error: ${msg}`);
+      toast.error('USB Connection Failed', msg);
       return false;
     }
   }, []);
@@ -197,7 +199,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const errMsg = 'Web Bluetooth API is not supported in this browser. Please use Google Chrome or Microsoft Edge with Bluetooth enabled.';
         setLastError(errMsg);
         setStatusMessage(errMsg);
-        alert(errMsg);
+        toast.warning('Bluetooth Not Supported', errMsg);
         return false;
       }
 

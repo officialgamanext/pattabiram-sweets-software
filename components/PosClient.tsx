@@ -33,6 +33,8 @@ import {
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { usePrinter } from '@/context/PrinterContext';
+import { useAuth } from '@/context/AuthContext';
+import { toast } from '@/context/ToastContext';
 import {
   collection,
   onSnapshot,
@@ -279,7 +281,7 @@ export default function PosClient() {
     if (matched) {
       handleSelectProduct(matched);
     } else {
-      alert(`No product found matching barcode: ${code}`);
+      toast.warning('Product Not Found', `No product found matching barcode: ${code}`);
     }
   };
 
@@ -414,7 +416,7 @@ export default function PosClient() {
     const numericAmount = parseFloat(inputAmount) || 0;
 
     if (numericKg <= 0 || numericAmount <= 0) {
-      alert('Please enter a valid weight or amount.');
+      toast.warning('Invalid Weight/Amount', 'Please enter a valid weight or amount.');
       return;
     }
 
@@ -494,7 +496,7 @@ export default function PosClient() {
   // Save Bill (Hold Draft Bill)
   const handleSaveBill = async () => {
     if (cart.length === 0) {
-      alert('Cart is empty. Add items to save a bill.');
+      toast.warning('Cart Empty', 'Add items to cart before holding a draft bill.');
       return;
     }
 
@@ -531,7 +533,7 @@ export default function PosClient() {
     setCustomCustomerPhone('');
     setDiscountAmount(0);
     setActiveBillNo(`POS-${Date.now().toString().slice(-6)}`);
-    alert(`Bill ${draftBill.billNo} saved to Held Draft Bills!`);
+    toast.success('Bill Held', `Bill ${draftBill.billNo} saved to Held Draft Bills!`);
   };
 
   // Continue Saved Bill
@@ -559,7 +561,7 @@ export default function PosClient() {
   // Settle Bill (Complete Sale & Print Receipt)
   const handleSettleBill = async () => {
     if (cart.length === 0) {
-      alert('Cart is empty. Select items to settle bill.');
+      toast.warning('Cart Empty', 'Cart is empty. Select items to settle bill.');
       return;
     }
 

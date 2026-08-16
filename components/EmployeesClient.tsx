@@ -41,6 +41,7 @@ import {
   query,
   orderBy
 } from 'firebase/firestore';
+import { toast } from '@/context/ToastContext';
 import CustomSelect from '@/components/CustomSelect';
 import Pagination from '@/components/Pagination';
 import { uploadToImageKit } from '@/lib/imageCompressor';
@@ -216,15 +217,16 @@ export default function EmployeesClient() {
           setFormLat(position.coords.latitude.toFixed(6));
           setFormLng(position.coords.longitude.toFixed(6));
           setIsDetectingGps(false);
+          toast.success('GPS Detected', `Coordinates: ${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`);
         },
         (error) => {
-          alert('Could not retrieve GPS location: ' + error.message);
+          toast.error('GPS Failed', 'Could not retrieve GPS location: ' + error.message);
           setIsDetectingGps(false);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else {
-      alert('Geolocation is not supported by your browser.');
+      toast.warning('Not Supported', 'Geolocation is not supported by your browser.');
     }
   };
 
@@ -287,7 +289,7 @@ export default function EmployeesClient() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formMobile.trim() || !formSalary.trim()) {
-      alert('Please fill in required fields: Name, Mobile, and Salary Amount.');
+      toast.warning('Required Fields Missing', 'Please fill in required fields: Name, Mobile, and Salary Amount.');
       return;
     }
 
@@ -334,7 +336,7 @@ export default function EmployeesClient() {
           emp.id === editingEmp.id ? { ...emp, ...empPayload } : emp
         );
         saveEmployeesToStateAndStorage(updatedList);
-        alert(`Employee "${formName}" updated successfully in Firebase!`);
+        toast.success('Employee Updated', `Employee "${formName}" updated successfully.`);
       } else {
         const docRef = await addDoc(collection(db, 'employees'), {
           ...empPayload,
@@ -342,12 +344,12 @@ export default function EmployeesClient() {
         });
         const newRecord: EmployeeRecord = { id: docRef.id, ...empPayload };
         saveEmployeesToStateAndStorage([newRecord, ...employees]);
-        alert(`Employee "${formName}" saved successfully to Firebase!`);
+        toast.success('Employee Created', `Employee "${formName}" saved successfully.`);
       }
       handleCloseModal();
     } catch (err: any) {
       console.error('Error saving employee to Firebase:', err);
-      alert('Error saving employee to Firebase: ' + err.message);
+      toast.error('Save Failed', 'Error saving employee: ' + err.message);
     } finally {
       setIsSaving(false);
     }
@@ -359,10 +361,10 @@ export default function EmployeesClient() {
       await deleteDoc(doc(db, 'employees', id));
       const filtered = employees.filter((emp) => emp.id !== id);
       saveEmployeesToStateAndStorage(filtered);
-      alert('Employee record deleted from Firebase.');
+      toast.success('Employee Deleted', 'Employee record removed successfully.');
     } catch (err: any) {
       console.error('Error deleting employee from Firebase:', err);
-      alert('Error deleting employee from Firebase: ' + err.message);
+      toast.error('Delete Failed', 'Error deleting employee: ' + err.message);
     }
   };
 
@@ -398,7 +400,7 @@ export default function EmployeesClient() {
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => alert('Exporting employees...')}
+            onClick={() => toast.info('Exporting Employees', 'Preparing employees CSV export...')}
             className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer"
           >
             Export

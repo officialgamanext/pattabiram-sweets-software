@@ -29,6 +29,7 @@ import * as XLSX from 'xlsx';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
 import { db } from '@/lib/firebase';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
+import { toast } from '@/context/ToastContext';
 import {
   collection,
   onSnapshot,
@@ -225,7 +226,7 @@ export default function ItemsClient() {
       }
     } catch (err) {
       console.error('Image compression failed:', err);
-      alert('Failed to process image. Please try a different image.');
+      toast.error('Image Processing Failed', 'Failed to process image. Please try a different image.');
     } finally {
       setIsCompressing(false);
     }
@@ -392,7 +393,7 @@ export default function ItemsClient() {
         setBulkParsedItems(parsed);
       } catch (err) {
         console.error('Failed to parse Excel file:', err);
-        alert('Failed to parse Excel file. Please use the sample template.');
+        toast.error('Excel Parsing Failed', 'Failed to parse Excel file. Please use the sample template.');
       }
     };
 
@@ -603,7 +604,7 @@ export default function ItemsClient() {
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => alert('Exporting products list...')}
+            onClick={() => toast.info('Exporting Products', 'Preparing products catalog export...')}
             className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer"
           >
             Export

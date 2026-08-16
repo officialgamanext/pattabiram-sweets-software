@@ -21,6 +21,7 @@ import {
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
 import Pagination from '@/components/Pagination';
 import { db } from '@/lib/firebase';
+import { toast } from '@/context/ToastContext';
 import {
   collection,
   onSnapshot,
@@ -256,7 +257,7 @@ export default function UnitManagementClient({
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => alert('Exporting units...')}
+            onClick={() => toast.info('Exporting Data', `Preparing ${title.toLowerCase()} export file...`)}
             className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer"
           >
             Export
@@ -314,7 +315,7 @@ export default function UnitManagementClient({
 
             {/* Export Button */}
             <button
-              onClick={() => alert('Exporting data...')}
+              onClick={() => toast.info('Exporting Data', `Preparing ${title.toLowerCase()} export file...`)}
               className="p-2.5 text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
               title="Export CSV"
             >

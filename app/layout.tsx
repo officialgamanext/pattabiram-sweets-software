@@ -3,6 +3,7 @@ import { Sora } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { PrinterProvider } from "@/context/PrinterContext";
+import { ToastProvider } from "@/context/ToastContext";
 import AuthGuard from "@/components/AuthGuard";
 
 const sora = Sora({
@@ -31,11 +32,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={sora.variable}>
       <body className="min-h-screen bg-[#f6f6f7] font-sans antialiased text-[#1a1a1a]">
-        <AuthProvider>
-          <PrinterProvider>
-            <AuthGuard>{children}</AuthGuard>
-          </PrinterProvider>
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <PrinterProvider>
+              <AuthGuard>{children}</AuthGuard>
+            </PrinterProvider>
+          </AuthProvider>
+        </ToastProvider>
       </body>
     </html>
   );

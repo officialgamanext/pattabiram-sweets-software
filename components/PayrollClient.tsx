@@ -26,6 +26,7 @@ import {
   User
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
+import { toast } from '@/context/ToastContext';
 import CustomDatePicker from '@/components/CustomDatePicker';
 import {
   collection,
@@ -271,13 +272,13 @@ export default function PayrollClient() {
           }
         },
         (error) => {
-          alert('Geolocation failed or permission denied: ' + error.message);
+          toast.error('GPS Failed', 'Geolocation failed or permission denied: ' + error.message);
           setVerificationStep('idle');
         },
         { enableHighAccuracy: true }
       );
     } else {
-      alert('Geolocation is not supported by your browser.');
+      toast.warning('Not Supported', 'Geolocation is not supported by your browser.');
       setVerificationStep('idle');
     }
   };
@@ -1285,7 +1286,7 @@ export default function PayrollClient() {
 
                     <button
                       onClick={() => {
-                        alert(`Payout recorded for ${selectedPayslipEmp.name}!`);
+                        toast.success('Payout Recorded', `Payout recorded for ${selectedPayslipEmp.name}!`);
                         setSelectedPayslipEmp(null);
                       }}
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-pointer"

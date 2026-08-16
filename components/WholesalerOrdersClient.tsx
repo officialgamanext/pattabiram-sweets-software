@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import Pagination from '@/components/Pagination';
 import { db } from '@/lib/firebase';
+import { toast } from '@/context/ToastContext';
 import {
   collection,
   onSnapshot,
@@ -260,13 +261,13 @@ export default function WholesalerOrdersClient() {
   const handleSaveOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedWholesaler) {
-      alert('Please select a wholesaler.');
+      toast.warning('Wholesaler Required', 'Please select a wholesaler.');
       return;
     }
 
     const selectedLines = orderItems.filter((i) => i.quantity > 0);
     if (selectedLines.length === 0) {
-      alert('Please add at least one item quantity to the order.');
+      toast.warning('Items Required', 'Please add at least one item quantity to the order.');
       return;
     }
 
@@ -294,10 +295,10 @@ export default function WholesalerOrdersClient() {
       setIsAddModalOpen(false);
       setSelectedWholesaler(null);
       setOrderItems([]);
-      alert(`Wholesaler Order ${newOrderId} created successfully!`);
-    } catch (err) {
+      toast.success('Order Created', `Wholesaler Order ${newOrderId} created successfully!`);
+    } catch (err: any) {
       console.error('Error saving wholesaler order:', err);
-      alert('Failed to save order. Please try again.');
+      toast.error('Order Failed', err?.message || 'Failed to save order. Please try again.');
     } finally {
       setIsSavingOrder(false);
     }

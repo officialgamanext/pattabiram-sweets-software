@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -32,12 +32,17 @@ import {
   Building2,
   UserPlus,
   Printer,
+  BarChart3,
+  PieChart,
+  Layers,
+  Boxes,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
 import CustomDatePicker from '@/components/CustomDatePicker';
 import Pagination from '@/components/Pagination';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 import { usePrinter } from '@/context/PrinterContext';
+import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -166,15 +171,13 @@ export const SLOT_TIMES: SlotTime[] = [
   '6:00 PM - 9:00 PM',
 ];
 
-export const BOX_TYPES = [
-  { name: 'HandleBox', price: 5 },
-  { name: 'cellbox', price: 10 },
-  { name: '1/4 box', price: 10 },
-  { name: '1/2 box', price: 10 },
-  { name: '1kg box', price: 20 },
-  { name: 'Dental box', price: 5 },
-  { name: 'pakam gheebox', price: 10 },
-];
+export interface UtilityOption {
+  id: string;
+  type: 'box' | 'shrink' | 'sticker';
+  name: string;
+  price: number;
+  status: 'Active' | 'Inactive';
+}
 
 const ALL_ORDER_STATUSES: OrderStatus[] = [
   'Order Created',
@@ -234,6 +237,7 @@ export default function OrdersClient() {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [customersMaster, setCustomersMaster] = useState<CustomerOption[]>([]);
   const [itemsMaster, setItemsMaster] = useState<ItemMasterOption[]>([]);
+  const [utilitiesMaster, setUtilitiesMaster] = useState<UtilityOption[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -253,8 +257,30 @@ export default function OrdersClient() {
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
   const [itemsPerPage, setItemsPerPage] = useState('10');
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
-
+  const { user, employeeProfile } = useAuth();
   const { isConnected: isPrinterConnected, printerType, printReceipt } = usePrinter();
+
+  // Slot Analytics Modal State
+  const [selectedSlotForAnalytics, setSelectedSlotForAnalytics] = useState<string | null>(null);
+  const [isSlotAnalyticsModalOpen, setIsSlotAnalyticsModalOpen] = useState(false);
+  const [slotAnalyticsSearchTerm, setSlotAnalyticsSearchTerm] = useState('');
+
+  // Helper to remove any undefined fields before writing to Firestore
+  const sanitizeForFirestore = (obj: any): any => {
+    if (obj === undefined) return null;
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) {
+      return obj.map(sanitizeForFirestore);
+    }
+    const clean: any = {};
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val !== undefined) {
+        clean[key] = sanitizeForFirestore(val);
+      }
+    }
+    return clean;
+  };
 
   const handlePrintOrderSlip = async (order: OrderRecord) => {
     if (!order) return;
@@ -401,8 +427,8 @@ export default function OrdersClient() {
   const [noOfBoxes, setNoOfBoxes] = useState<number>(1);
   const [boxType, setBoxType] = useState<string>('HandleBox');
   const [boxImageUrl, setBoxImageUrl] = useState<string>('');
-  const [hasSticker, setHasSticker] = useState<boolean>(false);
-  const [hasShrink, setHasShrink] = useState<boolean>(false);
+  const [shrinkType, setShrinkType] = useState<string>('None');
+  const [stickerType, setStickerType] = useState<string>('None');
   const [packingCharges, setPackingCharges] = useState<string>('0');
   const [additionalCharges, setAdditionalCharges] = useState<string>('0');
   const [discountAmount, setDiscountAmount] = useState<string>('0');
@@ -517,7 +543,14 @@ export default function OrdersClient() {
           ...(d.data() as Omit<OrderRecord, 'id'>),
         }));
 
-        fetched.sort((a, b) => (b.code || '').localeCompare(a.code || ''));
+        // Sort orders so the newest created orders always appear first at the top
+        fetched.sort((a, b) => {
+          const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date(a.orderDate || 0).getTime() || 0);
+          const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.orderDate || 0).getTime() || 0);
+          if (timeB !== timeA) return timeB - timeA;
+          return (b.code || '').localeCompare(a.code || '');
+        });
+
         setOrders(fetched);
         setIsLoading(false);
         setFirebaseError(null);
@@ -581,6 +614,32 @@ export default function OrdersClient() {
     return () => unsubItems();
   }, []);
 
+  // 4. Subscribe to Utilities collection (Boxes, Shrink, Stickers)
+  useEffect(() => {
+    const unsubUtils = onSnapshot(query(collection(db, 'utilities')), (snap) => {
+      const list: UtilityOption[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<UtilityOption, 'id'>),
+      }));
+      setUtilitiesMaster(list);
+    });
+
+    return () => unsubUtils();
+  }, []);
+
+  // Compute active utilities lists (strictly manually created in Utilities setup)
+  const activeBoxes = useMemo(() => {
+    return utilitiesMaster.filter((u) => u.type === 'box' && u.status === 'Active');
+  }, [utilitiesMaster]);
+
+  const activeShrinks = useMemo(() => {
+    return utilitiesMaster.filter((u) => u.type === 'shrink' && u.status === 'Active');
+  }, [utilitiesMaster]);
+
+  const activeStickers = useMemo(() => {
+    return utilitiesMaster.filter((u) => u.type === 'sticker' && u.status === 'Active');
+  }, [utilitiesMaster]);
+
   const [editingOrder, setEditingOrder] = useState<OrderRecord | null>(null);
 
   // Open Full Screen Add Order Modal for a specific Slot
@@ -591,11 +650,11 @@ export default function OrdersClient() {
     setExpDeliveryDate(getTodayDateStr());
     setIsCustomisation(false);
     setNoOfBoxes(1);
-    setBoxType('HandleBox');
+    setBoxType(activeBoxes[0]?.name || 'HandleBox');
     setBoxImageFile(null);
     setBoxImageUrl('');
-    setHasSticker(false);
-    setHasShrink(false);
+    setShrinkType('None');
+    setStickerType('None');
     setPackingCharges('0');
     setAdditionalCharges('0');
     setDiscountAmount('0');
@@ -618,16 +677,16 @@ export default function OrdersClient() {
     setIsCustomisation(Boolean(order.isCustomisation));
     if (order.customisationDetails) {
       setNoOfBoxes(order.customisationDetails.noOfBoxes || 1);
-      setBoxType(order.customisationDetails.boxType || 'HandleBox');
+      setBoxType(order.customisationDetails.boxType || activeBoxes[0]?.name || 'HandleBox');
       setBoxImageUrl(order.customisationDetails.boxImageUrl || '');
-      setHasSticker(Boolean(order.customisationDetails.hasSticker));
-      setHasShrink(Boolean(order.customisationDetails.hasShrink));
+      setShrinkType(order.customisationDetails.shrinkType || (order.customisationDetails.hasShrink ? (activeShrinks[0]?.name || 'Standard Shrink Wrap') : 'None'));
+      setStickerType(order.customisationDetails.stickerType || (order.customisationDetails.hasSticker ? (activeStickers[0]?.name || 'Custom Brand Sticker') : 'None'));
     } else {
       setNoOfBoxes(1);
-      setBoxType('HandleBox');
+      setBoxType(activeBoxes[0]?.name || 'HandleBox');
       setBoxImageUrl('');
-      setHasSticker(false);
-      setHasShrink(false);
+      setShrinkType('None');
+      setStickerType('None');
     }
     setPackingCharges(String(order.packingCharges || 0));
     setAdditionalCharges(String(order.additionalCharges || 0));
@@ -742,8 +801,16 @@ export default function OrdersClient() {
     );
   };
 
-  // Order Calculations
-  const selectedBoxPrice = BOX_TYPES.find((b) => b.name === boxType)?.price || 0;
+  // Order Dynamic Calculations based on Utilities Setup
+  const selectedBoxObj = activeBoxes.find((b) => b.name.toLowerCase() === (boxType || '').toLowerCase()) || activeBoxes[0];
+  const selectedBoxPrice = selectedBoxObj ? selectedBoxObj.price : 0;
+
+  const selectedShrinkObj = activeShrinks.find((s) => s.name.toLowerCase() === (shrinkType || '').toLowerCase());
+  const selectedShrinkPrice = selectedShrinkObj ? selectedShrinkObj.price : 0;
+
+  const selectedStickerObj = activeStickers.find((st) => st.name.toLowerCase() === (stickerType || '').toLowerCase());
+  const selectedStickerPrice = selectedStickerObj ? selectedStickerObj.price : 0;
+
   const subTotal = orderItems.reduce((acc, curr) => acc + curr.lineTotal, 0);
 
   // Packet charges: ₹5 per box for each item line where packet is selected (ONLY when Customisation is enabled!)
@@ -752,8 +819,8 @@ export default function OrdersClient() {
     : 0;
 
   const boxChargesTotal = isCustomisation ? Math.max(0, noOfBoxes) * selectedBoxPrice : 0;
-  const stickerChargesTotal = isCustomisation && hasSticker ? Math.max(0, noOfBoxes) * 10 : 0;
-  const shrinkChargesTotal = isCustomisation && hasShrink ? Math.max(0, noOfBoxes) * 10 : 0;
+  const stickerChargesTotal = isCustomisation && stickerType !== 'None' ? Math.max(0, noOfBoxes) * selectedStickerPrice : 0;
+  const shrinkChargesTotal = isCustomisation && shrinkType !== 'None' ? Math.max(0, noOfBoxes) * selectedShrinkPrice : 0;
 
   const pCharges = !isCustomisation ? parseFloat(packingCharges) || 0 : 0;
   const addCharges = !isCustomisation ? parseFloat(additionalCharges) || 0 : 0;
@@ -826,9 +893,13 @@ export default function OrdersClient() {
         }
       }
 
+      const creatorName = employeeProfile?.name || (user?.email ? user.email.split('@')[0] : 'Staff');
+      const creatorId = employeeProfile?.id || employeeProfile?.empId || user?.uid || 'staff';
+      const creatorRole = employeeProfile?.isSuperAdmin || (user?.email && !employeeProfile) ? 'SuperAdmin' : 'Employee';
+
       if (editingOrder) {
         // Update existing order
-        await updateDoc(doc(db, 'orders', editingOrder.id), {
+        await updateDoc(doc(db, 'orders', editingOrder.id), sanitizeForFirestore({
           code: editingOrder.code,
           customerName: selectedCustomer.name,
           customerMobile: selectedCustomer.mobile,
@@ -843,13 +914,15 @@ export default function OrdersClient() {
           customisationDetails: isCustomisation
             ? {
                 noOfBoxes: noOfBoxes,
-                boxType: boxType,
+                boxType: selectedBoxObj?.name || boxType,
                 boxPrice: selectedBoxPrice,
                 boxImageUrl: finalBoxImageUrl,
-                hasSticker: hasSticker,
-                stickerPrice: 10,
-                hasShrink: hasShrink,
-                shrinkPrice: 10,
+                shrinkType: shrinkType,
+                shrinkPrice: selectedShrinkPrice,
+                hasShrink: shrinkType !== 'None' && selectedShrinkPrice > 0,
+                stickerType: stickerType,
+                stickerPrice: selectedStickerPrice,
+                hasSticker: stickerType !== 'None' && selectedStickerPrice > 0,
               }
             : null,
           items: validItems,
@@ -868,10 +941,11 @@ export default function OrdersClient() {
           paymentStatus: paymentStatus,
           orderStatus: orderStatus,
           updatedAt: serverTimestamp(),
-        });
+        }));
       } else {
         // Create new order
-        await addDoc(collection(db, 'orders'), {
+        const targetOrderDate = selectedDate && selectedDate !== 'All' ? selectedDate : getTodayDateStr();
+        await addDoc(collection(db, 'orders'), sanitizeForFirestore({
           code: orderCode,
           customerName: selectedCustomer.name,
           customerMobile: selectedCustomer.mobile,
@@ -879,20 +953,22 @@ export default function OrdersClient() {
           customerType: selectedCustomer.type,
           slot: orderSlot,
           orderTime: timeStr,
-          orderDate: selectedDate && selectedDate !== 'All' ? selectedDate : getTodayDateStr(),
+          orderDate: targetOrderDate,
           manufacturingDate: mfgDate,
           expectedDeliveryDate: expDeliveryDate,
           isCustomisation: isCustomisation,
           customisationDetails: isCustomisation
             ? {
                 noOfBoxes: noOfBoxes,
-                boxType: boxType,
+                boxType: selectedBoxObj?.name || boxType,
                 boxPrice: selectedBoxPrice,
                 boxImageUrl: finalBoxImageUrl,
-                hasSticker: hasSticker,
-                stickerPrice: 10,
-                hasShrink: hasShrink,
-                shrinkPrice: 10,
+                shrinkType: shrinkType,
+                shrinkPrice: selectedShrinkPrice,
+                hasShrink: shrinkType !== 'None' && selectedShrinkPrice > 0,
+                stickerType: stickerType,
+                stickerPrice: selectedStickerPrice,
+                hasSticker: stickerType !== 'None' && selectedStickerPrice > 0,
               }
             : null,
           items: validItems,
@@ -910,8 +986,16 @@ export default function OrdersClient() {
           paymentMode: paymentMode,
           paymentStatus: paymentStatus,
           orderStatus: orderStatus,
+          createdBy: creatorName,
+          createdById: creatorId,
+          creatorRole: creatorRole,
           createdAt: serverTimestamp(),
-        });
+        }));
+
+        // Reset date filter to 'All' or current order date so newly created order is immediately visible
+        if (selectedDate !== 'All' && selectedDate !== targetOrderDate) {
+          setSelectedDate('All');
+        }
       }
 
       setEditingOrder(null);
@@ -969,7 +1053,9 @@ export default function OrdersClient() {
     // 1. Date Filter (default today's date)
     if (selectedDate && selectedDate !== 'All') {
       const orderDate = getOrderDateStr(order);
-      if (orderDate !== selectedDate) {
+      const mfgDate = order.manufacturingDate || '';
+      const delivDate = order.expectedDeliveryDate || '';
+      if (orderDate !== selectedDate && mfgDate !== selectedDate && delivDate !== selectedDate) {
         return false;
       }
     }
@@ -1002,8 +1088,86 @@ export default function OrdersClient() {
     return true;
   });
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const paginatedOrders = filteredOrders.slice((currentPage - 1) * 45, currentPage * 45);
+  // Calculate Aggregated Item Breakdown for Selected Slot Analytics Modal
+  const slotAnalyticsData = useMemo(() => {
+    if (!selectedSlotForAnalytics) return { items: [], totalOrders: 0, totalRevenue: 0, totalUnitsCount: 0 };
+    const slotOrders = filteredOrders.filter((o) => o.slot === selectedSlotForAnalytics);
+
+    const map = new Map<string, {
+      itemId: string;
+      itemCode?: string;
+      itemName: string;
+      category?: string;
+      unit: string;
+      totalQuantity: number;
+      totalAmount: number;
+      orders: {
+        orderId: string;
+        orderCode: string;
+        customerName: string;
+        quantity: number;
+        notes?: string;
+      }[];
+    }>();
+
+    let revenue = 0;
+
+    slotOrders.forEach((order) => {
+      revenue += (order.totalAmount || 0);
+      (order.items || []).forEach((it: any) => {
+        const name = (it.itemName || it.name || 'Unnamed Item').trim();
+        const unit = (it.unit || 'KG').toUpperCase();
+        const key = `${name.toLowerCase()}__${unit.toLowerCase()}`;
+        const qty = parseFloat(it.quantity || it.qty || 0) || 0;
+        const price = parseFloat(it.unitPrice || it.price || it.rate || 0) || 0;
+        const lineTotal = parseFloat(it.lineTotal || it.amount || 0) || (qty * price);
+
+        if (!map.has(key)) {
+          map.set(key, {
+            itemId: it.itemId || key,
+            itemCode: it.itemCode || '',
+            itemName: name,
+            category: it.category || 'General',
+            unit: unit,
+            totalQuantity: 0,
+            totalAmount: 0,
+            orders: [],
+          });
+        }
+
+        const entry = map.get(key)!;
+        entry.totalQuantity = Math.round((entry.totalQuantity + qty) * 100) / 100;
+        entry.totalAmount = Math.round((entry.totalAmount + lineTotal) * 100) / 100;
+        entry.orders.push({
+          orderId: order.id,
+          orderCode: order.code || '#ORD',
+          customerName: order.customerName || 'Customer',
+          quantity: qty,
+          notes: it.manufacturingDescription || it.packingDescription || '',
+        });
+      });
+    });
+
+    const items = Array.from(map.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
+    const totalUnitsCount = items.reduce((sum, it) => sum + it.totalQuantity, 0);
+
+    return {
+      items,
+      totalOrders: slotOrders.length,
+      totalRevenue: revenue,
+      totalUnitsCount: Math.round(totalUnitsCount * 100) / 100,
+    };
+  }, [selectedSlotForAnalytics, filteredOrders]);
+
+  const filteredSlotAnalyticsItems = slotAnalyticsData.items.filter((item) => {
+    if (!slotAnalyticsSearchTerm.trim()) return true;
+    const q = slotAnalyticsSearchTerm.toLowerCase().trim();
+    return (
+      item.itemName.toLowerCase().includes(q) ||
+      (item.category || '').toLowerCase().includes(q) ||
+      (item.itemCode || '').toLowerCase().includes(q)
+    );
+  });
 
   // Calculate Order Statistics for Summary Bar from filtered orders
   const totalOrdersCount = filteredOrders.length;
@@ -1278,10 +1442,23 @@ export default function OrdersClient() {
                 {/* Slot Column Header */}
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <span className="font-extrabold text-sm text-slate-800">{slotTime}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">
                       {slotOrders.length} Orders
                     </span>
+                    {/* Analytics Button: Left of Plus Button */}
+                    <button
+                      onClick={() => {
+                        setSelectedSlotForAnalytics(slotTime);
+                        setIsSlotAnalyticsModalOpen(true);
+                        setSlotAnalyticsSearchTerm('');
+                      }}
+                      className="flex items-center justify-center h-[30px] w-[30px] rounded-[6px] bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-bold text-xs transition-all cursor-pointer shadow-2xs border border-slate-200"
+                      title={`View Item Quantity Analytics for ${slotTime}`}
+                    >
+                      <BarChart3 size={15} />
+                    </button>
+                    {/* Plus Button */}
                     <button
                       onClick={() => handleOpenAddOrderModal(slotTime)}
                       className="flex items-center justify-center h-[30px] w-[30px] rounded-[6px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all cursor-pointer shadow-xs"
@@ -1354,30 +1531,28 @@ export default function OrdersClient() {
                             <span>{order.orderTime || '10:00 AM'}</span>
                           </div>
 
-                          <div className="flex items-center gap-1.5">
+                          {/* Icon-Only Action Buttons for View, Print, Edit */}
+                          <div className="flex items-center gap-1">
                             <button
                               onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
-                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-600 transition-colors cursor-pointer border border-indigo-100 shadow-2xs"
+                              className="flex items-center justify-center h-7 w-7 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors cursor-pointer border border-indigo-100 shadow-2xs"
                               title="View Order Details"
                             >
-                              <Eye size={12} />
-                              <span>View</span>
+                              <Eye size={13} />
                             </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); handlePrintOrderSlip(order); }}
-                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-teal-50 hover:bg-teal-100 text-teal-700 transition-colors cursor-pointer border border-teal-200 shadow-2xs"
-                              title="Print Thermal Receipt Slip"
+                              className="flex items-center justify-center h-7 w-7 rounded-lg text-teal-700 bg-teal-50 hover:bg-teal-100 transition-colors cursor-pointer border border-teal-200 shadow-2xs"
+                              title="Print Thermal Receipt"
                             >
-                              <Printer size={12} />
-                              <span>Print</span>
+                              <Printer size={13} />
                             </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}
-                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer border border-slate-200/80 shadow-2xs"
+                              className="flex items-center justify-center h-7 w-7 rounded-lg text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer border border-slate-200/80 shadow-2xs"
                               title="Edit Order"
                             >
-                              <Pencil size={12} />
-                              <span>Edit</span>
+                              <Pencil size={13} />
                             </button>
                           </div>
                         </div>
@@ -1468,27 +1643,24 @@ export default function OrdersClient() {
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-600 transition-colors cursor-pointer border border-indigo-100 shadow-2xs"
+                            className="flex items-center justify-center h-8 w-8 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors cursor-pointer border border-indigo-100 shadow-2xs"
                             title="View Order Details"
                           >
-                            <Eye size={13} />
-                            <span>View</span>
+                            <Eye size={14} />
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handlePrintOrderSlip(order); }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-700 transition-colors cursor-pointer border border-teal-200 shadow-2xs"
-                            title="Print Thermal Receipt Slip"
+                            className="flex items-center justify-center h-8 w-8 rounded-lg text-teal-700 bg-teal-50 hover:bg-teal-100 transition-colors cursor-pointer border border-teal-200 shadow-2xs"
+                            title="Print Thermal Receipt"
                           >
-                            <Printer size={13} />
-                            <span>Print</span>
+                            <Printer size={14} />
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer border border-slate-200/80 shadow-2xs"
+                            className="flex items-center justify-center h-8 w-8 rounded-lg text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer border border-slate-200/80 shadow-2xs"
                             title="Edit Order"
                           >
-                            <Pencil size={13} />
-                            <span>Edit</span>
+                            <Pencil size={14} />
                           </button>
                         </div>
                       </td>
@@ -1663,15 +1835,15 @@ export default function OrdersClient() {
                             min="1"
                             value={noOfBoxes}
                             onChange={(e) => setNoOfBoxes(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-white font-semibold shadow-2xs"
+                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-white font-semibold shadow-2xs h-[34px]"
                           />
                           <label className="text-[11px] font-bold text-slate-500 mt-1">No of boxes</label>
                         </div>
 
-                        {/* 2. Box Type Dropdown */}
+                        {/* 2. Box Type Dropdown (Dynamic from Utilities) */}
                         <div className="flex flex-col">
                           <CustomSelect
-                            options={BOX_TYPES.map((b) => ({
+                            options={activeBoxes.map((b) => ({
                               value: b.name,
                               label: `${b.name} (₹${b.price})`,
                             }))}
@@ -1680,86 +1852,68 @@ export default function OrdersClient() {
                             className="w-full"
                             buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs py-2 h-[34px]"
                           />
-                          <label className="text-[11px] font-bold text-slate-500 mt-1">Box type</label>
+                          <label className="text-[11px] font-bold text-slate-500 mt-1">Box type (₹{selectedBoxPrice}/box)</label>
                         </div>
 
-                        {/* 3. Packing Box Image Holder */}
+                        {/* 3. Shrink Type Dropdown (Dynamic from Utilities) */}
                         <div className="flex flex-col">
-                          <div className="flex items-center gap-2 bg-white p-1 border border-slate-200 rounded-xl shadow-2xs">
+                          <CustomSelect
+                            options={[
+                              { value: 'None', label: 'None (₹0)' },
+                              ...activeShrinks.map((s) => ({
+                                value: s.name,
+                                label: `${s.name} (₹${s.price})`,
+                              })),
+                            ]}
+                            value={shrinkType}
+                            onChange={(val) => setShrinkType(val)}
+                            className="w-full"
+                            buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs py-2 h-[34px]"
+                          />
+                          <label className="text-[11px] font-bold text-slate-500 mt-1">
+                            Shrink wrap {shrinkType !== 'None' ? `(₹${selectedShrinkPrice}/box)` : ''}
+                          </label>
+                        </div>
+
+                        {/* 4. Sticker Type Dropdown (Dynamic from Utilities) */}
+                        <div className="flex flex-col">
+                          <CustomSelect
+                            options={[
+                              { value: 'None', label: 'None (₹0)' },
+                              ...activeStickers.map((st) => ({
+                                value: st.name,
+                                label: `${st.name} (₹${st.price})`,
+                              })),
+                            ]}
+                            value={stickerType}
+                            onChange={(val) => setStickerType(val)}
+                            className="w-full"
+                            buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs py-2 h-[34px]"
+                          />
+                          <label className="text-[11px] font-bold text-slate-500 mt-1">
+                            Sticker {stickerType !== 'None' ? `(₹${selectedStickerPrice}/box)` : ''}
+                          </label>
+                        </div>
+
+                        {/* 5. Packing Box Image Holder */}
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2 bg-white p-1 border border-slate-200 rounded-xl shadow-2xs h-[34px]">
                             <input
                               type="file"
                               accept="image/*"
                               disabled={isUploadingBoxImage}
                               onChange={handleBoxImageUpload}
-                              className="text-[10px] text-slate-500 file:mr-1 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-indigo-50 file:text-indigo-700 cursor-pointer w-full"
+                              className="text-[10px] text-slate-500 file:mr-1 file:py-0.5 file:px-1.5 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-indigo-50 file:text-indigo-700 cursor-pointer w-full"
                             />
                             {isUploadingBoxImage ? (
                               <Loader2 size={16} className="animate-spin text-indigo-600 flex-shrink-0 mr-1" />
                             ) : boxImageUrl ? (
-                              <div className="relative w-7 h-7 rounded-md overflow-hidden border border-slate-200 flex-shrink-0">
+                              <div className="relative w-6 h-6 rounded-md overflow-hidden border border-slate-200 flex-shrink-0">
                                 <Image src={boxImageUrl} alt="Box Preview" fill className="object-cover" />
                               </div>
                             ) : null}
                           </div>
                           <label className="text-[11px] font-bold text-slate-500 mt-1">Packing box image</label>
-                        </div>
-
-                        {/* 4. Sticker Selection */}
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-1.5 h-[34px]">
-                            <button
-                              type="button"
-                              onClick={() => setHasSticker(true)}
-                              className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
-                                hasSticker
-                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
-                              }`}
-                            >
-                              <Check size={13} /> Yes
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setHasSticker(false)}
-                              className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
-                                !hasSticker
-                                  ? 'bg-red-600 text-white border-red-600 shadow-xs'
-                                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
-                              }`}
-                            >
-                              <X size={13} /> No
-                            </button>
-                          </div>
-                          <label className="text-[11px] font-bold text-slate-500 mt-1">Sticker (₹10)</label>
-                        </div>
-
-                        {/* 5. Shrink Selection */}
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-1.5 h-[34px]">
-                            <button
-                              type="button"
-                              onClick={() => setHasShrink(true)}
-                              className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
-                                hasShrink
-                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
-                              }`}
-                            >
-                              <Check size={13} /> Yes
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setHasShrink(false)}
-                              className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
-                                !hasShrink
-                                  ? 'bg-red-600 text-white border-red-600 shadow-xs'
-                                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
-                              }`}
-                            >
-                              <X size={13} /> No
-                            </button>
-                          </div>
-                          <label className="text-[11px] font-bold text-slate-500 mt-1">Shrink (₹10)</label>
                         </div>
                       </div>
                     </div>
@@ -2499,6 +2653,163 @@ export default function OrdersClient() {
                 <span>Delete</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 11. SLOT ITEM QUANTITY ANALYTICS MODAL ────────────────── */}
+      {isSlotAnalyticsModalOpen && selectedSlotForAnalytics && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            
+            {/* Modal Header Bar */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                  <BarChart3 size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
+                      Slot Analytics & Item Breakdown
+                    </h2>
+                    <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
+                      {selectedSlotForAnalytics}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Aggregated product quantities required for all orders in this delivery time slot
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSlotAnalyticsModalOpen(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Metric Summary Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 sm:p-5 bg-white border-b border-slate-100">
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Slot Orders</span>
+                <p className="text-lg font-extrabold text-slate-900 mt-0.5">{slotAnalyticsData.totalOrders}</p>
+                <span className="text-[10px] text-slate-400 font-medium">Orders in slot</span>
+              </div>
+              <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100">
+                <span className="text-[10px] font-bold uppercase text-indigo-600 tracking-wider">Unique Items</span>
+                <p className="text-lg font-extrabold text-indigo-700 mt-0.5">{slotAnalyticsData.items.length}</p>
+                <span className="text-[10px] text-indigo-500 font-medium">Product varieties</span>
+              </div>
+              <div className="p-3 rounded-xl bg-teal-50/60 border border-teal-100">
+                <span className="text-[10px] font-bold uppercase text-teal-700 tracking-wider">Total Quantity</span>
+                <p className="text-lg font-extrabold text-teal-800 mt-0.5">{slotAnalyticsData.totalUnitsCount}</p>
+                <span className="text-[10px] text-teal-600 font-medium">Aggregated units</span>
+              </div>
+              <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-100">
+                <span className="text-[10px] font-bold uppercase text-emerald-700 tracking-wider">Total Revenue</span>
+                <p className="text-lg font-extrabold text-emerald-800 mt-0.5">
+                  ₹ {slotAnalyticsData.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </p>
+                <span className="text-[10px] text-emerald-600 font-medium">Slot order value</span>
+              </div>
+            </div>
+
+            {/* Search Filter Bar */}
+            <div className="p-3 sm:px-5 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-sm">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={slotAnalyticsSearchTerm}
+                  onChange={(e) => setSlotAnalyticsSearchTerm(e.target.value)}
+                  placeholder="Search item name or category..."
+                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <span className="text-xs font-semibold text-slate-500">
+                Showing {filteredSlotAnalyticsItems.length} of {slotAnalyticsData.items.length} items
+              </span>
+            </div>
+
+            {/* Item Aggregation Table */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+              {filteredSlotAnalyticsItems.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs font-medium space-y-1">
+                  <p className="text-sm font-bold text-slate-600">No items found</p>
+                  <p>There are no products in this slot matching your query.</p>
+                </div>
+              ) : (
+                <div className="border border-slate-200/90 rounded-xl overflow-hidden shadow-2xs">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-bold text-slate-600 uppercase">
+                        <th className="py-3 px-4">Item Name</th>
+                        <th className="py-3 px-4">Category</th>
+                        <th className="py-3 px-4 text-center">Unit</th>
+                        <th className="py-3 px-4 text-right">Total Quantity</th>
+                        <th className="py-3 px-4 text-right">Total Amount</th>
+                        <th className="py-3 px-4">Contributing Orders</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {filteredSlotAnalyticsItems.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3 px-4 font-bold text-slate-900">
+                            {item.itemName}
+                            {item.itemCode && (
+                              <span className="ml-1.5 text-[10px] text-slate-400 font-mono">({item.itemCode})</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
+                              {item.category || 'General'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center font-bold text-slate-700">{item.unit}</td>
+                          <td className="py-3 px-4 text-right">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              {item.totalQuantity} {item.unit}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right font-extrabold text-slate-900">
+                            ₹ {item.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex flex-wrap gap-1 max-w-xs">
+                              {item.orders.map((ord, oIdx) => (
+                                <span
+                                  key={oIdx}
+                                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200"
+                                  title={`${ord.customerName} - ${ord.quantity} ${item.unit}${ord.notes ? ` (${ord.notes})` : ''}`}
+                                >
+                                  <strong className="text-indigo-600 font-mono">{ord.orderCode}</strong> ({ord.quantity} {item.unit})
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <span className="text-xs text-slate-500 font-medium">
+                Tip: Quantities represent total production requirement for <strong className="text-slate-800">{selectedSlotForAnalytics}</strong>.
+              </span>
+              <button
+                onClick={() => setIsSlotAnalyticsModalOpen(false)}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white transition-colors cursor-pointer shadow-2xs"
+              >
+                Close
+              </button>
+            </div>
+
           </div>
         </div>
       )}

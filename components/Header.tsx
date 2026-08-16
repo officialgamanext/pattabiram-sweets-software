@@ -100,6 +100,7 @@ export default function Header() {
       '/customers': 'customers',
       '/employees': 'employee_portal',
       '/payroll': 'payroll',
+      '/utilities': 'utilities',
       '/manufacturing-portal': 'manufacturing_portal',
       '/packing-portal': 'packing_portal',
       '/employee-portal': 'employee_portal',
@@ -126,6 +127,7 @@ export default function Header() {
   const managementNavItems = [
     { label: 'Manufacturing', href: '/manufacturing', icon: <Factory size={17} /> },
     { label: 'Packing Unit', href: '/packing', icon: <Package size={17} /> },
+    { label: 'Utilities', href: '/utilities', icon: <Sliders size={17} /> },
     { label: 'Wholesalers', href: '/wholesalers', icon: <Users size={17} /> },
     { label: 'Wholesaler Orders', href: '/wholesaler-orders', icon: <Users size={17} /> },
     { label: 'Customers', href: '/customers', icon: <UserCheck size={17} /> },

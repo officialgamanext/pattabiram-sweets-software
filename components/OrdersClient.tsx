@@ -425,8 +425,8 @@ export default function OrdersClient() {
 
   // New Order Form State
   const [orderSlot, setOrderSlot] = useState<SlotTime>('9:00 AM - 12:00 PM');
-  const [mfgDate, setMfgDate] = useState<string>(getTodayDateStr());
-  const [expDeliveryDate, setExpDeliveryDate] = useState<string>(getTodayDateStr());
+  const [mfgDate, setMfgDate] = useState<string>('');
+  const [expDeliveryDate, setExpDeliveryDate] = useState<string>('');
   const [isCustomisation, setIsCustomisation] = useState<boolean>(false);
   const [noOfBoxes, setNoOfBoxes] = useState<number>(1);
   const [boxType, setBoxType] = useState<string>('HandleBox');
@@ -499,8 +499,8 @@ export default function OrdersClient() {
         unit: prod.unit,
         imageUrl: prod.imageUrl || '',
         unitPrice: prod.price,
-        quantity: 1,
-        lineTotal: prod.price,
+        quantity: 0,
+        lineTotal: 0,
         hasPacket: false,
         packetCharge: 0,
         manufacturingDescription: '',
@@ -669,8 +669,8 @@ export default function OrdersClient() {
   const handleOpenAddOrderModal = (slot: SlotTime = '9:00 AM - 12:00 PM') => {
     setEditingOrder(null);
     setOrderSlot(slot);
-    setMfgDate(getTodayDateStr());
-    setExpDeliveryDate(getTodayDateStr());
+    setMfgDate('');
+    setExpDeliveryDate('');
     setIsCustomisation(false);
     setNoOfBoxes(1);
     setBoxType(activeBoxes[0]?.name || 'HandleBox');
@@ -796,7 +796,7 @@ export default function OrdersClient() {
         let pckDesc = item.packingDescription;
         let packet = item.hasPacket;
 
-        if (field === 'quantity') qty = Math.max(0.01, parseFloat(val) || 0);
+        if (field === 'quantity') qty = val === '' ? 0 : Math.max(0, parseFloat(val) || 0);
         if (field === 'unitPrice') price = Math.max(0, parseFloat(val) || 0);
         if (field === 'mfgDesc') mfgDesc = val;
         if (field === 'pckDesc') pckDesc = val;
@@ -886,9 +886,39 @@ export default function OrdersClient() {
       return;
     }
 
+    const missingQtyItem = validItems.find((i) => !i.quantity || i.quantity <= 0);
+    if (missingQtyItem) {
+      toast.warning('Quantity Required', `Please enter a valid quantity for "${missingQtyItem.itemName}".`);
+      return;
+    }
+
     const recv = parseFloat(receivedAmount) || 0;
     if (recv > grandTotal) {
       toast.error('Invalid Payment Amount', `Received amount (₹${recv}) cannot exceed the order total of ₹${grandTotal.toFixed(2)}.`);
+      return;
+    }
+
+    if (!mfgDate) {
+      toast.warning('Date Required', 'Please select a Manufacturing Date.');
+      return;
+    }
+    if (!expDeliveryDate) {
+      toast.warning('Date Required', 'Please select an Expected Delivery Date.');
+      return;
+    }
+
+    const isTuesdayDate = (dateStr: string) => {
+      if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(y, m - 1, d).getDay() === 2;
+    };
+
+    if (isTuesdayDate(mfgDate)) {
+      toast.warning('Tuesday Blocked', 'Manufacturing Date cannot fall on Tuesday (Factory Closed).');
+      return;
+    }
+    if (isTuesdayDate(expDeliveryDate)) {
+      toast.warning('Tuesday Blocked', 'Expected Delivery Date cannot fall on Tuesday (Store Closed).');
       return;
     }
 
@@ -1811,26 +1841,36 @@ export default function OrdersClient() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-100">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Manufacturing Date *
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Manufacturing Date *
+                        </label>
+                        <span className="text-[10px] font-bold text-rose-500">Tue Closed</span>
+                      </div>
                       <CustomDatePicker
                         value={mfgDate}
                         onChange={(d) => setMfgDate(d)}
                         allowAll={false}
+                        blockTuesdays={true}
+                        placeholder="Select Mfg Date"
                         size="md"
                         className="w-full"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Expected Delivery Date *
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Expected Delivery Date *
+                        </label>
+                        <span className="text-[10px] font-bold text-rose-500">Tue Closed</span>
+                      </div>
                       <CustomDatePicker
                         value={expDeliveryDate}
                         onChange={(d) => setExpDeliveryDate(d)}
                         allowAll={false}
+                        blockTuesdays={true}
+                        placeholder="Select Delivery Date"
                         size="md"
                         className="w-full"
                       />
@@ -2158,8 +2198,9 @@ export default function OrdersClient() {
                                   <input
                                     type="number"
                                     step="0.1"
-                                    min="0.1"
-                                    value={item.quantity}
+                                    min="0"
+                                    placeholder="0"
+                                    value={item.quantity === 0 ? '' : item.quantity}
                                     onChange={(e) => handleItemLineChange(lineKey, 'quantity', e.target.value)}
                                     className="w-full px-2 py-1.5 border border-slate-200 rounded-xl font-black text-indigo-600 text-xs bg-white focus:outline-none focus:border-indigo-500"
                                   />
@@ -2287,8 +2328,9 @@ export default function OrdersClient() {
                                       <input
                                         type="number"
                                         step="0.1"
-                                        min="0.1"
-                                        value={item.quantity}
+                                        min="0"
+                                        placeholder="0"
+                                        value={item.quantity === 0 ? '' : item.quantity}
                                         onChange={(e) => handleItemLineChange(lineKey, 'quantity', e.target.value)}
                                         className="w-16 px-2 py-1 border border-slate-200 rounded-lg font-bold text-indigo-600 text-xs focus:outline-none focus:border-indigo-500"
                                       />

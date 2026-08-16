@@ -276,6 +276,23 @@ export default function ItemsClient() {
     }
   };
 
+  // Open Edit Item Modal with current item values populated
+  const handleOpenEditItemModal = (item: ItemRecord) => {
+    setEditingItem(item);
+    setEditItemForm({
+      name: item.name || '',
+      price: item.price !== undefined ? String(item.price) : '',
+      category: item.category || (categories[0]?.name || 'Sweets'),
+      unit: item.unit || 'KG',
+      manufacturingUnitName: item.manufacturingUnitName || (mfgUnits[0]?.name || 'N/A'),
+      packingUnitName: item.packingUnitName || (pckUnits[0]?.name || 'N/A'),
+      imageUrl: item.imageUrl || '',
+      status: item.status || 'Active',
+    });
+    setPendingImageBase64('');
+    setPendingFileName('');
+  };
+
   // Handle Edit Item (Upload to ImageKit ON CLICK OF SAVE)
   const handleUpdateItem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -778,9 +795,9 @@ export default function ItemsClient() {
                             <Eye size={14} />
                           </button>
                           <button
-                            onClick={() => setEditingItem(item)}
-                            className="p-1 text-slate-400 hover:text-slate-800 transition-colors"
-                            title="Edit"
+                            onClick={() => handleOpenEditItemModal(item)}
+                            className="p-1 text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer"
+                            title="Edit Item"
                           >
                             <Pencil size={14} />
                           </button>
@@ -1457,7 +1474,18 @@ export default function ItemsClient() {
               </div>
             </div>
 
-            <div className="pt-3 flex justify-end">
+            <div className="pt-3 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  const itm = viewItem;
+                  setViewItem(null);
+                  handleOpenEditItemModal(itm);
+                }}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Pencil size={13} />
+                <span>Edit Item</span>
+              </button>
               <button
                 onClick={() => setViewItem(null)}
                 className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"

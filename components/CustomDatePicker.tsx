@@ -7,6 +7,7 @@ interface CustomDatePickerProps {
   value: string; // Format: 'YYYY-MM-DD' or 'All'
   onChange: (date: string) => void;
   allowAll?: boolean;
+  blockTuesdays?: boolean;
   placeholder?: string;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
@@ -33,6 +34,7 @@ export default function CustomDatePicker({
   value,
   onChange,
   allowAll = true,
+  blockTuesdays = false,
   placeholder = 'Select Date',
   className = '',
   size = 'md',
@@ -143,6 +145,9 @@ export default function CustomDatePicker({
       ? new Date(value + 'T00:00:00')
       : new Date();
     base.setDate(base.getDate() - 1);
+    if (blockTuesdays && base.getDay() === 2) {
+      base.setDate(base.getDate() - 1);
+    }
     const y = base.getFullYear();
     const m = String(base.getMonth() + 1).padStart(2, '0');
     const d = String(base.getDate()).padStart(2, '0');
@@ -155,6 +160,9 @@ export default function CustomDatePicker({
       ? new Date(value + 'T00:00:00')
       : new Date();
     base.setDate(base.getDate() + 1);
+    if (blockTuesdays && base.getDay() === 2) {
+      base.setDate(base.getDate() + 1);
+    }
     const y = base.getFullYear();
     const m = String(base.getMonth() + 1).padStart(2, '0');
     const d = String(base.getDate()).padStart(2, '0');
@@ -270,6 +278,22 @@ export default function CustomDatePicker({
 
               const isSelected = value === dateStr;
               const isToday = todayStr === dateStr;
+              const dateObj = new Date(viewYear, viewMonth, day);
+              const isTuesday = dateObj.getDay() === 2;
+
+              if (blockTuesdays && isTuesday) {
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    disabled={true}
+                    title="Tuesday is a Holiday / Factory Closed"
+                    className="h-8 w-8 mx-auto flex items-center justify-center rounded-xl text-xs font-semibold text-slate-300 bg-slate-50/70 cursor-not-allowed line-through"
+                  >
+                    {day}
+                  </button>
+                );
+              }
 
               return (
                 <button
@@ -291,17 +315,23 @@ export default function CustomDatePicker({
           </div>
 
           {/* Calendar Action Footer */}
-          <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-3 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                onChange(todayStr);
-                setIsOpen(false);
-              }}
-              className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-colors cursor-pointer"
-            >
-              Today
-            </button>
+          <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-3 gap-2 flex-wrap">
+            {blockTuesdays ? (
+              <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                Tuesday: Closed
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(todayStr);
+                  setIsOpen(false);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-colors cursor-pointer"
+              >
+                Today
+              </button>
+            )}
 
             {allowAll && (
               <button

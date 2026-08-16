@@ -128,9 +128,6 @@ export default function PosClient() {
   const {
     isConnected: isPrinterConnected,
     printerType,
-    printerName: printerDeviceName,
-    connectUsbPrinter: handleConnectUsbPrinter,
-    connectBluetoothPrinter: handleConnectBluetoothPrinter,
     printReceipt,
     printWindow,
   } = usePrinter();
@@ -678,32 +675,6 @@ export default function PosClient() {
                 {savedBills.length}
               </span>
             )}
-          </button>
-
-          {/* USB Printer Button */}
-          <button
-            onClick={handleConnectUsbPrinter}
-            className={`h-8 px-3 text-xs font-semibold rounded-lg border shadow-2xs inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
-              isPrinterConnected && printerType === 'USB'
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
-            }`}
-          >
-            <Usb size={14} className={printerType === 'USB' ? 'text-emerald-600' : 'text-slate-500'} />
-            <span>{printerType === 'USB' && isPrinterConnected ? 'USB Connected' : 'USB Printer'}</span>
-          </button>
-
-          {/* Bluetooth Printer Button */}
-          <button
-            onClick={handleConnectBluetoothPrinter}
-            className={`h-8 px-3 text-xs font-semibold rounded-lg border shadow-2xs inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
-              isPrinterConnected && printerType === 'Bluetooth'
-                ? 'bg-indigo-50 text-indigo-800 border-indigo-300'
-                : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
-            }`}
-          >
-            <Bluetooth size={14} className={printerType === 'Bluetooth' ? 'text-indigo-600' : 'text-slate-500'} />
-            <span>{printerType === 'Bluetooth' && isPrinterConnected ? printerDeviceName : 'Bluetooth Printer'}</span>
           </button>
 
           {/* Barcode Scanner Reader Active Indicator */}

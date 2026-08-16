@@ -137,6 +137,7 @@ export interface OrderRecord {
   shrinkChargesTotal?: number;
   packetChargesTotal?: number;
   packingCharges?: number;
+  noOfBoxes?: number;
   additionalCharges?: number;
   discountAmount?: number;
   totalAmount: number;
@@ -704,7 +705,7 @@ export default function OrdersClient() {
       setShrinkType(order.customisationDetails.shrinkType || (order.customisationDetails.hasShrink ? (activeShrinks[0]?.name || 'Standard Shrink Wrap') : 'None'));
       setStickerType(order.customisationDetails.stickerType || (order.customisationDetails.hasSticker ? (activeStickers[0]?.name || 'Custom Brand Sticker') : 'None'));
     } else {
-      setNoOfBoxes(1);
+      setNoOfBoxes(order.noOfBoxes || (globalSettings.globalPackingBoxPrice > 0 && order.packingCharges ? Math.round(order.packingCharges / globalSettings.globalPackingBoxPrice) : 1));
       setBoxType(activeBoxes[0]?.name || 'HandleBox');
       setBoxImageUrl('');
       setShrinkType('None');
@@ -846,7 +847,7 @@ export default function OrdersClient() {
   const stickerChargesTotal = isCustomisation && stickerType !== 'None' ? Math.max(0, noOfBoxes) * selectedStickerPrice : 0;
   const shrinkChargesTotal = isCustomisation && shrinkType !== 'None' ? Math.max(0, noOfBoxes) * selectedShrinkPrice : 0;
 
-  const pCharges = !isCustomisation ? parseFloat(packingCharges) || 0 : 0;
+  const pCharges = !isCustomisation ? Math.max(0, noOfBoxes) * globalSettings.globalPackingBoxPrice : 0;
   const addCharges = !isCustomisation ? parseFloat(additionalCharges) || 0 : 0;
   const discountVal = parseFloat(discountAmount) || 0;
 
@@ -952,6 +953,7 @@ export default function OrdersClient() {
           items: validItems,
           totalItems: validItems.length,
           subTotal: subTotal,
+          noOfBoxes: noOfBoxes,
           boxChargesTotal: isCustomisation ? boxChargesTotal : 0,
           stickerChargesTotal: isCustomisation ? stickerChargesTotal : 0,
           shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
@@ -998,6 +1000,7 @@ export default function OrdersClient() {
           items: validItems,
           totalItems: validItems.length,
           subTotal: subTotal,
+          noOfBoxes: noOfBoxes,
           boxChargesTotal: isCustomisation ? boxChargesTotal : 0,
           stickerChargesTotal: isCustomisation ? stickerChargesTotal : 0,
           shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
@@ -2442,18 +2445,43 @@ export default function OrdersClient() {
                       </>
                     ) : (
                       <>
-                        <div className="pt-2 space-y-2.5">
+                        <div className="flex justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-500 font-semibold">
+                            Packing Charges ({noOfBoxes} boxes × ₹{globalSettings.globalPackingBoxPrice}):
+                          </span>
+                          <span className="font-bold text-slate-800">
+                            + ₹ {pCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+
+                        <div className="pt-2 space-y-3">
                           <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1">Packing Charges (₹)</label>
-                            <input
-                              type="number"
-                              step="1"
-                              min="0"
-                              placeholder="0"
-                              value={packingCharges}
-                              onChange={(e) => setPackingCharges(e.target.value)}
-                              className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
-                            />
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-xs font-bold text-slate-700">No. of Packing Boxes</label>
+                              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                                @ ₹{globalSettings.globalPackingBoxPrice}/box
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={noOfBoxes}
+                                onChange={(e) => {
+                                  const val = Math.max(0, parseInt(e.target.value) || 0);
+                                  setNoOfBoxes(val);
+                                }}
+                                placeholder="1"
+                                className="w-24 px-3 py-2 text-xs sm:text-sm font-bold border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50"
+                              />
+                              <div className="flex-1 px-3 py-2 text-xs font-bold border border-slate-200 bg-slate-50 rounded-xl flex items-center justify-between text-slate-700">
+                                <span className="text-slate-400 font-medium">Packing Charge:</span>
+                                <span className="font-extrabold text-slate-900">
+                                  + ₹ {(Math.max(0, noOfBoxes) * globalSettings.globalPackingBoxPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            </div>
                           </div>
 
                           <div>

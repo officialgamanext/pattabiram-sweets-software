@@ -332,6 +332,23 @@ export default function ManufacturingPortalClient() {
     });
   }, [filteredOrders, selectedUnit, searchTerm, itemInfoMap]);
 
+  // Helper to remove any undefined fields before writing to Firestore
+  const sanitizeForFirestore = (obj: any): any => {
+    if (obj === undefined) return null;
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) {
+      return obj.map(sanitizeForFirestore);
+    }
+    const clean: any = {};
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val !== undefined) {
+        clean[key] = sanitizeForFirestore(val);
+      }
+    }
+    return clean;
+  };
+
   // Update item-level mfgStatus for an entire batch or single item
   const handleBatchUpdateItemMfgStatus = async (itemSummary: AggregatedItemSummary, targetMfgStatus: 'Manufacturing Started' | 'Moved to Packing') => {
     try {
@@ -345,29 +362,34 @@ export default function ManufacturingPortalClient() {
         const fullOrder = orders.find((o) => o.id === ordId);
         if (!fullOrder || !fullOrder.items) return;
 
-        const updatedItems: OrderItemLine[] = fullOrder.items.map((it) => {
+        const updatedItems = fullOrder.items.map((it) => {
           const name = (it.itemName || (it as any).name || '').toLowerCase().trim();
           const targetName = (itemSummary.itemName || '').toLowerCase().trim();
-          if (name && targetName && name === targetName) {
-            return {
-              ...it,
-              mfgStatus: targetMfgStatus,
-              pckStatus: targetMfgStatus === 'Moved to Packing' ? (it.pckStatus || 'Pending') : it.pckStatus
-            };
-          }
-          return it;
+          const isTarget = name && targetName && name === targetName;
+
+          const newMfgStatus = isTarget ? targetMfgStatus : (it.mfgStatus || 'Pending');
+          const newPckStatus = isTarget && targetMfgStatus === 'Moved to Packing'
+            ? (it.pckStatus || 'Pending')
+            : (it.pckStatus || 'Pending');
+
+          const updated: any = {
+            ...it,
+            mfgStatus: newMfgStatus,
+            pckStatus: newPckStatus,
+          };
+          return sanitizeForFirestore(updated);
         });
 
         // Determine overall order status
         const allItemsMovedToPacking = updatedItems.every(
-          (it) => it.mfgStatus === 'Moved to Packing'
+          (it: any) => it.mfgStatus === 'Moved to Packing'
         );
 
         const anyItemStarted = updatedItems.some(
-          (it) => it.mfgStatus === 'Manufacturing Started' || it.mfgStatus === 'Moved to Packing'
+          (it: any) => it.mfgStatus === 'Manufacturing Started' || it.mfgStatus === 'Moved to Packing'
         );
 
-        let newOrderStatus = fullOrder.orderStatus;
+        let newOrderStatus = fullOrder.orderStatus || 'Order Created';
         if (allItemsMovedToPacking) {
           newOrderStatus = 'Moved to Packing';
         } else if (anyItemStarted && fullOrder.orderStatus !== 'Moved to Packing') {
@@ -375,11 +397,11 @@ export default function ManufacturingPortalClient() {
         }
 
         const orderRef = doc(db, 'orders', ordId);
-        batch.update(orderRef, {
+        batch.update(orderRef, sanitizeForFirestore({
           items: updatedItems,
           orderStatus: newOrderStatus,
           updatedAt: serverTimestamp()
-        });
+        }));
       });
 
       await batch.commit();
@@ -397,39 +419,44 @@ export default function ManufacturingPortalClient() {
       const fullOrder = orders.find((o) => o.id === orderId);
       if (!fullOrder || !fullOrder.items) return;
 
-      const updatedItems: OrderItemLine[] = fullOrder.items.map((it) => {
+      const updatedItems = fullOrder.items.map((it) => {
         const name = (it.itemName || (it as any).name || '').toLowerCase().trim();
         const targetName = (itemNameToUpdate || '').toLowerCase().trim();
-        if (name && targetName && name === targetName) {
-          return {
-            ...it,
-            mfgStatus: targetMfgStatus,
-            pckStatus: targetMfgStatus === 'Moved to Packing' ? (it.pckStatus || 'Pending') : it.pckStatus
-          };
-        }
-        return it;
+        const isTarget = name && targetName && name === targetName;
+
+        const newMfgStatus = isTarget ? targetMfgStatus : (it.mfgStatus || 'Pending');
+        const newPckStatus = isTarget && targetMfgStatus === 'Moved to Packing'
+          ? (it.pckStatus || 'Pending')
+          : (it.pckStatus || 'Pending');
+
+        const updated: any = {
+          ...it,
+          mfgStatus: newMfgStatus,
+          pckStatus: newPckStatus,
+        };
+        return sanitizeForFirestore(updated);
       });
 
       const allItemsMovedToPacking = updatedItems.every(
-        (it) => it.mfgStatus === 'Moved to Packing'
+        (it: any) => it.mfgStatus === 'Moved to Packing'
       );
 
       const anyItemStarted = updatedItems.some(
-        (it) => it.mfgStatus === 'Manufacturing Started' || it.mfgStatus === 'Moved to Packing'
+        (it: any) => it.mfgStatus === 'Manufacturing Started' || it.mfgStatus === 'Moved to Packing'
       );
 
-      let newOrderStatus = fullOrder.orderStatus;
+      let newOrderStatus = fullOrder.orderStatus || 'Order Created';
       if (allItemsMovedToPacking) {
         newOrderStatus = 'Moved to Packing';
       } else if (anyItemStarted && fullOrder.orderStatus !== 'Moved to Packing') {
         newOrderStatus = 'Manufacturing Started';
       }
 
-      await updateDoc(doc(db, 'orders', orderId), {
+      await updateDoc(doc(db, 'orders', orderId), sanitizeForFirestore({
         items: updatedItems,
         orderStatus: newOrderStatus,
         updatedAt: serverTimestamp()
-      });
+      }));
     } catch (err) {
       console.error('Failed single item status update:', err);
     } finally {

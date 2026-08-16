@@ -293,6 +293,23 @@ export default function PackingPortalClient() {
     });
   }, [orders, selectedUnit, searchTerm, itemInfoMap]);
 
+  // Helper to remove any undefined fields before writing to Firestore
+  const sanitizeForFirestore = (obj: any): any => {
+    if (obj === undefined) return null;
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) {
+      return obj.map(sanitizeForFirestore);
+    }
+    const clean: any = {};
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val !== undefined) {
+        clean[key] = sanitizeForFirestore(val);
+      }
+    }
+    return clean;
+  };
+
   // Update item-level pckStatus for batch
   const handleBatchUpdateItemPckStatus = async (itemSummary: AggregatedPackingSummary, targetPckStatus: 'Packing Started' | 'Moved to Store') => {
     try {
@@ -305,28 +322,32 @@ export default function PackingPortalClient() {
         const fullOrder = orders.find((o) => o.id === ordId);
         if (!fullOrder || !fullOrder.items) return;
 
-        const updatedItems: OrderItemLine[] = fullOrder.items.map((it) => {
+        const updatedItems = fullOrder.items.map((it) => {
           const name = (it.itemName || (it as any).name || '').toLowerCase().trim();
           const targetName = (itemSummary.itemName || '').toLowerCase().trim();
-          if (name && targetName && name === targetName) {
-            return {
-              ...it,
-              pckStatus: targetPckStatus
-            };
-          }
-          return it;
+          const isTarget = name && targetName && name === targetName;
+
+          const newPckStatus = isTarget ? targetPckStatus : (it.pckStatus || 'Pending');
+          const newMfgStatus = it.mfgStatus || 'Moved to Packing';
+
+          const updated: any = {
+            ...it,
+            mfgStatus: newMfgStatus,
+            pckStatus: newPckStatus,
+          };
+          return sanitizeForFirestore(updated);
         });
 
         // Determine overall order status
         const allItemsMovedToStore = updatedItems.every(
-          (it) => it.pckStatus === 'Moved to Store'
+          (it: any) => it.pckStatus === 'Moved to Store'
         );
 
         const anyItemPackingStarted = updatedItems.some(
-          (it) => it.pckStatus === 'Packing Started' || it.pckStatus === 'Moved to Store'
+          (it: any) => it.pckStatus === 'Packing Started' || it.pckStatus === 'Moved to Store'
         );
 
-        let newOrderStatus = fullOrder.orderStatus;
+        let newOrderStatus = fullOrder.orderStatus || 'Moved to Packing';
         if (allItemsMovedToStore) {
           newOrderStatus = 'Moved to Store';
         } else if (anyItemPackingStarted && fullOrder.orderStatus !== 'Moved to Store') {
@@ -334,11 +355,11 @@ export default function PackingPortalClient() {
         }
 
         const orderRef = doc(db, 'orders', ordId);
-        batch.update(orderRef, {
+        batch.update(orderRef, sanitizeForFirestore({
           items: updatedItems,
           orderStatus: newOrderStatus,
           updatedAt: serverTimestamp()
-        });
+        }));
       });
 
       await batch.commit();
@@ -356,38 +377,42 @@ export default function PackingPortalClient() {
       const fullOrder = orders.find((o) => o.id === orderId);
       if (!fullOrder || !fullOrder.items) return;
 
-      const updatedItems: OrderItemLine[] = fullOrder.items.map((it) => {
+      const updatedItems = fullOrder.items.map((it) => {
         const name = (it.itemName || (it as any).name || '').toLowerCase().trim();
         const targetName = (itemNameToUpdate || '').toLowerCase().trim();
-        if (name && targetName && name === targetName) {
-          return {
-            ...it,
-            pckStatus: targetPckStatus
-          };
-        }
-        return it;
+        const isTarget = name && targetName && name === targetName;
+
+        const newPckStatus = isTarget ? targetPckStatus : (it.pckStatus || 'Pending');
+        const newMfgStatus = it.mfgStatus || 'Moved to Packing';
+
+        const updated: any = {
+          ...it,
+          mfgStatus: newMfgStatus,
+          pckStatus: newPckStatus,
+        };
+        return sanitizeForFirestore(updated);
       });
 
       const allItemsMovedToStore = updatedItems.every(
-        (it) => it.pckStatus === 'Moved to Store'
+        (it: any) => it.pckStatus === 'Moved to Store'
       );
 
       const anyItemPackingStarted = updatedItems.some(
-        (it) => it.pckStatus === 'Packing Started' || it.pckStatus === 'Moved to Store'
+        (it: any) => it.pckStatus === 'Packing Started' || it.pckStatus === 'Moved to Store'
       );
 
-      let newOrderStatus = fullOrder.orderStatus;
+      let newOrderStatus = fullOrder.orderStatus || 'Moved to Packing';
       if (allItemsMovedToStore) {
         newOrderStatus = 'Moved to Store';
       } else if (anyItemPackingStarted && fullOrder.orderStatus !== 'Moved to Store') {
         newOrderStatus = 'Packing Started';
       }
 
-      await updateDoc(doc(db, 'orders', orderId), {
+      await updateDoc(doc(db, 'orders', orderId), sanitizeForFirestore({
         items: updatedItems,
         orderStatus: newOrderStatus,
         updatedAt: serverTimestamp()
-      });
+      }));
     } catch (err) {
       console.error('Failed single item packing update:', err);
     } finally {

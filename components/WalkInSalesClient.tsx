@@ -185,13 +185,20 @@ export default function WalkInSalesClient() {
         customerPhone: targetSale.customerMobile || '-',
         paymentMode: targetSale.paymentMode,
         orderType: targetSale.orderType || 'Walk-in POS',
-        items: (targetSale.items || []).map((it: any) => ({
-          name: it.name || it.itemName || 'Item',
-          qty: it.quantity || 1,
-          unit: it.unit || 'kg',
-          price: it.price || 0,
-          total: it.amount || (it.quantity || 1) * (it.price || 0),
-        })),
+        items: (targetSale.items || []).map((it: any) => {
+          const qty = parseFloat(it.quantity || it.qty || 1) || 1;
+          let price = parseFloat(it.price || it.rate || it.itemPrice || it.unitPrice || 0) || 0;
+          let total = parseFloat(it.amount || it.total || it.subTotal || it.itemTotal || 0) || 0;
+          if (!total && price > 0) total = price * qty;
+          if (!price && total > 0 && qty > 0) price = total / qty;
+          return {
+            name: it.name || it.itemName || it.item || 'Item',
+            qty: qty,
+            unit: it.unit || 'kg',
+            price: price,
+            total: total || (price * qty),
+          };
+        }),
         subtotal: targetSale.subtotal || targetSale.totalAmount,
         tax: targetSale.tax || 0,
         discount: targetSale.discount || 0,

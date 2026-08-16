@@ -258,13 +258,20 @@ export default function OrdersClient() {
 
   const handlePrintOrderSlip = async (order: OrderRecord) => {
     if (!order) return;
-    const orderItems = (order.items || []).map((it: any) => ({
-      name: it.itemName || it.name || 'Item',
-      qty: it.quantity || 1,
-      unit: it.unit || 'kg',
-      price: it.price || 0,
-      total: it.amount || it.total || (it.quantity || 1) * (it.price || 0),
-    }));
+    const orderItems = (order.items || []).map((it: any) => {
+      const qty = parseFloat(it.quantity || it.qty || 1) || 1;
+      let price = parseFloat(it.price || it.rate || it.itemPrice || it.unitPrice || 0) || 0;
+      let total = parseFloat(it.amount || it.total || it.subTotal || it.itemTotal || 0) || 0;
+      if (!total && price > 0) total = price * qty;
+      if (!price && total > 0 && qty > 0) price = total / qty;
+      return {
+        name: it.itemName || it.name || it.item || 'Item',
+        qty: qty,
+        unit: it.unit || 'kg',
+        price: price,
+        total: total || (price * qty),
+      };
+    });
 
     if (isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
       await printReceipt({
@@ -285,9 +292,13 @@ export default function OrdersClient() {
         subtotal: order.subTotal || order.totalAmount,
         discount: order.discountAmount || 0,
         tax: 0,
-        packingCharges: order.packingCharges || 0,
         boxCharges: order.boxChargesTotal || 0,
-        additionalCharges: (order.additionalCharges || 0) + (order.packetChargesTotal || 0) + (order.stickerChargesTotal || 0) + (order.shrinkChargesTotal || 0),
+        boxDetails: order.isCustomisation && order.customisationDetails?.noOfBoxes ? `${order.customisationDetails.noOfBoxes}xRs.${order.customisationDetails.boxPrice || 0}` : undefined,
+        stickerCharges: order.stickerChargesTotal || 0,
+        shrinkCharges: order.shrinkChargesTotal || 0,
+        packetCharges: order.packetChargesTotal || 0,
+        packingCharges: order.packingCharges || 0,
+        additionalCharges: order.additionalCharges || 0,
         grandTotal: order.totalAmount,
         footerNote: 'Order verified & recorded. Thank you!',
       });

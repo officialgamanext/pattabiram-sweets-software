@@ -1,7 +1,7 @@
 /**
  * ESC/POS Thermal Receipt Printer Command Generator
- * Supports 58mm (32 cols) and 80mm (48 cols) standard thermal printers
- * Compatible with WebUSB, Web Serial, and Web Bluetooth ESC/POS printers
+ * Supports 2-inch (58mm / 32 columns) and 3-inch (80mm / 48 columns) printers
+ * Auto-adapts font sizing, word wrapping, tabular alignments, and totals
  */
 
 export interface ReceiptItem {
@@ -31,23 +31,68 @@ export interface ReceiptData {
   subtotal: number;
   tax?: number;
   discount?: number;
+  boxCharges?: number;
+  boxDetails?: string;
+  stickerCharges?: number;
+  shrinkCharges?: number;
+  packetCharges?: number;
   packingCharges?: number;
   additionalCharges?: number;
-  boxCharges?: number;
   grandTotal: number;
   footerNote?: string;
   cashierName?: string;
+}
+
+/**
+ * Word wrap helper that breaks strings cleanly at word boundaries
+ */
+export function wrapText(text: string, maxWidth: number): string[] {
+  if (!text) return [];
+  const words = text.toString().trim().split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    if (!currentLine) {
+      if (word.length > maxWidth) {
+        for (let i = 0; i < word.length; i += maxWidth) {
+          lines.push(word.substring(i, i + maxWidth));
+        }
+      } else {
+        currentLine = word;
+      }
+    } else if (currentLine.length + 1 + word.length <= maxWidth) {
+      currentLine += ' ' + word;
+    } else {
+      lines.push(currentLine);
+      if (word.length > maxWidth) {
+        for (let i = 0; i < word.length; i += maxWidth) {
+          if (i + maxWidth < word.length) {
+            lines.push(word.substring(i, i + maxWidth));
+          } else {
+            currentLine = word.substring(i);
+          }
+        }
+      } else {
+        currentLine = word;
+      }
+    }
+  }
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  return lines;
 }
 
 export class EscPosBuilder {
   private buffer: number[] = [];
   private paperWidth: '58mm' | '80mm';
 
-  constructor(paperWidth: '58mm' | '80mm' = '80mm') {
+  constructor(paperWidth: '58mm' | '80mm' = '58mm') {
     this.paperWidth = paperWidth;
   }
 
-  // Column width helper
+  // Column width helper (58mm = 32 cols, 80mm = 48 cols)
   public get maxColumns(): number {
     return this.paperWidth === '58mm' ? 32 : 48;
   }
@@ -92,17 +137,17 @@ export class EscPosBuilder {
   }
 
   public doubleHeight(enable: boolean = true): EscPosBuilder {
-    this.buffer.push(0x1d, 0x21, enable ? 0x01 : 0x00);
+    this.buffer.push(0x1d, 0x21, enable ? 0x01 : 0x00); // GS ! 0x01 = double height only
+    return this;
+  }
+
+  public doubleWidth(enable: boolean = true): EscPosBuilder {
+    this.buffer.push(0x1d, 0x21, enable ? 0x10 : 0x00); // GS ! 0x10 = double width only
     return this;
   }
 
   public underline(mode: 0 | 1 | 2 = 0): EscPosBuilder {
     this.buffer.push(0x1b, 0x2d, mode);
-    return this;
-  }
-
-  public invert(enable: boolean = true): EscPosBuilder {
-    this.buffer.push(0x1d, 0x42, enable ? 0x01 : 0x00);
     return this;
   }
 
@@ -130,38 +175,47 @@ export class EscPosBuilder {
     return this;
   }
 
-  // Draw separator line
+  // Centered text with automatic word wrapping
+  public textLineCentered(str: string): EscPosBuilder {
+    const lines = wrapText(str, this.maxColumns);
+    for (const l of lines) {
+      const pad = Math.max(0, Math.floor((this.maxColumns - l.length) / 2));
+      this.textLine(' '.repeat(pad) + l);
+    }
+    return this;
+  }
+
+  // Left-aligned text with automatic word wrapping
+  public textLineWrapped(str: string, indent: number = 0): EscPosBuilder {
+    const lines = wrapText(str, this.maxColumns - indent);
+    const padStr = ' '.repeat(indent);
+    for (const l of lines) {
+      this.textLine(padStr + l);
+    }
+    return this;
+  }
+
+  // Draw clean divider line
   public drawLine(char: string = '-'): EscPosBuilder {
     const line = char.repeat(this.maxColumns);
     return this.textLine(line);
   }
 
-  // Draw 2-column key-value row (e.g. "Subtotal" ............ "Rs. 450.00")
+  // Draw 2-column key-value row with automatic right alignment & clean overflow handling
   public row2(left: string, right: string): EscPosBuilder {
     const cols = this.maxColumns;
-    const spaceCount = Math.max(1, cols - left.length - right.length);
-    const line = left + ' '.repeat(spaceCount) + right;
-    return this.textLine(line.substring(0, cols));
-  }
-
-  // Draw 3-column row for table items (Item, Qty, Total)
-  public rowItem(name: string, qtyStr: string, totalStr: string): EscPosBuilder {
-    if (this.paperWidth === '58mm') {
-      // 58mm: 32 columns -> Name: 16, Qty: 6, Total: 10
-      const n = name.padEnd(16).substring(0, 16);
-      const q = qtyStr.padStart(6).substring(0, 6);
-      const t = totalStr.padStart(10).substring(0, 10);
-      return this.textLine(`${n}${q}${t}`);
+    if (left.length + right.length + 1 <= cols) {
+      const spaceCount = cols - left.length - right.length;
+      return this.textLine(left + ' '.repeat(spaceCount) + right);
     } else {
-      // 80mm: 48 columns -> Name: 26, Qty: 10, Total: 12
-      const n = name.padEnd(26).substring(0, 26);
-      const q = qtyStr.padStart(10).substring(0, 10);
-      const t = totalStr.padStart(12).substring(0, 12);
-      return this.textLine(`${n}${q}${t}`);
+      // If combined length overflows, print left on first line and right-aligned right on second line
+      this.textLine(left);
+      const pad = Math.max(0, cols - right.length);
+      return this.textLine(' '.repeat(pad) + right);
     }
   }
 
-  // Cut Paper (Full or Partial)
+  // Cut Paper
   public cut(partial: boolean = false): EscPosBuilder {
     this.feed(3);
     this.buffer.push(0x1d, 0x56, partial ? 0x01 : 0x00);
@@ -174,22 +228,22 @@ export class EscPosBuilder {
     return this;
   }
 
-  // Open Cash Drawer (if supported by printer RJ11 port)
+  // Open Cash Drawer
   public openCashDrawer(): EscPosBuilder {
     this.buffer.push(0x1b, 0x70, 0x00, 0x19, 0xfa);
     return this;
   }
 
-  // Return generated Uint8Array
+  // Return Uint8Array bytes
   public toUint8Array(): Uint8Array {
     return new Uint8Array(this.buffer);
   }
 }
 
 /**
- * Generate a complete Pattabiram Sweets Test Print ESC/POS receipt
+ * Generate a complete Test Print ESC/POS receipt
  */
-export function generateTestReceipt(paperWidth: '58mm' | '80mm' = '80mm'): Uint8Array {
+export function generateTestReceipt(paperWidth: '58mm' | '80mm' = '58mm'): Uint8Array {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-IN', {
     day: '2-digit',
@@ -203,47 +257,83 @@ export function generateTestReceipt(paperWidth: '58mm' | '80mm' = '80mm'): Uint8
   });
 
   const builder = new EscPosBuilder(paperWidth);
+  const is2Inch = paperWidth === '58mm';
+
+  builder.init().alignCenter().bold(true);
+
+  if (is2Inch) {
+    builder.doubleHeight(true).textLineCentered('PATTABIRAM SWEETS').doubleHeight(false);
+  } else {
+    builder.doubleSize(true).textLineCentered('PATTABIRAM SWEETS').doubleSize(false);
+  }
 
   builder
-    .init()
-    .alignCenter()
-    .bold(true)
-    .doubleSize(true)
-    .textLine('PATTABIRAM SWEETS')
-    .doubleSize(false)
     .bold(false)
-    .textLine('Traditional Taste of Tradition')
-    .textLine('Thermal Printer Test Receipt')
-    .textLine('--------------------------------')
+    .textLineCentered('Traditional Taste of Tradition')
+    .textLineCentered(`Thermal Test (${is2Inch ? '2 Inch / 58mm' : '3 Inch / 80mm'})`)
+    .drawLine('=')
     .alignLeft()
-    .textLine(`Date: ${dateStr}  Time: ${timeStr}`)
-    .textLine(`Format: ESC/POS Thermal (${paperWidth})`)
+    .textLine(`Date: ${dateStr} ${timeStr}`)
     .textLine(`Port: Web USB / Bluetooth BLE`)
     .textLine(`Status: Ready & Online`)
+    .drawLine('-');
+
+  if (is2Inch) {
+    // 2-inch clean header
+    builder.bold(true).row2('ITEM / QTY', 'AMOUNT').bold(false).drawLine('-');
+    
+    // Sample items in 2-line layout
+    builder.textLine('Pattabiram Special Halwa');
+    builder.row2('  1 Kg @ Rs.480.00', 'Rs.480.00');
+
+    builder.textLine('Kaju Katli (Pure Ghee)');
+    builder.row2('  500 g @ Rs.900.00', 'Rs.450.00');
+
+    builder.textLine('Butter Murukku Mixture');
+    builder.row2('  250 g @ Rs.440.00', 'Rs.110.00');
+  } else {
+    // 3-inch 4-column layout
+    builder.bold(true);
+    const hName = 'ITEM DESCRIPTION'.padEnd(24).substring(0, 24);
+    const hQty = 'QTY'.padStart(8).substring(0, 8);
+    const hRate = 'RATE'.padStart(7).substring(0, 7);
+    const hTotal = 'TOTAL'.padStart(9).substring(0, 9);
+    builder.textLine(`${hName}${hQty}${hRate}${hTotal}`).bold(false).drawLine('-');
+
+    const r1N = 'Special Halwa'.padEnd(24).substring(0, 24);
+    const r1Q = '1.00 Kg'.padStart(8).substring(0, 8);
+    const r1R = '480.00'.padStart(7).substring(0, 7);
+    const r1T = '480.00'.padStart(9).substring(0, 9);
+    builder.textLine(`${r1N}${r1Q}${r1R}${r1T}`);
+
+    const r2N = 'Kaju Katli'.padEnd(24).substring(0, 24);
+    const r2Q = '500 g'.padStart(8).substring(0, 8);
+    const r2R = '900.00'.padStart(7).substring(0, 7);
+    const r2T = '450.00'.padStart(9).substring(0, 9);
+    builder.textLine(`${r2N}${r2Q}${r2R}${r2T}`);
+  }
+
+  builder
+    .drawLine('-')
+    .row2('Sub Total:', 'Rs.1040.00')
+    .row2('GST (5% Included):', 'Rs.52.00')
     .drawLine('=')
-    .bold(true)
-    .rowItem('Item Description', 'Qty', 'Amount')
-    .bold(false)
-    .drawLine('-')
-    .rowItem('Pattabiram Special Halwa', '1 kg', 'Rs. 480.00')
-    .rowItem('Kaju Katli (Pure Ghee)', '500 g', 'Rs. 450.00')
-    .rowItem('Motichoor Laddu', '1 kg', 'Rs. 320.00')
-    .rowItem('Butter Murukku Mixture', '250 g', 'Rs. 110.00')
-    .drawLine('-')
-    .bold(true)
-    .row2('Subtotal:', 'Rs. 1,360.00')
-    .row2('GST (5% Included):', 'Rs. 68.00')
-    .doubleHeight(true)
-    .row2('TEST GRAND TOTAL:', 'Rs. 1,360.00')
-    .doubleHeight(false)
+    .bold(true);
+
+  if (is2Inch) {
+    builder.doubleHeight(true).row2('NET TOTAL:', 'Rs.1040.00').doubleHeight(false);
+  } else {
+    builder.doubleHeight(true).row2('NET TOTAL AMOUNT:', 'Rs.1040.00').doubleHeight(false);
+  }
+
+  builder
     .bold(false)
     .drawLine('=')
     .alignCenter()
     .bold(true)
-    .textLine('*** PRINTER HARDWARE TEST PASSED ***')
+    .textLineCentered('*** HARDWARE TEST PASSED ***')
     .bold(false)
-    .textLine('High Speed ESC/POS Thermal Printing')
-    .textLine('Powered by Pattabiram Software')
+    .textLineCentered('Powered by Pattabiram Software')
     .feed(2)
     .cut()
     .beep(1);
@@ -253,12 +343,14 @@ export function generateTestReceipt(paperWidth: '58mm' | '80mm' = '80mm'): Uint8
 
 /**
  * Generate formatted ESC/POS bytes from bill data
+ * Auto-scales cleanly for 2-inch (58mm) and 3-inch (80mm) widths
  */
 export function generateReceiptEscPos(
   data: ReceiptData,
-  paperWidth: '58mm' | '80mm' = '80mm'
+  paperWidth: '58mm' | '80mm' = '58mm'
 ): Uint8Array {
   const builder = new EscPosBuilder(paperWidth);
+  const is2Inch = paperWidth === '58mm';
 
   const now = new Date();
   const dateStr =
@@ -276,96 +368,164 @@ export function generateReceiptEscPos(
       hour12: true,
     });
 
-  builder
-    .init()
-    .alignCenter()
-    .bold(true)
-    .doubleSize(true)
-    .textLine(data.storeName || 'PATTABIRAM SWEETS')
-    .doubleSize(false)
-    .bold(false);
+  // 1. STORE HEADER
+  builder.init().alignCenter().bold(true);
+
+  if (is2Inch) {
+    // 2-inch: Double height only ensures "PATTABIRAM SWEETS" fits cleanly on a single centered line
+    builder.doubleHeight(true).textLineCentered(data.storeName || 'PATTABIRAM SWEETS').doubleHeight(false);
+  } else {
+    builder.doubleSize(true).textLineCentered(data.storeName || 'PATTABIRAM SWEETS').doubleSize(false);
+  }
+
+  builder.bold(false);
 
   if (data.storeAddress) {
-    builder.textLine(data.storeAddress);
+    builder.textLineCentered(data.storeAddress);
   }
   if (data.storePhone) {
-    builder.textLine(`Ph: ${data.storePhone}`);
+    builder.textLineCentered(`Ph: ${data.storePhone}`);
   }
   if (data.storeGst) {
-    builder.textLine(`GSTIN: ${data.storeGst}`);
+    builder.textLineCentered(`GSTIN: ${data.storeGst}`);
   }
 
-  builder
-    .drawLine('=')
-    .alignLeft()
-    .bold(true)
-    .textLine(`Bill No: ${data.billNo}`)
-    .bold(false)
-    .textLine(`Date: ${dateStr}  ${timeStr}`);
+  // 2. BILL / ORDER METADATA
+  builder.drawLine('=').alignLeft();
+
+  builder.bold(true).row2(`Bill: ${data.billNo}`, `${dateStr}`).bold(false);
+  builder.row2(`Time: ${timeStr}`, `Type: ${data.orderType || 'POS'}`);
 
   if (data.customerName || data.customerPhone) {
-    builder.textLine(`Customer: ${data.customerName || 'Walk-in'} (${data.customerPhone || 'N/A'})`);
+    const custName = data.customerName || 'Walk-in';
+    const custPhone = data.customerPhone && data.customerPhone !== '-' ? data.customerPhone : '';
+    if (custPhone) {
+      builder.textLineWrapped(`Customer: ${custName} (${custPhone})`);
+    } else {
+      builder.textLineWrapped(`Customer: ${custName}`);
+    }
   }
+
   if (data.slot || data.deliveryDate) {
-    const slotStr = data.slot ? `Slot: ${data.slot}` : '';
-    const delivStr = data.deliveryDate ? `Delivery: ${data.deliveryDate}` : '';
-    builder.textLine([slotStr, delivStr].filter(Boolean).join(' | '));
+    const slotText = data.slot ? `Slot: ${data.slot}` : '';
+    const delivText = data.deliveryDate ? `Del: ${data.deliveryDate}` : '';
+    if (slotText && delivText) {
+      builder.row2(slotText, delivText);
+    } else {
+      builder.textLine(slotText || delivText);
+    }
   }
+
   if (data.paymentMode || data.paymentStatus) {
-    const payStr = data.paymentMode ? `Payment: ${data.paymentMode}` : '';
-    const statusStr = data.paymentStatus ? `Status: ${data.paymentStatus}` : '';
-    builder.textLine([payStr, statusStr, `Type: ${data.orderType || 'POS'}`].filter(Boolean).join(' | '));
+    const payStr = `Pay: ${data.paymentMode || 'Cash'}`;
+    const statusStr = data.paymentStatus ? `(${data.paymentStatus})` : '';
+    builder.row2(`${payStr} ${statusStr}`.trim(), data.cashierName ? `Staff: ${data.cashierName}` : '');
   }
 
-  builder
-    .drawLine('-')
-    .bold(true)
-    .rowItem('Item', 'Qty', 'Total')
-    .bold(false)
-    .drawLine('-');
+  // 3. ITEM TABLE HEADER
+  builder.drawLine('-');
 
-  // Item List
-  data.items.forEach((item) => {
-    const qtyText = `${item.qty}${item.unit ? ' ' + item.unit : ''}`;
-    const totalText = `Rs.${item.total.toFixed(2)}`;
-    builder.rowItem(item.name, qtyText, totalText);
-  });
+  if (is2Inch) {
+    // 2-inch Table Header: 2-line layout
+    builder.bold(true).row2('ITEM / QTY & RATE', 'TOTAL').bold(false).drawLine('-');
 
-  builder
-    .drawLine('-')
-    .row2('Sub Total:', `Rs.${data.subtotal.toFixed(2)}`);
+    // Line items in 2-line layout
+    data.items.forEach((item) => {
+      builder.textLineWrapped(item.name);
+      const unitStr = item.unit ? ` ${item.unit}` : '';
+      const priceStr = item.price > 0 ? ` @ Rs.${item.price.toFixed(2)}` : '';
+      const qtyLine = `  ${item.qty}${unitStr}${priceStr}`;
+      const totalStr = `Rs.${item.total.toFixed(2)}`;
+      builder.row2(qtyLine, totalStr);
+    });
+  } else {
+    // 3-inch Table Header: 4-column layout
+    builder.bold(true);
+    const hName = 'ITEM DESCRIPTION'.padEnd(24).substring(0, 24);
+    const hQty = 'QTY'.padStart(8).substring(0, 8);
+    const hRate = 'RATE'.padStart(7).substring(0, 7);
+    const hTotal = 'TOTAL'.padStart(9).substring(0, 9);
+    builder.textLine(`${hName}${hQty}${hRate}${hTotal}`).bold(false).drawLine('-');
+
+    data.items.forEach((item) => {
+      const unitStr = item.unit ? ` ${item.unit}` : '';
+      const qtyText = `${item.qty}${unitStr}`;
+      const rateText = item.price > 0 ? item.price.toFixed(2) : '—';
+      const totalText = item.total.toFixed(2);
+
+      // If name is long, print on first line, then aligned values
+      if (item.name.length > 22) {
+        builder.textLine(item.name);
+        const padSpace = ' '.repeat(24);
+        const colQ = qtyText.padStart(8).substring(0, 8);
+        const colR = rateText.padStart(7).substring(0, 7);
+        const colT = totalText.padStart(9).substring(0, 9);
+        builder.textLine(`${padSpace}${colQ}${colR}${colT}`);
+      } else {
+        const colN = item.name.padEnd(24).substring(0, 24);
+        const colQ = qtyText.padStart(8).substring(0, 8);
+        const colR = rateText.padStart(7).substring(0, 7);
+        const colT = totalText.padStart(9).substring(0, 9);
+        builder.textLine(`${colN}${colQ}${colR}${colT}`);
+      }
+    });
+  }
+
+  // 4. TOTALS & CHARGES BREAKDOWN
+  builder.drawLine('-');
+
+  builder.row2('Sub Total:', `Rs.${data.subtotal.toFixed(2)}`);
+
+  if (data.boxCharges && data.boxCharges > 0) {
+    const boxLbl = data.boxDetails ? `Box Charges (${data.boxDetails}):` : 'Box Charges:';
+    builder.row2(boxLbl, `+Rs.${data.boxCharges.toFixed(2)}`);
+  }
+
+  if (data.stickerCharges && data.stickerCharges > 0) {
+    builder.row2('Sticker Charges:', `+Rs.${data.stickerCharges.toFixed(2)}`);
+  }
+
+  if (data.shrinkCharges && data.shrinkCharges > 0) {
+    builder.row2('Shrink Charges:', `+Rs.${data.shrinkCharges.toFixed(2)}`);
+  }
+
+  if (data.packetCharges && data.packetCharges > 0) {
+    builder.row2('Packet Charges:', `+Rs.${data.packetCharges.toFixed(2)}`);
+  }
+
+  if (data.packingCharges && data.packingCharges > 0) {
+    builder.row2('Packing Charges:', `+Rs.${data.packingCharges.toFixed(2)}`);
+  }
+
+  if (data.additionalCharges && data.additionalCharges > 0) {
+    builder.row2('Additional Charges:', `+Rs.${data.additionalCharges.toFixed(2)}`);
+  }
 
   if (data.discount && data.discount > 0) {
     builder.row2('Discount:', `-Rs.${data.discount.toFixed(2)}`);
   }
 
   if (data.tax && data.tax > 0) {
-    builder.row2('Tax / GST:', `Rs.${data.tax.toFixed(2)}`);
+    builder.row2('Tax / GST:', `+Rs.${data.tax.toFixed(2)}`);
   }
 
-  if (data.packingCharges && data.packingCharges > 0) {
-    builder.row2('Packing Charges:', `Rs.${data.packingCharges.toFixed(2)}`);
+  // 5. GRAND NET AMOUNT
+  builder.drawLine('=').bold(true);
+
+  if (is2Inch) {
+    // 2-inch: Bold and double height fits cleanly on 1 single line
+    builder.doubleHeight(true).row2('NET AMOUNT:', `Rs.${data.grandTotal.toFixed(2)}`).doubleHeight(false);
+  } else {
+    builder.doubleHeight(true).row2('NET GRAND TOTAL:', `Rs.${data.grandTotal.toFixed(2)}`).doubleHeight(false);
   }
 
-  if (data.boxCharges && data.boxCharges > 0) {
-    builder.row2('Box Charges:', `Rs.${data.boxCharges.toFixed(2)}`);
-  }
+  builder.bold(false).drawLine('=');
 
-  if (data.additionalCharges && data.additionalCharges > 0) {
-    builder.row2('Other Charges:', `Rs.${data.additionalCharges.toFixed(2)}`);
-  }
-
+  // 6. FOOTER
   builder
-    .drawLine('=')
-    .bold(true)
-    .doubleHeight(true)
-    .row2('NET AMOUNT:', `Rs.${data.grandTotal.toFixed(2)}`)
-    .doubleHeight(false)
-    .bold(false)
-    .drawLine('=')
     .alignCenter()
-    .textLine(data.footerNote || 'Thank you for visiting!')
-    .textLine('Please visit again')
+    .textLineCentered(data.footerNote || 'Thank you for visiting!')
+    .textLineCentered('Please visit again')
     .feed(2)
     .cut();
 

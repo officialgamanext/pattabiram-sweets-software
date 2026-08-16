@@ -1444,7 +1444,7 @@ export default function OrdersClient() {
                   <span className="font-extrabold text-sm text-slate-800">{slotTime}</span>
                   <div className="flex items-center gap-1.5">
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">
-                      {slotOrders.length} Orders
+                      {slotOrders.length}
                     </span>
                     {/* Analytics Button: Left of Plus Button */}
                     <button
@@ -1681,34 +1681,35 @@ export default function OrdersClient() {
         </div>
       )}
 
-      {/* ── 6. FULL SCREEN MODAL: CREATE ORDER (Clean POS Page Workspace) */}
+      {/* ── 6. FULL SCREEN MODAL: CREATE ORDER (Responsive Modern Mobile & Desktop Layout) */}
       {isAddOrderModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col overflow-hidden animate-in fade-in duration-150">
 
           {/* Modal Top Header Bar */}
-          <div className="bg-white border-b border-slate-200/80 px-6 sm:px-8 py-4 flex items-center justify-between shadow-2xs">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-                <ShoppingBag size={20} />
+          <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 md:px-8 py-3 sm:py-4 flex items-center justify-between shadow-2xs flex-shrink-0 z-30">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs flex-shrink-0">
+                <ShoppingBag size={18} className="sm:hidden" />
+                <ShoppingBag size={20} className="hidden sm:block" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
-                    {editingOrder ? `Edit Order ${editingOrder.code}` : 'Create New Order'}
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <h2 className="text-sm sm:text-lg font-black text-slate-900 tracking-tight truncate">
+                    {editingOrder ? `Edit #${editingOrder.code}` : 'Create Order'}
                   </h2>
-                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                  <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 whitespace-nowrap">
                     {orderSlot}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">Select customer, add products with quantities, and set payment details</p>
+                <p className="text-[11px] text-slate-500 hidden sm:block truncate">Select customer, add products with quantities, and set payment details</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => setIsAddOrderModalOpen(false)}
-                className="px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="hidden sm:inline-flex px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -1716,14 +1717,14 @@ export default function OrdersClient() {
                 type="button"
                 onClick={handleCreateOrderSubmit}
                 disabled={isSubmitting || !selectedCustomer || orderItems.length === 0}
-                className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
               >
-                {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                <span>{editingOrder ? 'Update Order' : 'Create Order'}</span>
+                {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                <span>{editingOrder ? 'Update' : 'Create'}</span>
               </button>
               <button
                 onClick={() => setIsAddOrderModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-[6px] h-[30px] w-[30px] flex items-center justify-center hover:bg-slate-100 transition-colors cursor-pointer ml-1"
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl h-8 w-8 flex items-center justify-center hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -1731,30 +1732,30 @@ export default function OrdersClient() {
           </div>
 
           {/* Modal Main Body: 2 Columns Layout */}
-          <div className="flex-1 overflow-y-auto p-6 sm:p-8 w-full">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-8 w-full pb-24 lg:pb-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 max-w-7xl mx-auto">
 
               {/* Left Column (8 Cols): Time Slot, Customer Search, Product Items Table */}
-              <div className="lg:col-span-8 space-y-6">
+              <div className="lg:col-span-8 space-y-4 sm:space-y-6">
 
                 {/* 1. Time Slot & Dates Selection */}
-                <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-4">
+                <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3 sm:space-y-4">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider">
                         Order Time Slot *
                       </label>
-                      <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                      <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
                         Required
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {SLOT_TIMES.map((slot) => (
                         <button
                           key={slot}
                           type="button"
                           onClick={() => setOrderSlot(slot)}
-                          className={`px-[8px] py-[4px] h-[34px] rounded-[6px] text-xs font-bold border transition-all cursor-pointer ${
+                          className={`py-2 px-2 min-h-[38px] rounded-xl text-[11px] sm:text-xs font-bold border transition-all cursor-pointer flex items-center justify-center text-center leading-tight ${
                             orderSlot === slot
                               ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                               : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -1766,7 +1767,7 @@ export default function OrdersClient() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-100">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         Manufacturing Date *
@@ -1796,7 +1797,7 @@ export default function OrdersClient() {
                 </div>
 
                 {/* 2. Customisation Box Checkbox & Section */}
-                <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-4">
+                <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3 sm:space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <input
@@ -1820,28 +1821,31 @@ export default function OrdersClient() {
                     )}
                   </div>
 
-                  {/* Customisation Box Details (Label Below Layout) */}
+                  {/* Customisation Box Details */}
                   {isCustomisation && (
-                    <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200 space-y-4 animate-in fade-in duration-150">
-                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-2">
-                        Customisation Box Details
+                    <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50/80 border border-slate-200 space-y-3 sm:space-y-4 animate-in fade-in duration-150">
+                      <h4 className="text-[11px] sm:text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-2">
+                        Customisation Packaging Options
                       </h4>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
                         {/* 1. No of Boxes */}
                         <div className="flex flex-col">
+                          <label className="text-[11px] font-bold text-slate-600 mb-1">No of boxes *</label>
                           <input
                             type="number"
                             min="1"
                             value={noOfBoxes}
                             onChange={(e) => setNoOfBoxes(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-white font-semibold shadow-2xs h-[34px]"
+                            className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-white font-bold shadow-2xs h-[38px]"
                           />
-                          <label className="text-[11px] font-bold text-slate-500 mt-1">No of boxes</label>
                         </div>
 
-                        {/* 2. Box Type Dropdown (Dynamic from Utilities) */}
+                        {/* 2. Box Type Dropdown */}
                         <div className="flex flex-col">
+                          <label className="text-[11px] font-bold text-slate-600 mb-1">
+                            Box Type {activeBoxes.length > 0 ? `(₹${selectedBoxPrice}/box)` : ''}
+                          </label>
                           <CustomSelect
                             options={activeBoxes.map((b) => ({
                               value: b.name,
@@ -1850,13 +1854,15 @@ export default function OrdersClient() {
                             value={boxType}
                             onChange={(val) => setBoxType(val)}
                             className="w-full"
-                            buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs py-2 h-[34px]"
+                            buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs sm:text-sm py-2 h-[38px]"
                           />
-                          <label className="text-[11px] font-bold text-slate-500 mt-1">Box type (₹{selectedBoxPrice}/box)</label>
                         </div>
 
-                        {/* 3. Shrink Type Dropdown (Dynamic from Utilities) */}
+                        {/* 3. Shrink Type Dropdown */}
                         <div className="flex flex-col">
+                          <label className="text-[11px] font-bold text-slate-600 mb-1">
+                            Shrink Wrap {shrinkType !== 'None' ? `(₹${selectedShrinkPrice}/box)` : ''}
+                          </label>
                           <CustomSelect
                             options={[
                               { value: 'None', label: 'None (₹0)' },
@@ -1868,15 +1874,15 @@ export default function OrdersClient() {
                             value={shrinkType}
                             onChange={(val) => setShrinkType(val)}
                             className="w-full"
-                            buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs py-2 h-[34px]"
+                            buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs sm:text-sm py-2 h-[38px]"
                           />
-                          <label className="text-[11px] font-bold text-slate-500 mt-1">
-                            Shrink wrap {shrinkType !== 'None' ? `(₹${selectedShrinkPrice}/box)` : ''}
-                          </label>
                         </div>
 
-                        {/* 4. Sticker Type Dropdown (Dynamic from Utilities) */}
+                        {/* 4. Sticker Type Dropdown */}
                         <div className="flex flex-col">
+                          <label className="text-[11px] font-bold text-slate-600 mb-1">
+                            Sticker {stickerType !== 'None' ? `(₹${selectedStickerPrice}/box)` : ''}
+                          </label>
                           <CustomSelect
                             options={[
                               { value: 'None', label: 'None (₹0)' },
@@ -1888,16 +1894,14 @@ export default function OrdersClient() {
                             value={stickerType}
                             onChange={(val) => setStickerType(val)}
                             className="w-full"
-                            buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs py-2 h-[34px]"
+                            buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs sm:text-sm py-2 h-[38px]"
                           />
-                          <label className="text-[11px] font-bold text-slate-500 mt-1">
-                            Sticker {stickerType !== 'None' ? `(₹${selectedStickerPrice}/box)` : ''}
-                          </label>
                         </div>
 
                         {/* 5. Packing Box Image Holder */}
                         <div className="flex flex-col">
-                          <div className="flex items-center gap-2 bg-white p-1 border border-slate-200 rounded-xl shadow-2xs h-[34px]">
+                          <label className="text-[11px] font-bold text-slate-600 mb-1">Box Image</label>
+                          <div className="flex items-center gap-2 bg-white p-1 border border-slate-200 rounded-xl shadow-2xs h-[38px]">
                             <input
                               type="file"
                               accept="image/*"
@@ -1913,7 +1917,6 @@ export default function OrdersClient() {
                               </div>
                             ) : null}
                           </div>
-                          <label className="text-[11px] font-bold text-slate-500 mt-1">Packing box image</label>
                         </div>
                       </div>
                     </div>
@@ -1921,7 +1924,7 @@ export default function OrdersClient() {
                 </div>
 
                 {/* 3. Customer / Wholesaler Search */}
-                <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-3">
+                <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Customer / Wholesaler *
@@ -1930,7 +1933,7 @@ export default function OrdersClient() {
                     <button
                       type="button"
                       onClick={() => setIsAddCustomerModalOpen(true)}
-                      className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer bg-indigo-50 px-[8px] py-[4px] h-[30px] rounded-[6px] border border-indigo-100"
+                      className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer bg-indigo-50 px-2.5 py-1.5 rounded-xl border border-indigo-100"
                     >
                       <UserPlus size={14} />
                       <span>+ Add Customer</span>
@@ -1940,7 +1943,7 @@ export default function OrdersClient() {
                   <div className="relative">
                     <input
                       type="text"
-                      placeholder="Search by Mobile Number, Customer Name, or Code..."
+                      placeholder="Search by Mobile, Customer Name, or Code..."
                       value={customerSearchTerm}
                       onChange={(e) => {
                         setCustomerSearchTerm(e.target.value);
@@ -1972,14 +1975,13 @@ export default function OrdersClient() {
                                 setSelectedCustomer(cust);
                                 setCustomerSearchTerm(`${cust.name} (${cust.mobile})`);
                               }}
-                              className="p-3.5 hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-between"
+                              className="p-3 hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-between gap-2"
                             >
-                              <div>
-                                <p className="text-xs font-bold text-slate-900">{cust.name}</p>
-                                <p className="text-[11px] text-slate-500 mt-0.5">📞 {cust.mobile} • 📍 {cust.address}</p>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-900 truncate">{cust.name}</p>
+                                <p className="text-[11px] text-slate-500 mt-0.5 truncate">📞 {cust.mobile} • 📍 {cust.address}</p>
                               </div>
-                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${cust.type === 'Wholesaler' ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                                }`}>
+                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full flex-shrink-0 ${cust.type === 'Wholesaler' ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'}`}>
                                 {cust.type}
                               </span>
                             </div>
@@ -1991,23 +1993,23 @@ export default function OrdersClient() {
 
                   {/* Selected Customer Display Card */}
                   {selectedCustomer && (
-                    <div className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-100 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
+                    <div className="p-3 sm:p-4 rounded-xl bg-indigo-50/70 border border-indigo-100 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-xs flex-shrink-0">
                           {selectedCustomer.name.charAt(0).toUpperCase()}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-slate-900">{selectedCustomer.name}</span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-600 text-white font-mono">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                            <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">{selectedCustomer.name}</span>
+                            <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-600 text-white font-mono">
                               {selectedCustomer.code}
                             </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                            <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
                               {selectedCustomer.type}
                             </span>
                           </div>
-                          <p className="text-xs text-slate-600 mt-0.5">
-                            📞 {selectedCustomer.mobile} • 📍 {selectedCustomer.address}
+                          <p className="text-[11px] text-slate-600 mt-0.5 truncate">
+                            📞 {selectedCustomer.mobile} {selectedCustomer.address ? `• 📍 ${selectedCustomer.address}` : ''}
                           </p>
                         </div>
                       </div>
@@ -2018,7 +2020,7 @@ export default function OrdersClient() {
                           setSelectedCustomer(null);
                           setCustomerSearchTerm('');
                         }}
-                        className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-white transition-colors cursor-pointer"
+                        className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-white transition-colors cursor-pointer flex-shrink-0"
                         title="Remove selection"
                       >
                         <X size={18} />
@@ -2027,194 +2029,306 @@ export default function OrdersClient() {
                   )}
                 </div>
 
-                {/* 4. Products Selector Table */}
+                {/* 4. Products Selector Section */}
                 <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
-                  <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                  <div className="p-3.5 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900">Order Products</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Add products, set quantities, select packet options, and add instructions</p>
+                      <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                        Order Products ({orderItems.length})
+                      </h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5 hidden sm:block">Add products, set quantities, packet options, and instructions</p>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => handleOpenProductModal(null)}
-                      className="flex items-center gap-1.5 px-[12px] py-[6px] h-[34px] rounded-[10px] bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                     >
                       <Plus size={15} />
                       <span>Add Item</span>
                     </button>
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs min-w-[760px]">
-                      <thead>
-                        <tr className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                          <th className="py-3 px-4 min-w-[220px]">Item Name</th>
-                          <th className="py-3 px-3">Price (₹)</th>
-                          <th className="py-3 px-3 w-24">Qty</th>
-                          <th className="py-3 px-3">Total (₹)</th>
-                          {isCustomisation && <th className="py-3 px-3 text-center">Packet (₹5/box)</th>}
-                          <th className="py-3 px-3">Mfg Instructions</th>
-                          <th className="py-3 px-3">Packing Instructions</th>
-                          <th className="py-3 px-3 text-center">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                        {orderItems.length === 0 ? (
-                          <tr>
-                            <td colSpan={isCustomisation ? 8 : 7} className="py-12 text-center text-slate-400">
-                              <div className="flex flex-col items-center justify-center gap-2">
-                                <ShoppingBag size={28} className="text-slate-300" />
-                                <p className="font-semibold text-slate-600">No items added yet</p>
+                  {/* Empty State */}
+                  {orderItems.length === 0 ? (
+                    <div className="py-10 sm:py-12 text-center text-slate-400 p-4">
+                      <ShoppingBag size={28} className="mx-auto text-slate-300 mb-2" />
+                      <p className="font-semibold text-slate-600 text-xs sm:text-sm">No items added yet</p>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenProductModal(null)}
+                        className="mt-2 px-3.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-600 text-xs font-bold hover:bg-indigo-100 transition-colors cursor-pointer"
+                      >
+                        + Click here to add item
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* MOBILE CARD VIEW (Visible on screens < md) */}
+                      <div className="md:hidden divide-y divide-slate-100 p-3 space-y-3">
+                        {orderItems.map((item, idx) => {
+                          const lineKey = item.lineId || `${item.itemId}-${idx}`;
+                          return (
+                            <div key={lineKey} className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-3 space-y-2.5 shadow-2xs">
+                              {/* Top Row: Thumbnail, Name & Remove */}
+                              <div className="flex items-center justify-between gap-2">
+                                <div
+                                  onClick={() => handleOpenProductModal(lineKey)}
+                                  className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer"
+                                >
+                                  <div className="relative w-9 h-9 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0">
+                                    <Image src={item.imageUrl || '/logo.png'} alt={item.itemName} fill className="object-contain p-0.5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-bold text-slate-900 truncate flex items-center gap-1">
+                                      <span>{item.itemName || 'Choose Product'}</span>
+                                      <Pencil size={11} className="text-slate-400 flex-shrink-0" />
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 font-mono truncate">{item.itemCode || 'Tap to choose'}</p>
+                                  </div>
+                                </div>
+
                                 <button
                                   type="button"
-                                  onClick={() => handleOpenProductModal(null)}
-                                  className="mt-1 px-3.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-600 text-xs font-bold hover:bg-indigo-100 transition-colors cursor-pointer"
+                                  onClick={() => handleRemoveItemLine(lineKey)}
+                                  className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                                  title="Remove product"
                                 >
-                                  + Click here to add item
+                                  <Trash2 size={15} />
                                 </button>
                               </div>
-                            </td>
-                          </tr>
-                        ) : (
-                          orderItems.map((item, idx) => {
-                            const lineKey = item.lineId || `${item.itemId}-${idx}`;
-                            return (
-                              <tr key={lineKey} className="hover:bg-slate-50/60 transition-colors">
-                                <td className="py-3 px-4">
-                                  {item.itemName ? (
-                                    <div
-                                      onClick={() => handleOpenProductModal(lineKey)}
-                                      className="flex items-center justify-between gap-2.5 bg-slate-50 hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 p-1.5 rounded-xl transition-all cursor-pointer group shadow-2xs min-w-[200px]"
-                                      title="Click to change product"
-                                    >
-                                      <div className="flex items-center gap-2.5 min-w-0">
-                                        <div className="relative w-8 h-8 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0">
-                                          <Image
-                                            src={item.imageUrl || '/logo.png'}
-                                            alt={item.itemName}
-                                            fill
-                                            className="object-contain p-1"
-                                          />
-                                        </div>
-                                        <div className="min-w-0 text-left">
-                                          <p className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
-                                            {item.itemName}
-                                          </p>
-                                          <p className="text-[10px] text-slate-400 font-mono truncate">{item.itemCode}</p>
-                                        </div>
-                                      </div>
-                                      <Pencil size={13} className="text-slate-400 group-hover:text-indigo-600 flex-shrink-0 mr-1" />
-                                    </div>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenProductModal(lineKey)}
-                                      className="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer min-w-[200px]"
-                                    >
-                                      <Plus size={14} />
-                                      <span>Select Product</span>
-                                    </button>
-                                  )}
-                                </td>
-                                <td className="py-3 px-3">
+
+                              {/* Price, Quantity, Line Total Grid */}
+                              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200/60">
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-500 mb-1">Price (₹)</label>
                                   <input
                                     type="number"
                                     step="0.01"
                                     value={item.unitPrice}
                                     onChange={(e) => handleItemLineChange(lineKey, 'unitPrice', e.target.value)}
-                                    className="w-20 px-2 py-1 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                                    className="w-full px-2 py-1.5 border border-slate-200 rounded-xl font-bold text-slate-800 text-xs bg-white focus:outline-none focus:border-indigo-500"
                                   />
-                                </td>
-                                <td className="py-3 px-3">
-                                  <div className="flex items-center gap-1">
-                                    <input
-                                      type="number"
-                                      step="0.1"
-                                      min="0.1"
-                                      value={item.quantity}
-                                      onChange={(e) => handleItemLineChange(lineKey, 'quantity', e.target.value)}
-                                      className="w-16 px-2 py-1 border border-slate-200 rounded-lg font-bold text-indigo-600 text-xs focus:outline-none focus:border-indigo-500"
-                                    />
-                                    <span className="text-[10px] font-semibold text-slate-400">{item.unit}</span>
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-500 mb-1">Qty ({item.unit})</label>
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    min="0.1"
+                                    value={item.quantity}
+                                    onChange={(e) => handleItemLineChange(lineKey, 'quantity', e.target.value)}
+                                    className="w-full px-2 py-1.5 border border-slate-200 rounded-xl font-black text-indigo-600 text-xs bg-white focus:outline-none focus:border-indigo-500"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-500 mb-1">Line Total</label>
+                                  <div className="h-[31px] flex items-center justify-center px-1.5 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-black text-indigo-700">
+                                    ₹ {item.lineTotal.toFixed(2)}
                                   </div>
-                                </td>
-                                <td className="py-3 px-3 font-extrabold text-slate-900">
-                                  ₹ {item.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                </td>
+                                </div>
+                              </div>
 
-                                {/* Packet Column - Displays only when customisation is enabled */}
-                                {isCustomisation && (
-                                  <td className="py-3 px-3 text-center">
-                                    <div className="flex items-center justify-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleItemLineChange(lineKey, 'hasPacket', !item.hasPacket)}
-                                        className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                                          item.hasPacket
-                                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                                            : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
-                                        }`}
-                                        title={`Packet charge ₹5 per box (${noOfBoxes} boxes = ₹${noOfBoxes * 5})`}
-                                      >
-                                        {item.hasPacket ? (
-                                          <>
-                                            <Check size={13} />
-                                            <span>₹{noOfBoxes * 5}</span>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <X size={13} />
-                                            <span>₹5</span>
-                                          </>
-                                        )}
-                                      </button>
-                                    </div>
-                                  </td>
-                                )}
-
-                                <td className="py-3 px-3">
-                                  <input
-                                    type="text"
-                                    placeholder="Mfg notes..."
-                                    value={item.manufacturingDescription || ''}
-                                    onChange={(e) => handleItemLineChange(lineKey, 'mfgDesc', e.target.value)}
-                                    className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
-                                  />
-                                </td>
-                                <td className="py-3 px-3">
-                                  <input
-                                    type="text"
-                                    placeholder="Packing notes..."
-                                    value={item.packingDescription || ''}
-                                    onChange={(e) => handleItemLineChange(lineKey, 'pckDesc', e.target.value)}
-                                    className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
-                                  />
-                                </td>
-                                <td className="py-3 px-3 text-center">
+                              {/* Customisation Packet Toggle */}
+                              {isCustomisation && (
+                                <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 bg-white p-2 rounded-xl border border-slate-100">
+                                  <div className="flex flex-col">
+                                    <span className="text-[11px] font-bold text-slate-800">Individual Packet</span>
+                                    <span className="text-[10px] text-slate-400">₹5/box ({noOfBoxes} boxes = ₹{noOfBoxes * 5})</span>
+                                  </div>
                                   <button
                                     type="button"
-                                    onClick={() => handleRemoveItemLine(lineKey)}
-                                    className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                    onClick={() => handleItemLineChange(lineKey, 'hasPacket', !item.hasPacket)}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                      item.hasPacket
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                    }`}
                                   >
-                                    <Trash2 size={15} />
+                                    {item.hasPacket ? <Check size={12} /> : <X size={12} />}
+                                    <span>{item.hasPacket ? `Yes (+₹${noOfBoxes * 5})` : 'No'}</span>
                                   </button>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                                </div>
+                              )}
+
+                              {/* Instructions Row */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                <input
+                                  type="text"
+                                  placeholder="Mfg notes..."
+                                  value={item.manufacturingDescription || ''}
+                                  onChange={(e) => handleItemLineChange(lineKey, 'mfgDesc', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-indigo-500"
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="Packing notes..."
+                                  value={item.packingDescription || ''}
+                                  onChange={(e) => handleItemLineChange(lineKey, 'pckDesc', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-indigo-500"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* DESKTOP TABLE VIEW (Visible on screens >= md) */}
+                      <div className="hidden md:block overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs min-w-[760px]">
+                          <thead>
+                            <tr className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                              <th className="py-3 px-4 min-w-[220px]">Item Name</th>
+                              <th className="py-3 px-3">Price (₹)</th>
+                              <th className="py-3 px-3 w-24">Qty</th>
+                              <th className="py-3 px-3">Total (₹)</th>
+                              {isCustomisation && <th className="py-3 px-3 text-center">Packet (₹5/box)</th>}
+                              <th className="py-3 px-3">Mfg Instructions</th>
+                              <th className="py-3 px-3">Packing Instructions</th>
+                              <th className="py-3 px-3 text-center">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                            {orderItems.map((item, idx) => {
+                              const lineKey = item.lineId || `${item.itemId}-${idx}`;
+                              return (
+                                <tr key={lineKey} className="hover:bg-slate-50/60 transition-colors">
+                                  <td className="py-3 px-4">
+                                    {item.itemName ? (
+                                      <div
+                                        onClick={() => handleOpenProductModal(lineKey)}
+                                        className="flex items-center justify-between gap-2.5 bg-slate-50 hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 p-1.5 rounded-xl transition-all cursor-pointer group shadow-2xs min-w-[200px]"
+                                        title="Click to change product"
+                                      >
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                          <div className="relative w-8 h-8 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0">
+                                            <Image
+                                              src={item.imageUrl || '/logo.png'}
+                                              alt={item.itemName}
+                                              fill
+                                              className="object-contain p-1"
+                                            />
+                                          </div>
+                                          <div className="min-w-0 text-left">
+                                            <p className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
+                                              {item.itemName}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400 font-mono truncate">{item.itemCode}</p>
+                                          </div>
+                                        </div>
+                                        <Pencil size={13} className="text-slate-400 group-hover:text-indigo-600 flex-shrink-0 mr-1" />
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenProductModal(lineKey)}
+                                        className="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer min-w-[200px]"
+                                      >
+                                        <Plus size={14} />
+                                        <span>Select Product</span>
+                                      </button>
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={item.unitPrice}
+                                      onChange={(e) => handleItemLineChange(lineKey, 'unitPrice', e.target.value)}
+                                      className="w-20 px-2 py-1 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                                    />
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    <div className="flex items-center gap-1">
+                                      <input
+                                        type="number"
+                                        step="0.1"
+                                        min="0.1"
+                                        value={item.quantity}
+                                        onChange={(e) => handleItemLineChange(lineKey, 'quantity', e.target.value)}
+                                        className="w-16 px-2 py-1 border border-slate-200 rounded-lg font-bold text-indigo-600 text-xs focus:outline-none focus:border-indigo-500"
+                                      />
+                                      <span className="text-[10px] font-semibold text-slate-400">{item.unit}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-3 font-extrabold text-slate-900">
+                                    ₹ {item.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </td>
+
+                                  {isCustomisation && (
+                                    <td className="py-3 px-3 text-center">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleItemLineChange(lineKey, 'hasPacket', !item.hasPacket)}
+                                          className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                                            item.hasPacket
+                                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                              : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                                          }`}
+                                          title={`Packet charge ₹5 per box (${noOfBoxes} boxes = ₹${noOfBoxes * 5})`}
+                                        >
+                                          {item.hasPacket ? (
+                                            <>
+                                              <Check size={13} />
+                                              <span>₹{noOfBoxes * 5}</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <X size={13} />
+                                              <span>₹5</span>
+                                            </>
+                                          )}
+                                        </button>
+                                      </div>
+                                    </td>
+                                  )}
+
+                                  <td className="py-3 px-3">
+                                    <input
+                                      type="text"
+                                      placeholder="Mfg notes..."
+                                      value={item.manufacturingDescription || ''}
+                                      onChange={(e) => handleItemLineChange(lineKey, 'mfgDesc', e.target.value)}
+                                      className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                                    />
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    <input
+                                      type="text"
+                                      placeholder="Packing notes..."
+                                      value={item.packingDescription || ''}
+                                      onChange={(e) => handleItemLineChange(lineKey, 'pckDesc', e.target.value)}
+                                      className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                                    />
+                                  </td>
+                                  <td className="py-3 px-3 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveItemLine(lineKey)}
+                                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
                 </div>
 
               </div>
 
-              {/* Right Column (4 Cols): Sticky Order Summary & Payment Checkout Panel */}
-              <div className="lg:col-span-4 space-y-6">
-                <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-2xs space-y-5 sticky top-6">
-                  <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-100 pb-3.5">
+              {/* Right Column (4 Cols): Order Summary & Payment Checkout Panel */}
+              <div className="lg:col-span-4 space-y-4 sm:space-y-6">
+                <div className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200/90 shadow-2xs space-y-4 sm:space-y-5 lg:sticky lg:top-6">
+                  <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-100 pb-3">
                     Order Summary
                   </h3>
 
@@ -2225,8 +2339,8 @@ export default function OrdersClient() {
                     </div>
 
                     <div className="flex justify-between py-1 border-b border-slate-50">
-                      <span className="text-slate-400">Total Items Selected:</span>
-                      <span className="font-bold text-slate-800">{orderItems.length} items</span>
+                      <span className="text-slate-400">Total Items:</span>
+                      <span className="font-bold text-slate-800">{orderItems.length} products</span>
                     </div>
 
                     <div className="flex justify-between py-1 border-b border-slate-50">
@@ -2250,7 +2364,7 @@ export default function OrdersClient() {
 
                         <div className="flex justify-between py-1 border-b border-slate-50">
                           <span className="text-slate-500 font-semibold">
-                            Sticker Charges ({hasSticker ? `${noOfBoxes} × ₹10` : 'No'}):
+                            Sticker Charges ({stickerType !== 'None' ? `${noOfBoxes} × ₹${selectedStickerPrice}` : 'None'}):
                           </span>
                           <span className="font-bold text-slate-800">
                             + ₹ {stickerChargesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -2259,7 +2373,7 @@ export default function OrdersClient() {
 
                         <div className="flex justify-between py-1 border-b border-slate-50">
                           <span className="text-slate-500 font-semibold">
-                            Shrink Charges ({hasShrink ? `${noOfBoxes} × ₹10` : 'No'}):
+                            Shrink Charges ({shrinkType !== 'None' ? `${noOfBoxes} × ₹${selectedShrinkPrice}` : 'None'}):
                           </span>
                           <span className="font-bold text-slate-800">
                             + ₹ {shrinkChargesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -2284,7 +2398,7 @@ export default function OrdersClient() {
                             placeholder="0"
                             value={discountAmount}
                             onChange={(e) => setDiscountAmount(e.target.value)}
-                            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
+                            className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
                           />
                         </div>
                       </>
@@ -2300,7 +2414,7 @@ export default function OrdersClient() {
                               placeholder="0"
                               value={packingCharges}
                               onChange={(e) => setPackingCharges(e.target.value)}
-                              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
+                              className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
                             />
                           </div>
 
@@ -2313,7 +2427,7 @@ export default function OrdersClient() {
                               placeholder="0"
                               value={additionalCharges}
                               onChange={(e) => setAdditionalCharges(e.target.value)}
-                              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
+                              className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
                             />
                           </div>
 
@@ -2326,14 +2440,14 @@ export default function OrdersClient() {
                               placeholder="0"
                               value={discountAmount}
                               onChange={(e) => setDiscountAmount(e.target.value)}
-                              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
+                              className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
                             />
                           </div>
                         </div>
                       </>
                     )}
 
-                    <div className="flex justify-between py-2.5 border-t border-slate-200 text-base font-extrabold text-slate-900 mt-2">
+                    <div className="flex justify-between py-2.5 border-t border-slate-200 text-base sm:text-lg font-black text-slate-900 mt-2">
                       <span>Grand Total:</span>
                       <span className="text-indigo-600">
                         ₹ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -2365,7 +2479,7 @@ export default function OrdersClient() {
                             setReceivedAmount(val);
                           }
                         }}
-                        className={`w-full px-3.5 py-2.5 text-sm font-bold border rounded-xl focus:outline-none bg-slate-50/50 ${
+                        className={`w-full px-3.5 py-2.5 text-sm sm:text-base font-bold border rounded-xl focus:outline-none bg-slate-50/50 ${
                           parseFloat(receivedAmount) > grandTotal
                             ? 'text-red-600 border-red-300 focus:border-red-500'
                             : 'text-indigo-600 border-slate-200 focus:border-indigo-500'
@@ -2381,10 +2495,11 @@ export default function OrdersClient() {
                             key={mode}
                             type="button"
                             onClick={() => setPaymentMode(mode)}
-                            className={`px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-bold border transition-all cursor-pointer ${paymentMode === mode
-                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                              }`}
+                            className={`py-2 px-2 min-h-[36px] rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                              paymentMode === mode
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
                           >
                             {mode}
                           </button>
@@ -2395,19 +2510,20 @@ export default function OrdersClient() {
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">Payment Status</label>
                       <span
-                        className={`block w-full text-center py-2.5 rounded-xl text-xs font-extrabold border ${paymentStatus === 'Completed'
-                          ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
-                          : paymentStatus === 'Partial'
-                            ? 'bg-sky-50 text-sky-600 border-sky-200'
-                            : 'bg-amber-50 text-amber-600 border-amber-200'
-                          }`}
+                        className={`block w-full text-center py-2 rounded-xl text-xs font-extrabold border ${
+                          paymentStatus === 'Completed'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : paymentStatus === 'Partial'
+                            ? 'bg-sky-50 text-sky-700 border-sky-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}
                       >
                         {paymentStatus}
                       </span>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Initial Order Status</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Order Status</label>
                       <CustomSelect
                         options={ALL_ORDER_STATUSES.map((s) => ({ value: s, label: s }))}
                         value={orderStatus}
@@ -2418,12 +2534,13 @@ export default function OrdersClient() {
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-100 space-y-2">
+                  {/* Desktop Submit Buttons */}
+                  <div className="pt-3 border-t border-slate-100 space-y-2 hidden lg:block">
                     <button
                       type="button"
                       onClick={handleCreateOrderSubmit}
                       disabled={isSubmitting || !selectedCustomer || orderItems.length === 0}
-                      className="w-full flex items-center justify-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-gradient-to-br from-indigo-600 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50"
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 text-white text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer disabled:opacity-50"
                     >
                       {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                       <span>{editingOrder ? 'Update Order' : 'Create Order'}</span>
@@ -2432,7 +2549,7 @@ export default function OrdersClient() {
                     <button
                       type="button"
                       onClick={() => setIsAddOrderModalOpen(false)}
-                      className="w-full px-[8px] py-[4px] h-[30px] rounded-[6px] bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+                      className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -2442,6 +2559,38 @@ export default function OrdersClient() {
 
             </div>
           </div>
+
+          {/* Sticky Mobile Action Footer Bar */}
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200/90 p-3 flex items-center justify-between gap-3 shadow-xl z-40">
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                Total ({orderItems.length} items)
+              </span>
+              <span className="text-sm sm:text-base font-black text-indigo-700 truncate block">
+                ₹ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsAddOrderModalOpen(false)}
+                className="px-3 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateOrderSubmit}
+                disabled={isSubmitting || !selectedCustomer || orderItems.length === 0}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                <span>{editingOrder ? 'Update Order' : 'Create Order'}</span>
+              </button>
+            </div>
+          </div>
+
         </div>
       )}
 

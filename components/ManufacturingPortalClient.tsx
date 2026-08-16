@@ -60,7 +60,7 @@ export interface AggregatedItemSummary {
 }
 
 function isOrderEligibleForManufacturing(order: OrderRecord): boolean {
-  // 1. Exclude POS bills completely
+  // 1. Exclude POS / Walk-in bills completely
   const orderType = ((order as any).orderType || (order as any).source || '').toString().toLowerCase();
   if (orderType.includes('pos') || orderType.includes('walk-in')) {
     return false;
@@ -72,12 +72,26 @@ function isOrderEligibleForManufacturing(order: OrderRecord): boolean {
     return false;
   }
 
-  // 3. Normal orders & Wholesaler orders MUST BE APPROVED before entering manufacturing!
-  if (status === 'Pending' || status === 'Order Created') {
+  // 3. Must have at least 1 item
+  if (!order.items || order.items.length === 0) {
     return false;
   }
 
   return true;
+}
+
+function getOrderEffectiveMfgDate(order: OrderRecord): string {
+  if (order.manufacturingDate && /^\d{4}-\d{2}-\d{2}$/.test(order.manufacturingDate)) {
+    return order.manufacturingDate;
+  }
+  if (order.orderDate && /^\d{4}-\d{2}-\d{2}$/.test(order.orderDate)) {
+    return order.orderDate;
+  }
+  const createdRaw = (order as any).createdAt;
+  if (createdRaw?.toDate) {
+    return createdRaw.toDate().toISOString().split('T')[0];
+  }
+  return '';
 }
 
 export default function ManufacturingPortalClient() {
@@ -97,7 +111,7 @@ export default function ManufacturingPortalClient() {
     const dateSet = new Set<string>();
     orders.forEach((o) => {
       if (!isOrderEligibleForManufacturing(o)) return;
-      const d = o.manufacturingDate || o.orderDate;
+      const d = getOrderEffectiveMfgDate(o);
       if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
         dateSet.add(d);
       }
@@ -110,7 +124,7 @@ export default function ManufacturingPortalClient() {
     return orders.filter((o) => {
       if (!isOrderEligibleForManufacturing(o)) return false;
       if (!selectedMfgDate || selectedMfgDate === 'all') return true;
-      const d = o.manufacturingDate || o.orderDate;
+      const d = getOrderEffectiveMfgDate(o);
       return d === selectedMfgDate;
     });
   }, [orders, selectedMfgDate]);
@@ -219,12 +233,15 @@ export default function ManufacturingPortalClient() {
           return;
         }
 
+        const orderCodeDisplay = order.code || (order as any).orderId || order.id || 'ORD';
+
         // Apply Search Term
         if (
           searchTerm &&
           !rawName.toLowerCase().includes(searchTerm.toLowerCase()) &&
           !(category || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !(order.code || '').toLowerCase().includes(searchTerm.toLowerCase())
+          !orderCodeDisplay.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !(order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase())
         ) {
           return;
         }
@@ -235,9 +252,9 @@ export default function ManufacturingPortalClient() {
           existing.totalQuantity += item.quantity || 0;
           existing.orders.push({
             orderId: order.id,
-            orderCode: order.code,
-            customerName: order.customerName,
-            slot: order.slot,
+            orderCode: orderCodeDisplay,
+            customerName: order.customerName || 'Customer',
+            slot: order.slot || 'Regular',
             quantity: item.quantity || 0,
             mfgStatus: itemMfgStatus,
             manufacturingDescription: item.manufacturingDescription
@@ -245,7 +262,7 @@ export default function ManufacturingPortalClient() {
         } else {
           map.set(key, {
             itemId: item.itemId || key,
-            itemCode: item.itemCode || 'ITEM',
+            itemCode: item.itemCode || (item as any).code || 'ITEM',
             itemName: rawName,
             category: category,
             unit: item.unit || 'kg',
@@ -256,9 +273,9 @@ export default function ManufacturingPortalClient() {
             orders: [
               {
                 orderId: order.id,
-                orderCode: order.code,
-                customerName: order.customerName,
-                slot: order.slot,
+                orderCode: orderCodeDisplay,
+                customerName: order.customerName || 'Customer',
+                slot: order.slot || 'Regular',
                 quantity: item.quantity || 0,
                 mfgStatus: itemMfgStatus,
                 manufacturingDescription: item.manufacturingDescription
@@ -303,8 +320,9 @@ export default function ManufacturingPortalClient() {
       }
 
       if (searchTerm) {
+        const ordCode = order.code || (order as any).orderId || order.id || '';
         return (
-          (order.code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          ordCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
           (order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
           order.items?.some((i) => (i.itemName || (i as any).name || '').toLowerCase().includes(searchTerm.toLowerCase()))
         );
@@ -676,19 +694,20 @@ export default function ManufacturingPortalClient() {
           ) : (
             <div className="divide-y divide-slate-100">
               {filteredOrderWiseList.map((order) => {
+                const orderCodeDisplay = order.code || (order as any).orderId || order.id || 'ORD';
                 return (
                   <div key={order.id} className="p-5 hover:bg-slate-50/50 transition-colors space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <span className="font-mono font-bold text-xs text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-100">
-                          {order.code}
+                          {orderCodeDisplay}
                         </span>
-                        <h3 className="text-sm font-bold text-slate-900">{order.customerName}</h3>
-                        <span className="text-xs text-slate-400">• Slot: {order.slot}</span>
+                        <h3 className="text-sm font-bold text-slate-900">{order.customerName || 'Customer'}</h3>
+                        <span className="text-xs text-slate-400">• Slot: {order.slot || 'Regular'}</span>
                       </div>
 
                       <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
-                        Overall Order Status: {order.orderStatus}
+                        Overall Order Status: {order.orderStatus || (order as any).status || 'Pending'}
                       </span>
                     </div>
 
@@ -697,7 +716,8 @@ export default function ManufacturingPortalClient() {
                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Order Items to Produce</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                         {order.items?.map((item, idx) => {
-                          const key = (item.itemName || '').toLowerCase().trim();
+                          const rawItemName = item.itemName || (item as any).name || 'Unknown Item';
+                          const key = rawItemName.toLowerCase().trim();
                           const masterInfo = itemInfoMap.get(key);
                           const mfgUnit = (item as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
 
@@ -709,15 +729,15 @@ export default function ManufacturingPortalClient() {
                               : 'Pending'
                           );
 
-                          const isUpdatingSingle = updatingId === `${order.id}_${item.itemName}`;
+                          const isUpdatingSingle = updatingId === `${order.id}_${rawItemName}`;
                           const isMovedToPacking = itemMfgStatus === 'Moved to Packing';
 
                           return (
                             <div key={idx} className="bg-white rounded-lg p-3 border border-slate-200 text-xs space-y-2 flex flex-col justify-between">
                               <div className="space-y-1">
                                 <div className="flex justify-between items-center font-bold text-slate-800">
-                                  <span>{item.itemName}</span>
-                                  <span className="text-teal-600">{item.quantity} {item.unit}</span>
+                                  <span>{rawItemName}</span>
+                                  <span className="text-teal-600">{item.quantity} {item.unit || 'kg'}</span>
                                 </div>
                                 
                                 <div className="flex items-center justify-between">

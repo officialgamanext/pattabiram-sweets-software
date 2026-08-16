@@ -68,8 +68,8 @@ function isOrderEligibleForPacking(order: OrderRecord): boolean {
     return false;
   }
 
-  // 3. Normal orders & Wholesaler orders MUST BE APPROVED before entering packing!
-  if (status === 'Pending' || status === 'Order Created') {
+  // 3. Must have at least 1 item
+  if (!order.items || order.items.length === 0) {
     return false;
   }
 

@@ -36,6 +36,7 @@ export interface ItemMasterInfo {
   mfgUnitName: string;
   pckUnitName: string;
   category: string;
+  intimateBeforeOneDay?: boolean;
 }
 
 export interface AggregatedItemSummary {
@@ -157,7 +158,8 @@ export default function ManufacturingPortalClient() {
           map.set(nameKey, {
             mfgUnitName: data.manufacturingUnitName || 'General Kitchen',
             pckUnitName: data.packingUnitName || 'General Packing',
-            category: data.category || 'General'
+            category: data.category || 'General',
+            intimateBeforeOneDay: Boolean(data.intimateBeforeOneDay),
           });
         });
         setItemInfoMap(map);
@@ -198,6 +200,99 @@ export default function ManufacturingPortalClient() {
     });
     return opts;
   }, [mfgUnits]);
+
+  // Calculate Today and Tomorrow Date Strings (YYYY-MM-DD)
+  const todayDateStr = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, []);
+
+  const tomorrowDateStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, []);
+
+  // Compute items that require 1-day advance intimation for tomorrow's manufacturing date (1 day prior only)
+  const tomorrowIntimationAlerts = useMemo(() => {
+    // Only show advance alert when viewing "All Dates" or "Today".
+    // If the user has selected the same date (e.g. tomorrow) in the Mfg Date picker, do not display duplicate advance banner.
+    if (selectedMfgDate && selectedMfgDate !== 'all' && selectedMfgDate !== todayDateStr) {
+      return [];
+    }
+
+    // Find all active orders scheduled for manufacturing tomorrow (1 day prior)
+    const tomorrowOrders = orders.filter((o) => {
+      if (!isOrderEligibleForManufacturing(o)) return false;
+      const d = getOrderEffectiveMfgDate(o);
+      return d === tomorrowDateStr;
+    });
+
+    const map = new Map<string, {
+      itemName: string;
+      category: string;
+      unit: string;
+      mfgUnitName: string;
+      totalQuantity: number;
+      ordersCount: number;
+      slots: string[];
+      orderCodes: string[];
+    }>();
+
+    tomorrowOrders.forEach((order) => {
+      (order.items || []).forEach((item) => {
+        const name = (item.itemName || (item as any).name || '').trim();
+        if (!name) return;
+        const nameKey = name.toLowerCase();
+        const itemMaster = itemInfoMap.get(nameKey);
+
+        // Check if item has 1-Day Advance Intimation enabled
+        const isIntimateEnabled = Boolean(
+          itemMaster?.intimateBeforeOneDay || (item as any).intimateBeforeOneDay
+        );
+
+        if (!isIntimateEnabled) return;
+
+        const mfgUnit = itemMaster?.mfgUnitName || 'Main Factory';
+
+        // Filter by selectedUnit if a specific unit is filtered
+        if (selectedUnit !== 'all' && mfgUnit !== selectedUnit) return;
+
+        const qty = parseFloat(item.quantity as any) || 0;
+        const unit = item.unit || 'KG';
+        const category = itemMaster?.category || item.category || 'Sweets';
+        const slot = order.slot || 'All Slots';
+        const ordCode = order.code || `#ORD-${order.id.slice(0, 4)}`;
+
+        if (!map.has(nameKey)) {
+          map.set(nameKey, {
+            itemName: name,
+            category: category,
+            unit: unit,
+            mfgUnitName: mfgUnit,
+            totalQuantity: 0,
+            ordersCount: 0,
+            slots: [],
+            orderCodes: [],
+          });
+        }
+
+        const entry = map.get(nameKey)!;
+        entry.totalQuantity += qty;
+        entry.ordersCount += 1;
+        if (!entry.slots.includes(slot)) entry.slots.push(slot);
+        if (!entry.orderCodes.includes(ordCode)) entry.orderCodes.push(ordCode);
+      });
+    });
+
+    return Array.from(map.values());
+  }, [orders, itemInfoMap, tomorrowDateStr, selectedUnit]);
 
   // Aggregate items across active orders that are still pending cooking in Manufacturing (mfgStatus !== 'Moved to Packing')
   const aggregatedItems = useMemo(() => {
@@ -505,6 +600,68 @@ export default function ManufacturingPortalClient() {
           </div>
         </div>
       </div>
+
+      {/* Advance Preparation Alert Banner for Tomorrow's Manufacturing */}
+      {tomorrowIntimationAlerts.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 border-2 border-amber-400/90 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 relative overflow-hidden animate-in fade-in slide-in-from-top-3 duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center shadow-xs flex-shrink-0">
+                <Flame size={22} className="animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm sm:text-base font-black text-amber-950 tracking-tight">
+                    ⚡ Advance Preparation Alert — Tomorrow&apos;s Production ({new Date(tomorrowDateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })})
+                  </h3>
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs uppercase tracking-wider">
+                    {tomorrowIntimationAlerts.length} {tomorrowIntimationAlerts.length === 1 ? 'Item' : 'Items'}
+                  </span>
+                </div>
+                <p className="text-xs text-amber-900/80 font-semibold mt-0.5">
+                  The following item(s) have <strong>1-Day Advance Intimation</strong> enabled and are scheduled for manufacturing tomorrow. Please prepare ingredients, mixes, and raw materials today!
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Cards Grid of Items to prepare */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-1">
+            {tomorrowIntimationAlerts.map((alertItem) => (
+              <div
+                key={alertItem.itemName}
+                className="bg-white/95 rounded-xl p-3.5 border border-amber-300 shadow-2xs flex flex-col justify-between hover:border-amber-500 transition-all hover:shadow-xs"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-1.5 mb-1.5">
+                    <h4 className="text-xs font-black text-slate-900 leading-tight truncate" title={alertItem.itemName}>
+                      {alertItem.itemName}
+                    </h4>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 flex-shrink-0">
+                      {alertItem.category}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5 my-1">
+                    <span className="text-xl font-black text-amber-600">
+                      {alertItem.totalQuantity.toLocaleString('en-IN')}
+                    </span>
+                    <span className="text-xs font-bold text-slate-600 uppercase">
+                      {alertItem.unit}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-amber-100 flex items-center justify-between text-[10px] text-slate-500 font-semibold mt-2">
+                  <span>📦 {alertItem.ordersCount} {alertItem.ordersCount === 1 ? 'Order' : 'Orders'}</span>
+                  <span className="text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-mono truncate max-w-[120px]" title={alertItem.slots.join(', ')}>
+                    {alertItem.slots.join(', ')}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

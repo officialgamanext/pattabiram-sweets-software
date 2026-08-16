@@ -53,6 +53,7 @@ export interface ItemRecord {
   manufacturingUnitName?: string;
   packingUnitId?: string;
   packingUnitName?: string;
+  intimateBeforeOneDay?: boolean;
   status: 'Active' | 'Inactive';
   createdAt?: any;
 }
@@ -124,6 +125,7 @@ export default function ItemsClient() {
     manufacturingUnitName: '',
     packingUnitName: '',
     imageUrl: '',
+    intimateBeforeOneDay: false,
     status: 'Active' as 'Active' | 'Inactive',
   };
   const [newItem, setNewItem] = useState(emptyItemForm);
@@ -260,6 +262,7 @@ export default function ItemsClient() {
         manufacturingUnitName: newItem.manufacturingUnitName || (mfgUnits[0]?.name || 'N/A'),
         packingUnitName: newItem.packingUnitName || (pckUnits[0]?.name || 'N/A'),
         imageUrl: finalImageUrl,
+        intimateBeforeOneDay: Boolean(newItem.intimateBeforeOneDay),
         status: newItem.status,
         createdAt: serverTimestamp(),
       });
@@ -287,6 +290,7 @@ export default function ItemsClient() {
       manufacturingUnitName: item.manufacturingUnitName || (mfgUnits[0]?.name || 'N/A'),
       packingUnitName: item.packingUnitName || (pckUnits[0]?.name || 'N/A'),
       imageUrl: item.imageUrl || '',
+      intimateBeforeOneDay: Boolean(item.intimateBeforeOneDay),
       status: item.status || 'Active',
     });
     setPendingImageBase64('');
@@ -318,6 +322,7 @@ export default function ItemsClient() {
         manufacturingUnitName: editItemForm.manufacturingUnitName,
         packingUnitName: editItemForm.packingUnitName,
         imageUrl: finalImageUrl,
+        intimateBeforeOneDay: Boolean(editItemForm.intimateBeforeOneDay),
         status: editItemForm.status,
         updatedAt: serverTimestamp(),
       });
@@ -984,6 +989,25 @@ export default function ItemsClient() {
                 </div>
               </div>
 
+              {/* Intimate 1 Day Before Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50/70 border border-amber-200/90">
+                <div className="pr-2">
+                  <label htmlFor="addItemIntimateToggle" className="block text-xs font-bold text-amber-950 cursor-pointer">
+                    ⚡ Intimate 1 Day Before Manufacturing
+                  </label>
+                  <p className="text-[10px] text-amber-800 font-medium mt-0.5">
+                    Displays advance preparation notice in Manufacturing Portal 1 day prior to production date.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  id="addItemIntimateToggle"
+                  checked={newItem.intimateBeforeOneDay}
+                  onChange={(e) => setNewItem({ ...newItem, intimateBeforeOneDay: e.target.checked })}
+                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer flex-shrink-0"
+                />
+              </div>
+
               {/* Status */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
@@ -1135,6 +1159,25 @@ export default function ItemsClient() {
                     buttonClassName="w-full"
                   />
                 </div>
+              </div>
+
+              {/* Intimate 1 Day Before Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50/70 border border-amber-200/90">
+                <div className="pr-2">
+                  <label htmlFor="editItemIntimateToggle" className="block text-xs font-bold text-amber-950 cursor-pointer">
+                    ⚡ Intimate 1 Day Before Manufacturing
+                  </label>
+                  <p className="text-[10px] text-amber-800 font-medium mt-0.5">
+                    Displays advance preparation notice in Manufacturing Portal 1 day prior to production date.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  id="editItemIntimateToggle"
+                  checked={editItemForm.intimateBeforeOneDay}
+                  onChange={(e) => setEditItemForm({ ...editItemForm, intimateBeforeOneDay: e.target.checked })}
+                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer flex-shrink-0"
+                />
               </div>
 
               {/* Status */}
@@ -1463,6 +1506,14 @@ export default function ItemsClient() {
               <div className="flex justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-400">Packing Unit:</span>
                 <span className="font-semibold text-slate-800">{viewItem.packingUnitName || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-400">1-Day Advance Intimation:</span>
+                <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
+                  viewItem.intimateBeforeOneDay ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {viewItem.intimateBeforeOneDay ? '⚡ Enabled' : 'Disabled'}
+                </span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-slate-400">Status:</span>

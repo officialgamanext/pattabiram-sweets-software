@@ -12,7 +12,22 @@ import {
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { sendDescopeOtp, verifyDescopeOtp } from '@/lib/descope';
-import { ShieldCheck, Mail, Lock, Phone, KeyRound, ArrowRight, Loader2, AlertCircle, RefreshCw, LockKeyhole } from 'lucide-react';
+import {
+  ShieldCheck,
+  Mail,
+  Lock,
+  Phone,
+  KeyRound,
+  ArrowRight,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  LockKeyhole,
+  Download,
+  Smartphone,
+  Share,
+  CheckCircle2,
+} from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,6 +50,63 @@ export default function LoginPage() {
 
   // Recaptcha verifier reference
   const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
+
+  // PWA Install state
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [showIOSPrompt, setShowIOSPrompt] = useState(false);
+
+  useEffect(() => {
+    // Check if running in standalone mode (already installed as PWA)
+    if (
+      typeof window !== 'undefined' &&
+      (window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as any).standalone === true)
+    ) {
+      setIsAppInstalled(true);
+    }
+
+    // Check if iOS
+    if (typeof window !== 'undefined') {
+      const userAgent = window.navigator.userAgent.toLowerCase();
+      setIsIOS(/iphone|ipad|ipod/.test(userAgent));
+    }
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setIsAppInstalled(true);
+      }
+      setDeferredPrompt(null);
+    } else if (isIOS) {
+      setShowIOSPrompt(true);
+    } else {
+      // Fallback message if browser already shows install icon in address bar
+      alert('To install the app, click the Install / (+) button in your browser address bar or menu.');
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -170,8 +242,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md bg-white border border-slate-200/90 rounded-2xl shadow-xl overflow-hidden relative z-10">
         
         {/* Header Branding */}
-        <div className="p-6 sm:p-8 pb-5 text-center border-b border-slate-100 bg-white">
-          <div className="inline-flex items-center gap-2 bg-[#02626D] text-white px-3 py-1.5 rounded-lg mb-4 shadow-2xs">
+        <div className="p-6 sm:p-8 pb-4 text-center border-b border-slate-100 bg-white">
+          <div className="inline-flex items-center gap-2 bg-[#02626D] text-white px-3 py-1.5 rounded-lg mb-3 shadow-2xs">
             <span className="font-extrabold text-xs tracking-wider uppercase">Pattabiram</span>
             <span className="text-[10px] text-teal-100 font-medium bg-[#024f58] px-2 py-0.5 rounded-full border border-[#014047]">
               Spring &apos;26
@@ -179,7 +251,76 @@ export default function LoginPage() {
           </div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Log in</h1>
           <p className="text-xs text-slate-500 mt-1 font-medium">Continue to Pattabiram Sweets Admin</p>
+
+          {/* PWA Install Button (Only visible on login screen before login, hidden if already installed) */}
+          {!isAppInstalled && (
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="w-full py-2 px-3 bg-teal-50/80 hover:bg-teal-100/80 text-[#02626D] border border-teal-200/90 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center justify-between gap-2 group cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-[#02626D] text-white flex items-center justify-center flex-shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                    <Download size={14} />
+                  </div>
+                  <div className="text-left min-w-0">
+                    <span className="block text-xs font-bold text-slate-900 truncate">Install Pattabiram App</span>
+                    <span className="block text-[10px] text-slate-500 font-normal">Add to Home Screen & Desktop</span>
+                  </div>
+                </div>
+
+                <span className="px-2 py-1 rounded-lg bg-[#02626D] text-white text-[10.5px] font-semibold flex items-center gap-1 shadow-2xs group-hover:bg-[#014d56] transition-colors flex-shrink-0">
+                  <Smartphone size={12} />
+                  <span>Install</span>
+                </span>
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* iOS PWA Install Instruction Modal */}
+        {showIOSPrompt && (
+          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-3.5 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-slate-200">
+                    <Image src="/app-icon.png" alt="App Icon" fill className="object-contain p-0.5" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-900">Install on iPhone / iPad</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowIOSPrompt(false)}
+                  className="p-1 text-slate-400 hover:text-slate-700 text-xs font-bold rounded-lg"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-2.5 text-xs text-slate-600">
+                <p className="font-medium text-slate-800">Follow these 2 quick steps to install:</p>
+                <div className="flex items-start gap-2.5 p-2 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="w-5 h-5 rounded-full bg-[#02626D] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">1</span>
+                  <p>Tap the <strong>Share button ( <Share size={12} className="inline mx-0.5" /> )</strong> in Safari’s navigation bar at the bottom.</p>
+                </div>
+                <div className="flex items-start gap-2.5 p-2 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="w-5 h-5 rounded-full bg-[#02626D] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">2</span>
+                  <p>Scroll down and select <strong>&quot;Add to Home Screen&quot;</strong>, then tap <strong>Add</strong>.</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowIOSPrompt(false)}
+                className="w-full h-8.5 rounded-xl bg-[#02626D] text-white text-xs font-semibold hover:bg-[#014d56] transition-colors shadow-2xs cursor-pointer"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Tab Switcher */}
         <div className="px-6 pt-4 bg-white">

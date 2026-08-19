@@ -1,0 +1,38 @@
+{
+  "name": "Pattabiram Sweets Management",
+  "short_name": "Pattabiram Sweets",
+  "description": "Complete business management software for Pattabiram Sweets — orders, inventory, manufacturing, and more.",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f6f6f7",
+  "theme_color": "#02626D",
+  "categories": ["business", "productivity", "management"],
+  "icons": [
+    {
+      "src": "/app-icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app-icon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

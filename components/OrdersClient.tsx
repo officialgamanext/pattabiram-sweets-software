@@ -428,7 +428,7 @@ export default function OrdersClient() {
   const [mfgDate, setMfgDate] = useState<string>('');
   const [expDeliveryDate, setExpDeliveryDate] = useState<string>('');
   const [isCustomisation, setIsCustomisation] = useState<boolean>(false);
-  const [noOfBoxes, setNoOfBoxes] = useState<number>(1);
+  const [noOfBoxes, setNoOfBoxes] = useState<number | string>('');
   const [boxType, setBoxType] = useState<string>('HandleBox');
   const [boxImageUrl, setBoxImageUrl] = useState<string>('');
   const [shrinkType, setShrinkType] = useState<string>('None');
@@ -672,7 +672,7 @@ export default function OrdersClient() {
     setMfgDate('');
     setExpDeliveryDate('');
     setIsCustomisation(false);
-    setNoOfBoxes(1);
+    setNoOfBoxes('');
     setBoxType(activeBoxes[0]?.name || 'HandleBox');
     setBoxImageFile(null);
     setBoxImageUrl('');
@@ -699,13 +699,13 @@ export default function OrdersClient() {
     setExpDeliveryDate(order.expectedDeliveryDate || getTodayDateStr());
     setIsCustomisation(Boolean(order.isCustomisation));
     if (order.customisationDetails) {
-      setNoOfBoxes(order.customisationDetails.noOfBoxes || 1);
+      setNoOfBoxes(order.customisationDetails.noOfBoxes !== undefined ? order.customisationDetails.noOfBoxes : '');
       setBoxType(order.customisationDetails.boxType || activeBoxes[0]?.name || 'HandleBox');
       setBoxImageUrl(order.customisationDetails.boxImageUrl || '');
       setShrinkType(order.customisationDetails.shrinkType || (order.customisationDetails.hasShrink ? (activeShrinks[0]?.name || 'Standard Shrink Wrap') : 'None'));
       setStickerType(order.customisationDetails.stickerType || (order.customisationDetails.hasSticker ? (activeStickers[0]?.name || 'Custom Brand Sticker') : 'None'));
     } else {
-      setNoOfBoxes(order.noOfBoxes || (globalSettings.globalPackingBoxPrice > 0 && order.packingCharges ? Math.round(order.packingCharges / globalSettings.globalPackingBoxPrice) : 1));
+      setNoOfBoxes(order.noOfBoxes !== undefined ? order.noOfBoxes : '');
       setBoxType(activeBoxes[0]?.name || 'HandleBox');
       setBoxImageUrl('');
       setShrinkType('None');
@@ -836,19 +836,21 @@ export default function OrdersClient() {
   const selectedStickerObj = activeStickers.find((st) => st.name.toLowerCase() === (stickerType || '').toLowerCase());
   const selectedStickerPrice = selectedStickerObj ? selectedStickerObj.price : 0;
 
+  const numericNoOfBoxes = typeof noOfBoxes === 'number' ? noOfBoxes : (parseInt(String(noOfBoxes)) || 0);
+
   const subTotal = orderItems.reduce((acc, curr) => acc + curr.lineTotal, 0);
 
   // Packet charges: ₹ per box for each item line where packet is selected (ONLY when Customisation is enabled!)
   const packetCostPerBox = globalSettings.individualItemPackingCost;
   const packetChargesTotal = isCustomisation
-    ? orderItems.reduce((acc, curr) => acc + (curr.hasPacket ? Math.max(0, noOfBoxes) * packetCostPerBox : 0), 0)
+    ? orderItems.reduce((acc, curr) => acc + (curr.hasPacket ? Math.max(0, numericNoOfBoxes) * packetCostPerBox : 0), 0)
     : 0;
 
-  const boxChargesTotal = isCustomisation ? Math.max(0, noOfBoxes) * selectedBoxPrice : 0;
-  const stickerChargesTotal = isCustomisation && stickerType !== 'None' ? Math.max(0, noOfBoxes) * selectedStickerPrice : 0;
-  const shrinkChargesTotal = isCustomisation && shrinkType !== 'None' ? Math.max(0, noOfBoxes) * selectedShrinkPrice : 0;
+  const boxChargesTotal = isCustomisation ? Math.max(0, numericNoOfBoxes) * selectedBoxPrice : 0;
+  const stickerChargesTotal = isCustomisation && stickerType !== 'None' ? Math.max(0, numericNoOfBoxes) * selectedStickerPrice : 0;
+  const shrinkChargesTotal = isCustomisation && shrinkType !== 'None' ? Math.max(0, numericNoOfBoxes) * selectedShrinkPrice : 0;
 
-  const pCharges = !isCustomisation ? Math.max(0, noOfBoxes) * globalSettings.globalPackingBoxPrice : 0;
+  const pCharges = !isCustomisation ? Math.max(0, numericNoOfBoxes) * globalSettings.globalPackingBoxPrice : 0;
   const addCharges = !isCustomisation ? parseFloat(additionalCharges) || 0 : 0;
   const discountVal = parseFloat(discountAmount) || 0;
 
@@ -952,6 +954,7 @@ export default function OrdersClient() {
       const creatorName = employeeProfile?.name || (user?.email ? user.email.split('@')[0] : 'Staff');
       const creatorId = employeeProfile?.id || employeeProfile?.empId || user?.uid || 'staff';
       const creatorRole = employeeProfile?.isSuperAdmin || (user?.email && !employeeProfile) ? 'SuperAdmin' : 'Employee';
+      const savedNoOfBoxes = numericNoOfBoxes;
 
       if (editingOrder) {
         // Update existing order
@@ -969,7 +972,7 @@ export default function OrdersClient() {
           isCustomisation: isCustomisation,
           customisationDetails: isCustomisation
             ? {
-                noOfBoxes: noOfBoxes,
+                noOfBoxes: savedNoOfBoxes,
                 boxType: selectedBoxObj?.name || boxType,
                 boxPrice: selectedBoxPrice,
                 boxImageUrl: finalBoxImageUrl,
@@ -984,7 +987,7 @@ export default function OrdersClient() {
           items: validItems,
           totalItems: validItems.length,
           subTotal: subTotal,
-          noOfBoxes: noOfBoxes,
+          noOfBoxes: savedNoOfBoxes,
           boxChargesTotal: isCustomisation ? boxChargesTotal : 0,
           stickerChargesTotal: isCustomisation ? stickerChargesTotal : 0,
           shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
@@ -1016,7 +1019,7 @@ export default function OrdersClient() {
           isCustomisation: isCustomisation,
           customisationDetails: isCustomisation
             ? {
-                noOfBoxes: noOfBoxes,
+                noOfBoxes: savedNoOfBoxes,
                 boxType: selectedBoxObj?.name || boxType,
                 boxPrice: selectedBoxPrice,
                 boxImageUrl: finalBoxImageUrl,
@@ -1031,7 +1034,7 @@ export default function OrdersClient() {
           items: validItems,
           totalItems: validItems.length,
           subTotal: subTotal,
-          noOfBoxes: noOfBoxes,
+          noOfBoxes: savedNoOfBoxes,
           boxChargesTotal: isCustomisation ? boxChargesTotal : 0,
           stickerChargesTotal: isCustomisation ? stickerChargesTotal : 0,
           shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
@@ -1274,26 +1277,31 @@ export default function OrdersClient() {
   ];
 
   return (
-    <div className="w-full flex flex-col gap-6 font-sans pb-10">
+    <div className="w-full flex flex-col gap-4 font-sans pb-10">
 
       {/* ── 1. SHOPIFY POLARIS PAGE TITLE & ACTION BAR ────────────────────── */}
       <div className="flex flex-col gap-3 pt-1">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <ShoppingBag size={22} className="text-slate-800 stroke-[1.75]" />
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Orders</h1>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center flex-shrink-0">
+              <ShoppingBag size={18} />
+            </div>
+            <div>
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Orders</h1>
+              <p className="text-[11px] text-slate-500 hidden sm:block">Manage, filter, and track manufacturing and delivery time slots</p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => toast.info('Exporting Orders', 'Generating orders CSV / Excel export...')}
-              className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+              className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 h-8 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer"
             >
               Export
             </button>
             <button
               onClick={() => handleOpenAddOrderModal('9:00 AM - 12:00 PM')}
-              className="bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
+              className="bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-semibold px-3.5 py-1.5 h-8 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
             >
               <Plus size={14} />
               <span>Create order</span>
@@ -1302,7 +1310,7 @@ export default function OrdersClient() {
         </div>
 
         {/* ── Filter Toolbar (Date, Order Status, Payment Status, Search) ── */}
-        <div className="bg-white rounded-xl p-3 border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-white rounded-xl p-3 border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
           {/* Left: Custom Date Picker Control */}
           <div className="flex items-center gap-2 flex-wrap">
             <CustomDatePicker
@@ -1315,7 +1323,7 @@ export default function OrdersClient() {
             <button
               type="button"
               onClick={() => setSelectedDate(getTodayDateStr())}
-              className={`px-3 py-1 h-[32px] rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+              className={`px-3 py-1 h-8 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
                 selectedDate === getTodayDateStr()
                   ? 'bg-slate-100 text-slate-900 border-slate-300 font-bold'
                   : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
@@ -1327,7 +1335,7 @@ export default function OrdersClient() {
             <button
               type="button"
               onClick={() => setSelectedDate('All')}
-              className={`px-3 py-1 h-[32px] rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+              className={`px-3 py-1 h-8 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
                 selectedDate === 'All'
                   ? 'bg-slate-100 text-slate-900 border-slate-300 font-bold'
                   : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
@@ -1348,7 +1356,7 @@ export default function OrdersClient() {
                 onChange={setOrderStatusFilter}
                 icon={<Filter size={13} />}
                 size="sm"
-                buttonClassName="h-[36px] border-slate-200 rounded-xl"
+                buttonClassName="h-8 text-xs font-medium border-slate-300 rounded-lg bg-white shadow-2xs"
               />
             </div>
 
@@ -1361,7 +1369,7 @@ export default function OrdersClient() {
                 onChange={setPaymentStatusFilter}
                 icon={<Tag size={13} />}
                 size="sm"
-                buttonClassName="h-[36px] border-slate-200 rounded-xl"
+                buttonClassName="h-8 text-xs font-medium border-slate-300 rounded-lg bg-white shadow-2xs"
               />
             </div>
 
@@ -1372,9 +1380,9 @@ export default function OrdersClient() {
                 placeholder="Search orders..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-3.5 pr-8 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 h-[36px] bg-slate-50/50 w-36 sm:w-48"
+                className="pl-3 pr-8 py-1 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D] bg-[#f7f7f8] focus:bg-white h-8 w-36 sm:w-48 shadow-2xs transition-colors"
               />
-              <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <Search size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
 
             {/* Reset Filters Button */}
@@ -1387,7 +1395,7 @@ export default function OrdersClient() {
                   setPaymentStatusFilter('All');
                   setSearchTerm('');
                 }}
-                className="px-2.5 py-1.5 h-[36px] rounded-xl text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 transition-colors cursor-pointer"
+                className="px-2.5 py-1 h-8 rounded-lg text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer"
                 title="Reset all filters to defaults"
               >
                 Reset
@@ -1398,77 +1406,77 @@ export default function OrdersClient() {
       </div>
 
       {/* ── 2. TOP METRICS & SUMMARY CARDS BAR ───────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Total Orders Card */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
-            <ShoppingBag size={20} />
+        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center flex-shrink-0">
+            <ShoppingBag size={17} />
           </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-semibold">Total Orders</p>
-            <h3 className="text-lg font-extrabold text-slate-900">{totalOrdersCount}</h3>
-            <p className="text-[10px] text-emerald-600 font-bold">Filtered count</p>
+          <div className="min-w-0">
+            <p className="text-[11px] text-slate-500 font-medium truncate">Total Orders</p>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{totalOrdersCount}</h3>
+            <p className="text-[10px] text-emerald-600 font-medium">Filtered count</p>
           </div>
         </div>
 
         {/* Total Amount Card */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center flex-shrink-0">
-            <IndianRupee size={20} />
+        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center flex-shrink-0">
+            <IndianRupee size={17} />
           </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-semibold">Total Amount</p>
-            <h3 className="text-sm font-extrabold text-slate-900">
+          <div className="min-w-0">
+            <p className="text-[11px] text-slate-500 font-medium truncate">Total Amount</p>
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight truncate">
               ₹ {totalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </h3>
-            <p className="text-[10px] text-emerald-600 font-bold">Filtered total</p>
+            <p className="text-[10px] text-emerald-600 font-medium">Filtered total</p>
           </div>
         </div>
 
         {/* Confirmed Orders */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
-            <CheckCircle2 size={20} />
+        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center flex-shrink-0">
+            <CheckCircle2 size={17} />
           </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-semibold">Confirmed Orders</p>
-            <h3 className="text-lg font-extrabold text-slate-900">{confirmedCount}</h3>
+          <div className="min-w-0">
+            <p className="text-[11px] text-slate-500 font-medium truncate">Confirmed</p>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{confirmedCount}</h3>
             <p className="text-[10px] text-slate-400">Created/Confirmed</p>
           </div>
         </div>
 
         {/* Pending Orders */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
-            <Clock size={20} />
+        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center flex-shrink-0">
+            <Clock size={17} />
           </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-semibold">Pending Orders</p>
-            <h3 className="text-lg font-extrabold text-slate-900">{pendingCount}</h3>
+          <div className="min-w-0">
+            <p className="text-[11px] text-slate-500 font-medium truncate">Pending</p>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{pendingCount}</h3>
             <p className="text-[10px] text-slate-400">Status/Payment</p>
           </div>
         </div>
 
         {/* Processing Orders */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-            <PackageCheck size={20} />
+        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center flex-shrink-0">
+            <PackageCheck size={17} />
           </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-semibold">Processing Orders</p>
-            <h3 className="text-lg font-extrabold text-slate-900">{processingCount}</h3>
+          <div className="min-w-0">
+            <p className="text-[11px] text-slate-500 font-medium truncate">Processing</p>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{processingCount}</h3>
             <p className="text-[10px] text-slate-400">In workflow</p>
           </div>
         </div>
 
         {/* Delivered Orders */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
-            <Truck size={20} />
+        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center flex-shrink-0">
+            <Truck size={17} />
           </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-semibold">Delivered Orders</p>
-            <h3 className="text-lg font-extrabold text-slate-900">{deliveredCount}</h3>
+          <div className="min-w-0">
+            <p className="text-[11px] text-slate-500 font-medium truncate">Delivered</p>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{deliveredCount}</h3>
             <p className="text-[10px] text-slate-400">Completed</p>
           </div>
         </div>
@@ -1476,23 +1484,23 @@ export default function OrdersClient() {
 
       {/* ── 3. Navigation Sub-Tabs (Orders by Slot vs Orders List) ── */}
       <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => setActiveTab('slot')}
-            className={`px-[12px] py-[6px] rounded-[8px] text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 h-8 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
               activeTab === 'slot'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-[#02626D] text-white shadow-2xs'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
           >
             Orders by Slot ({filteredOrders.length})
           </button>
           <button
             onClick={() => setActiveTab('list')}
-            className={`px-[12px] py-[6px] rounded-[8px] text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 h-8 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
               activeTab === 'list'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-[#02626D] text-white shadow-2xs'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
           >
             Orders List ({filteredOrders.length})
@@ -1502,20 +1510,20 @@ export default function OrdersClient() {
 
       {/* ── 4. SLOT VIEW (Grid of 4 Time Slots - WITHOUT visible scrollbar) ───── */}
       {activeTab === 'slot' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
           {SLOT_TIMES.map((slotTime) => {
             const slotOrders = filteredOrders.filter((o) => o.slot === slotTime);
 
             return (
               <div
                 key={slotTime}
-                className="bg-white rounded-2xl border border-slate-200/90 shadow-xs flex flex-col overflow-hidden"
+                className="bg-white rounded-xl border border-slate-200/90 shadow-2xs flex flex-col overflow-hidden"
               >
                 {/* Slot Column Header */}
-                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                  <span className="font-extrabold text-sm text-slate-800">{slotTime}</span>
+                <div className="p-3 sm:p-3.5 border-b border-slate-100 flex items-center justify-between bg-[#f7f7f8]">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800">{slotTime}</span>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700">
                       {slotOrders.length}
                     </span>
                     {/* Analytics Button: Left of Plus Button */}
@@ -1525,27 +1533,24 @@ export default function OrdersClient() {
                         setIsSlotAnalyticsModalOpen(true);
                         setSlotAnalyticsSearchTerm('');
                       }}
-                      className="flex items-center justify-center h-[30px] w-[30px] rounded-[6px] bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-bold text-xs transition-all cursor-pointer shadow-2xs border border-slate-200"
+                      className="flex items-center justify-center h-7 w-7 rounded-lg bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                       title={`View Item Quantity Analytics for ${slotTime}`}
                     >
-                      <BarChart3 size={15} />
+                      <BarChart3 size={14} />
                     </button>
                     {/* Plus Button */}
                     <button
                       onClick={() => handleOpenAddOrderModal(slotTime)}
-                      className="flex items-center justify-center h-[30px] w-[30px] rounded-[6px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all cursor-pointer shadow-xs"
+                      className="flex items-center justify-center h-7 w-7 rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs transition-colors cursor-pointer"
                       title={`Add Order for ${slotTime}`}
                     >
-                      <Plus size={15} />
+                      <Plus size={14} />
                     </button>
                   </div>
                 </div>
 
-                {/* Order Cards List inside Slot - NO SCROLLBAR */}
-                <div
-                  className="p-3 space-y-3 flex-1 max-h-[550px] overflow-y-auto no-scrollbar"
-                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                >
+                {/* Order Cards List inside Slot (Full Natural Height - No Internal Scroll) */}
+                <div className="p-3 space-y-2.5 flex-1">
                   {slotOrders.length === 0 ? (
                     <div className="py-10 text-center text-slate-400 text-xs font-medium">
                       No orders in this slot for the selected filters.
@@ -1555,22 +1560,22 @@ export default function OrdersClient() {
                       <div
                         key={order.id}
                         onClick={() => navigateToOrder(order.id)}
-                        className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs hover:shadow-sm hover:border-indigo-200 transition-all space-y-2.5 relative group cursor-pointer"
+                        className="bg-white border border-slate-200/90 hover:border-[#02626D]/50 rounded-lg p-3 shadow-2xs hover:shadow-xs transition-all space-y-2 relative group cursor-pointer"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-xs text-indigo-600 font-mono">{order.code}</span>
-                          <span className="font-extrabold text-xs text-slate-900">
+                          <span className="font-bold text-xs text-[#02626D] font-mono">{order.code}</span>
+                          <span className="font-bold text-xs text-slate-900">
                             ₹ {(order.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
 
                         <div className="flex items-center justify-between gap-1">
-                          <h4 className="text-xs font-bold text-slate-900 truncate max-w-[110px]" title={order.customerName}>
+                          <h4 className="text-xs font-semibold text-slate-900 truncate max-w-[120px]" title={order.customerName}>
                             {order.customerName}
                           </h4>
-                          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          <div className="flex items-center gap-1 flex-wrap justify-end">
                             <span
-                              className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                              className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${
                                 order.paymentStatus === 'Completed'
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                   : order.paymentStatus === 'Partial'
@@ -1584,7 +1589,7 @@ export default function OrdersClient() {
                               const osStyle = getOrderStatusBadgeStyle(order.orderStatus);
                               return (
                                 <span
-                                  className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${osStyle.bg} ${osStyle.text} ${osStyle.border}`}
+                                  className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${osStyle.bg} ${osStyle.text} ${osStyle.border}`}
                                 >
                                   {order.orderStatus}
                                 </span>
@@ -1593,7 +1598,7 @@ export default function OrdersClient() {
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-50">
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-100">
                           <div className="flex items-center gap-1">
                             <ShoppingBag size={12} />
                             <span>{order.totalItems || order.items?.length || 0} Items</span>
@@ -1607,24 +1612,24 @@ export default function OrdersClient() {
                           <div className="flex items-center gap-1">
                             <button
                               onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
-                              className="flex items-center justify-center h-7 w-7 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors cursor-pointer border border-indigo-100 shadow-2xs"
+                              className="flex items-center justify-center h-6.5 w-6.5 rounded-md text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-300 shadow-2xs"
                               title="View Order Details"
                             >
-                              <Eye size={13} />
+                              <Eye size={12} />
                             </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); handlePrintOrderSlip(order); }}
-                              className="flex items-center justify-center h-7 w-7 rounded-lg text-teal-700 bg-teal-50 hover:bg-teal-100 transition-colors cursor-pointer border border-teal-200 shadow-2xs"
+                              className="flex items-center justify-center h-6.5 w-6.5 rounded-md text-[#02626D] bg-[#02626D]/10 hover:bg-[#02626D]/20 transition-colors cursor-pointer border border-[#02626D]/30 shadow-2xs"
                               title="Print Thermal Receipt"
                             >
-                              <Printer size={13} />
+                              <Printer size={12} />
                             </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}
-                              className="flex items-center justify-center h-7 w-7 rounded-lg text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer border border-slate-200/80 shadow-2xs"
+                              className="flex items-center justify-center h-6.5 w-6.5 rounded-md text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-300 shadow-2xs"
                               title="Edit Order"
                             >
-                              <Pencil size={13} />
+                              <Pencil size={12} />
                             </button>
                           </div>
                         </div>
@@ -1634,10 +1639,10 @@ export default function OrdersClient() {
                 </div>
 
                 {/* Footer Link */}
-                <div className="p-3 text-center border-t border-slate-100 bg-slate-50/30">
+                <div className="p-2.5 text-center border-t border-slate-100 bg-[#f7f7f8]">
                   <button
                     onClick={() => setActiveTab('list')}
-                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
+                    className="text-xs font-semibold text-[#02626D] hover:text-[#014d56] transition-colors cursor-pointer"
                   >
                     View all {slotOrders.length} orders →
                   </button>
@@ -1650,9 +1655,9 @@ export default function OrdersClient() {
 
       {/* ── 5. LIST VIEW TAB ────────────────────────────────────────── */}
       {activeTab === 'list' && (
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-          <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
-            <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+        <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+          <div className="p-3.5 sm:p-4 border-b border-slate-100 flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               Showing {filteredOrders.length} of {orders.length} total orders
             </span>
           </div>
@@ -1660,15 +1665,15 @@ export default function OrdersClient() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-600 uppercase">
-                  <th className="py-3.5 px-4 sm:px-6">Order Code</th>
-                  <th className="py-3.5 px-4">Customer</th>
-                  <th className="py-3.5 px-4">Slot Time</th>
-                  <th className="py-3.5 px-4">Items Count</th>
-                  <th className="py-3.5 px-4">Total Amount</th>
-                  <th className="py-3.5 px-4">Payment Status</th>
-                  <th className="py-3.5 px-4">Order Status</th>
-                  <th className="py-3.5 px-4 text-center">Actions</th>
+                <tr className="bg-[#f7f7f8] border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  <th className="py-2.5 px-4 sm:px-6">Order Code</th>
+                  <th className="py-2.5 px-4">Customer</th>
+                  <th className="py-2.5 px-4">Slot Time</th>
+                  <th className="py-2.5 px-4">Items Count</th>
+                  <th className="py-2.5 px-4">Total Amount</th>
+                  <th className="py-2.5 px-4">Payment Status</th>
+                  <th className="py-2.5 px-4">Order Status</th>
+                  <th className="py-2.5 px-4 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
@@ -1683,15 +1688,15 @@ export default function OrdersClient() {
                     <tr
                       key={order.id}
                       onClick={() => navigateToOrder(order.id)}
-                      className="hover:bg-indigo-50/30 cursor-pointer transition-colors"
+                      className="hover:bg-slate-50/60 cursor-pointer transition-colors"
                     >
-                      <td className="py-3.5 px-4 sm:px-6 font-bold text-indigo-600">{order.code}</td>
-                      <td className="py-3.5 px-4 font-bold text-slate-900">{order.customerName}</td>
-                      <td className="py-3.5 px-4 text-slate-600">{order.slot}</td>
-                      <td className="py-3.5 px-4 text-slate-600 font-bold">{order.totalItems || order.items?.length} Items</td>
-                      <td className="py-3.5 px-4 font-extrabold text-slate-900">₹ {order.totalAmount}</td>
-                      <td className="py-3.5 px-4">
-                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                      <td className="py-3 px-4 sm:px-6 font-bold text-[#02626D] font-mono">{order.code}</td>
+                      <td className="py-3 px-4 font-semibold text-slate-900">{order.customerName}</td>
+                      <td className="py-3 px-4 text-slate-600">{order.slot}</td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">{order.totalItems || order.items?.length} Items</td>
+                      <td className="py-3 px-4 font-bold text-slate-900">₹ {order.totalAmount}</td>
+                      <td className="py-3 px-4">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
                           order.paymentStatus === 'Completed'
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             : order.paymentStatus === 'Partial'
@@ -1701,38 +1706,38 @@ export default function OrdersClient() {
                           {order.paymentStatus}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4">
                         {(() => {
                           const osStyle = getOrderStatusBadgeStyle(order.orderStatus);
                           return (
-                            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${osStyle.bg} ${osStyle.text} ${osStyle.border}`}>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${osStyle.bg} ${osStyle.text} ${osStyle.border}`}>
                               {order.orderStatus}
                             </span>
                           );
                         })()}
                       </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
-                            className="flex items-center justify-center h-8 w-8 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors cursor-pointer border border-indigo-100 shadow-2xs"
+                            className="flex items-center justify-center h-7 w-7 rounded-lg text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-300 shadow-2xs"
                             title="View Order Details"
                           >
-                            <Eye size={14} />
+                            <Eye size={13} />
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handlePrintOrderSlip(order); }}
-                            className="flex items-center justify-center h-8 w-8 rounded-lg text-teal-700 bg-teal-50 hover:bg-teal-100 transition-colors cursor-pointer border border-teal-200 shadow-2xs"
+                            className="flex items-center justify-center h-7 w-7 rounded-lg text-[#02626D] bg-[#02626D]/10 hover:bg-[#02626D]/20 transition-colors cursor-pointer border border-[#02626D]/30 shadow-2xs"
                             title="Print Thermal Receipt"
                           >
-                            <Printer size={14} />
+                            <Printer size={13} />
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}
-                            className="flex items-center justify-center h-8 w-8 rounded-lg text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer border border-slate-200/80 shadow-2xs"
+                            className="flex items-center justify-center h-7 w-7 rounded-lg text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-300 shadow-2xs"
                             title="Edit Order"
                           >
-                            <Pencil size={14} />
+                            <Pencil size={13} />
                           </button>
                         </div>
                       </td>
@@ -1755,21 +1760,20 @@ export default function OrdersClient() {
 
       {/* ── 6. FULL SCREEN MODAL: CREATE ORDER (Responsive Modern Mobile & Desktop Layout) */}
       {isAddOrderModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col overflow-hidden animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 bg-[#f6f6f7] flex flex-col overflow-hidden animate-in fade-in duration-150 font-sans">
 
           {/* Modal Top Header Bar */}
-          <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 md:px-8 py-3 sm:py-4 flex items-center justify-between shadow-2xs flex-shrink-0 z-30">
+          <div className="bg-white border-b border-slate-200/90 px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between shadow-2xs flex-shrink-0 z-30">
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs flex-shrink-0">
-                <ShoppingBag size={18} className="sm:hidden" />
-                <ShoppingBag size={20} className="hidden sm:block" />
+              <div className="w-8 h-8 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center flex-shrink-0">
+                <ShoppingBag size={18} />
               </div>
               <div className="min-w-0">
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  <h2 className="text-sm sm:text-lg font-black text-slate-900 tracking-tight truncate">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight truncate">
                     {editingOrder ? `Edit #${editingOrder.code}` : 'Create Order'}
                   </h2>
-                  <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 whitespace-nowrap">
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap">
                     {orderSlot}
                   </span>
                 </div>
@@ -1777,11 +1781,11 @@ export default function OrdersClient() {
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => setIsAddOrderModalOpen(false)}
-                className="hidden sm:inline-flex px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="hidden sm:inline-flex px-3 py-1.5 h-8 rounded-lg text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -1789,14 +1793,14 @@ export default function OrdersClient() {
                 type="button"
                 onClick={handleCreateOrderSubmit}
                 disabled={isSubmitting || !selectedCustomer || orderItems.length === 0}
-                className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 h-8 rounded-lg text-xs font-semibold bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 <span>{editingOrder ? 'Update' : 'Create'}</span>
               </button>
               <button
                 onClick={() => setIsAddOrderModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl h-8 w-8 flex items-center justify-center hover:bg-slate-100 transition-colors cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg h-8 w-8 flex items-center justify-center hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -1804,20 +1808,20 @@ export default function OrdersClient() {
           </div>
 
           {/* Modal Main Body: 2 Columns Layout */}
-          <div className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-8 w-full pb-24 lg:pb-8">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 max-w-7xl mx-auto">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-5 w-full pb-24 lg:pb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 w-full max-w-[1560px] mx-auto">
 
               {/* Left Column (8 Cols): Time Slot, Customer Search, Product Items Table */}
-              <div className="lg:col-span-8 space-y-4 sm:space-y-6">
+              <div className="lg:col-span-8 xl:col-span-8 space-y-3.5">
 
                 {/* 1. Time Slot & Dates Selection */}
-                <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3 sm:space-y-4">
+                <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3.5">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
                         Order Time Slot *
                       </label>
-                      <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                      <span className="text-[10px] font-medium text-[#02626D] bg-[#02626D]/10 px-2 py-0.5 rounded-md">
                         Required
                       </span>
                     </div>
@@ -1827,10 +1831,10 @@ export default function OrdersClient() {
                           key={slot}
                           type="button"
                           onClick={() => setOrderSlot(slot)}
-                          className={`py-2 px-2 min-h-[38px] rounded-xl text-[11px] sm:text-xs font-bold border transition-all cursor-pointer flex items-center justify-center text-center leading-tight ${
+                          className={`h-8 px-2 rounded-lg text-xs font-medium border transition-colors cursor-pointer flex items-center justify-center text-center leading-tight ${
                             orderSlot === slot
-                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                              ? 'bg-[#02626D] text-white border-[#02626D] shadow-2xs font-semibold'
+                              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                           }`}
                         >
                           {slot}
@@ -1842,10 +1846,10 @@ export default function OrdersClient() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-100">
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-bold text-slate-700">
+                        <label className="block text-xs font-semibold text-slate-700">
                           Manufacturing Date *
                         </label>
-                        <span className="text-[10px] font-bold text-rose-500">Tue Closed</span>
+                        <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">Tue Closed</span>
                       </div>
                       <CustomDatePicker
                         value={mfgDate}
@@ -1860,10 +1864,10 @@ export default function OrdersClient() {
 
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-bold text-slate-700">
+                        <label className="block text-xs font-semibold text-slate-700">
                           Expected Delivery Date *
                         </label>
-                        <span className="text-[10px] font-bold text-rose-500">Tue Closed</span>
+                        <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">Tue Closed</span>
                       </div>
                       <CustomDatePicker
                         value={expDeliveryDate}
@@ -1879,25 +1883,25 @@ export default function OrdersClient() {
                 </div>
 
                 {/* 2. Customisation Box Checkbox & Section */}
-                <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3 sm:space-y-4">
+                <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5">
                       <input
                         type="checkbox"
                         id="customisationCheckbox"
                         checked={isCustomisation}
                         onChange={(e) => setIsCustomisation(e.target.checked)}
-                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        className="w-4 h-4 rounded text-[#02626D] accent-[#02626D] focus:ring-[#02626D] cursor-pointer"
                       />
                       <label
                         htmlFor="customisationCheckbox"
-                        className="text-xs font-extrabold text-slate-900 cursor-pointer select-none"
+                        className="text-xs font-bold text-slate-800 cursor-pointer select-none"
                       >
                         Include Customisation Box
                       </label>
                     </div>
                     {isCustomisation && (
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
                         Customisation Active
                       </span>
                     )}
@@ -1905,28 +1909,32 @@ export default function OrdersClient() {
 
                   {/* Customisation Box Details */}
                   {isCustomisation && (
-                    <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50/80 border border-slate-200 space-y-3 sm:space-y-4 animate-in fade-in duration-150">
-                      <h4 className="text-[11px] sm:text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-2">
+                    <div className="p-3 sm:p-3.5 rounded-lg bg-[#f7f7f8] border border-slate-200 space-y-3 animate-in fade-in duration-150">
+                      <h4 className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider border-b border-slate-200 pb-1.5">
                         Customisation Packaging Options
                       </h4>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                         {/* 1. No of Boxes */}
                         <div className="flex flex-col">
-                          <label className="text-[11px] font-bold text-slate-600 mb-1">No of boxes *</label>
+                          <label className="text-[11px] font-semibold text-slate-600 mb-1">No of boxes *</label>
                           <input
                             type="number"
-                            min="1"
+                            min="0"
+                            placeholder="0"
                             value={noOfBoxes}
-                            onChange={(e) => setNoOfBoxes(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-white font-bold shadow-2xs h-[38px]"
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setNoOfBoxes(val === '' ? '' : Math.max(0, parseInt(val) || 0));
+                            }}
+                            className="w-full px-2.5 py-1 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D] focus:ring-1 focus:ring-[#02626D] bg-white font-semibold shadow-2xs h-8"
                           />
                         </div>
 
                         {/* 2. Box Type Dropdown */}
                         <div className="flex flex-col">
-                          <label className="text-[11px] font-bold text-slate-600 mb-1">
-                            Box Type {activeBoxes.length > 0 ? `(₹${selectedBoxPrice}/box)` : ''}
+                          <label className="text-[11px] font-semibold text-slate-600 mb-1 truncate">
+                            Box Type {activeBoxes.length > 0 ? `(₹${selectedBoxPrice})` : ''}
                           </label>
                           <CustomSelect
                             options={activeBoxes.map((b) => ({
@@ -1936,14 +1944,14 @@ export default function OrdersClient() {
                             value={boxType}
                             onChange={(val) => setBoxType(val)}
                             className="w-full"
-                            buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs sm:text-sm py-2 h-[38px]"
+                            buttonClassName="w-full bg-white font-medium shadow-2xs border-slate-300 rounded-lg text-xs py-1 h-8"
                           />
                         </div>
 
                         {/* 3. Shrink Type Dropdown */}
                         <div className="flex flex-col">
-                          <label className="text-[11px] font-bold text-slate-600 mb-1">
-                            Shrink Wrap {shrinkType !== 'None' ? `(₹${selectedShrinkPrice}/box)` : ''}
+                          <label className="text-[11px] font-semibold text-slate-600 mb-1 truncate">
+                            Shrink Wrap {shrinkType !== 'None' ? `(₹${selectedShrinkPrice})` : ''}
                           </label>
                           <CustomSelect
                             options={[
@@ -1956,14 +1964,14 @@ export default function OrdersClient() {
                             value={shrinkType}
                             onChange={(val) => setShrinkType(val)}
                             className="w-full"
-                            buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs sm:text-sm py-2 h-[38px]"
+                            buttonClassName="w-full bg-white font-medium shadow-2xs border-slate-300 rounded-lg text-xs py-1 h-8"
                           />
                         </div>
 
                         {/* 4. Sticker Type Dropdown */}
                         <div className="flex flex-col">
-                          <label className="text-[11px] font-bold text-slate-600 mb-1">
-                            Sticker {stickerType !== 'None' ? `(₹${selectedStickerPrice}/box)` : ''}
+                          <label className="text-[11px] font-semibold text-slate-600 mb-1 truncate">
+                            Sticker {stickerType !== 'None' ? `(₹${selectedStickerPrice})` : ''}
                           </label>
                           <CustomSelect
                             options={[
@@ -1976,25 +1984,25 @@ export default function OrdersClient() {
                             value={stickerType}
                             onChange={(val) => setStickerType(val)}
                             className="w-full"
-                            buttonClassName="w-full bg-white font-semibold shadow-2xs border-slate-200 rounded-xl text-xs sm:text-sm py-2 h-[38px]"
+                            buttonClassName="w-full bg-white font-medium shadow-2xs border-slate-300 rounded-lg text-xs py-1 h-8"
                           />
                         </div>
 
                         {/* 5. Packing Box Image Holder */}
                         <div className="flex flex-col">
-                          <label className="text-[11px] font-bold text-slate-600 mb-1">Box Image</label>
-                          <div className="flex items-center gap-2 bg-white p-1 border border-slate-200 rounded-xl shadow-2xs h-[38px]">
+                          <label className="text-[11px] font-semibold text-slate-600 mb-1">Box Image</label>
+                          <div className="flex items-center gap-1.5 bg-white p-1 border border-slate-300 rounded-lg shadow-2xs h-8">
                             <input
                               type="file"
                               accept="image/*"
                               disabled={isUploadingBoxImage}
                               onChange={handleBoxImageUpload}
-                              className="text-[10px] text-slate-500 file:mr-1 file:py-0.5 file:px-1.5 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-indigo-50 file:text-indigo-700 cursor-pointer w-full"
+                              className="text-[10px] text-slate-500 file:mr-1 file:py-0.5 file:px-1.5 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-[#02626D]/10 file:text-[#02626D] cursor-pointer w-full"
                             />
                             {isUploadingBoxImage ? (
-                              <Loader2 size={16} className="animate-spin text-indigo-600 flex-shrink-0 mr-1" />
+                              <Loader2 size={14} className="animate-spin text-[#02626D] flex-shrink-0 mr-1" />
                             ) : boxImageUrl ? (
-                              <div className="relative w-6 h-6 rounded-md overflow-hidden border border-slate-200 flex-shrink-0">
+                              <div className="relative w-6 h-6 rounded overflow-hidden border border-slate-200 flex-shrink-0">
                                 <Image src={boxImageUrl} alt="Box Preview" fill className="object-cover" />
                               </div>
                             ) : null}
@@ -2006,18 +2014,18 @@ export default function OrdersClient() {
                 </div>
 
                 {/* 3. Customer / Wholesaler Search */}
-                <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3">
+                <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
                       Customer / Wholesaler *
                     </label>
 
                     <button
                       type="button"
                       onClick={() => setIsAddCustomerModalOpen(true)}
-                      className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer bg-indigo-50 px-2.5 py-1.5 rounded-xl border border-indigo-100"
+                      className="h-7 px-2.5 rounded-lg text-xs font-semibold bg-white border border-[#02626D]/30 text-[#02626D] hover:bg-[#02626D]/5 shadow-2xs transition-colors cursor-pointer flex items-center gap-1"
                     >
-                      <UserPlus size={14} />
+                      <UserPlus size={13} />
                       <span>+ Add Customer</span>
                     </button>
                   </div>
@@ -2031,20 +2039,20 @@ export default function OrdersClient() {
                         setCustomerSearchTerm(e.target.value);
                         setSelectedCustomer(null);
                       }}
-                      className="w-full pl-3.5 pr-9 py-2.5 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50"
+                      className="w-full pl-9 pr-3 h-8.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D] focus:ring-1 focus:ring-[#02626D] bg-[#f7f7f8] focus:bg-white transition-all font-medium text-slate-800 placeholder-slate-400"
                     />
-                    <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
 
                     {/* Customer Dropdown Results */}
                     {customerSearchTerm && !selectedCustomer && (
-                      <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-2xl border border-slate-200 shadow-xl max-h-60 overflow-y-auto z-50 divide-y divide-slate-100">
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-slate-200 shadow-xl max-h-60 overflow-y-auto z-50 divide-y divide-slate-100">
                         {filteredCustomersSearch.length === 0 ? (
                           <div className="p-4 text-center">
-                            <p className="text-xs text-slate-500 font-semibold mb-2">No matching customer found</p>
+                            <p className="text-xs text-slate-500 font-medium mb-2">No matching customer found</p>
                             <button
                               type="button"
                               onClick={() => setIsAddCustomerModalOpen(true)}
-                              className="px-3.5 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors cursor-pointer"
+                              className="px-3 py-1.5 rounded-lg bg-[#02626D] text-white text-xs font-semibold hover:bg-[#014d56] transition-colors cursor-pointer shadow-2xs"
                             >
                               + Add New Customer
                             </button>
@@ -2057,13 +2065,13 @@ export default function OrdersClient() {
                                 setSelectedCustomer(cust);
                                 setCustomerSearchTerm(`${cust.name} (${cust.mobile})`);
                               }}
-                              className="p-3 hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-between gap-2"
+                              className="p-2.5 hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-between gap-2"
                             >
                               <div className="min-w-0">
                                 <p className="text-xs font-bold text-slate-900 truncate">{cust.name}</p>
-                                <p className="text-[11px] text-slate-500 mt-0.5 truncate">📞 {cust.mobile} • 📍 {cust.address}</p>
+                                <p className="text-[11px] text-slate-500 mt-0.5 truncate">📞 {cust.mobile} {cust.address ? `• 📍 ${cust.address}` : ''}</p>
                               </div>
-                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full flex-shrink-0 ${cust.type === 'Wholesaler' ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'}`}>
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md flex-shrink-0 ${cust.type === 'Wholesaler' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-slate-100 text-slate-700 border border-slate-200'}`}>
                                 {cust.type}
                               </span>
                             </div>
@@ -2075,22 +2083,22 @@ export default function OrdersClient() {
 
                   {/* Selected Customer Display Card */}
                   {selectedCustomer && (
-                    <div className="p-3 sm:p-4 rounded-xl bg-indigo-50/70 border border-indigo-100 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-xs flex-shrink-0">
+                    <div className="p-2.5 sm:p-3 rounded-lg bg-[#f7f7f8] border border-slate-200 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-[#02626D] text-white font-bold flex items-center justify-center text-xs shadow-2xs flex-shrink-0">
                           {selectedCustomer.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                            <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">{selectedCustomer.name}</span>
-                            <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-600 text-white font-mono">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-xs text-slate-900 truncate">{selectedCustomer.name}</span>
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-200 text-slate-800 font-mono">
                               {selectedCustomer.code}
                             </span>
-                            <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
                               {selectedCustomer.type}
                             </span>
                           </div>
-                          <p className="text-[11px] text-slate-600 mt-0.5 truncate">
+                          <p className="text-[11px] text-slate-500 mt-0.5 truncate">
                             📞 {selectedCustomer.mobile} {selectedCustomer.address ? `• 📍 ${selectedCustomer.address}` : ''}
                           </p>
                         </div>
@@ -2102,18 +2110,18 @@ export default function OrdersClient() {
                           setSelectedCustomer(null);
                           setCustomerSearchTerm('');
                         }}
-                        className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-white transition-colors cursor-pointer flex-shrink-0"
+                        className="p-1 text-slate-400 hover:text-slate-700 rounded-md hover:bg-white transition-colors cursor-pointer flex-shrink-0"
                         title="Remove selection"
                       >
-                        <X size={18} />
+                        <X size={16} />
                       </button>
                     </div>
                   )}
                 </div>
 
                 {/* 4. Products Selector Section */}
-                <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
-                  <div className="p-3.5 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+                  <div className="p-3.5 sm:p-4 border-b border-slate-100 flex items-center justify-between bg-[#f7f7f8]">
                     <div>
                       <h3 className="text-xs sm:text-sm font-bold text-slate-900">
                         Order Products ({orderItems.length})
@@ -2124,22 +2132,22 @@ export default function OrdersClient() {
                     <button
                       type="button"
                       onClick={() => handleOpenProductModal(null)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                      className="h-8 px-3 rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
                     >
-                      <Plus size={15} />
+                      <Plus size={14} />
                       <span>Add Item</span>
                     </button>
                   </div>
 
                   {/* Empty State */}
                   {orderItems.length === 0 ? (
-                    <div className="py-10 sm:py-12 text-center text-slate-400 p-4">
-                      <ShoppingBag size={28} className="mx-auto text-slate-300 mb-2" />
+                    <div className="py-8 sm:py-10 text-center text-slate-400 p-4">
+                      <ShoppingBag size={26} className="mx-auto text-slate-300 mb-1.5 stroke-[1.5]" />
                       <p className="font-semibold text-slate-600 text-xs sm:text-sm">No items added yet</p>
                       <button
                         type="button"
                         onClick={() => handleOpenProductModal(null)}
-                        className="mt-2 px-3.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-600 text-xs font-bold hover:bg-indigo-100 transition-colors cursor-pointer"
+                        className="mt-2 px-3 py-1.5 rounded-lg bg-[#02626D]/10 text-[#02626D] text-xs font-semibold hover:bg-[#02626D]/20 transition-colors cursor-pointer"
                       >
                         + Click here to add item
                       </button>
@@ -2151,20 +2159,20 @@ export default function OrdersClient() {
                         {orderItems.map((item, idx) => {
                           const lineKey = item.lineId || `${item.itemId}-${idx}`;
                           return (
-                            <div key={lineKey} className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-3 space-y-2.5 shadow-2xs">
+                            <div key={lineKey} className="bg-[#f7f7f8] border border-slate-200 rounded-xl p-3 space-y-2.5 shadow-2xs">
                               {/* Top Row: Thumbnail, Name & Remove */}
                               <div className="flex items-center justify-between gap-2">
                                 <div
                                   onClick={() => handleOpenProductModal(lineKey)}
-                                  className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer"
+                                  className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
                                 >
-                                  <div className="relative w-9 h-9 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0">
+                                  <div className="relative w-8 h-8 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0">
                                     <Image src={item.imageUrl || '/logo.png'} alt={item.itemName} fill className="object-contain p-0.5" />
                                   </div>
                                   <div className="min-w-0">
                                     <p className="text-xs font-bold text-slate-900 truncate flex items-center gap-1">
                                       <span>{item.itemName || 'Choose Product'}</span>
-                                      <Pencil size={11} className="text-slate-400 flex-shrink-0" />
+                                      <Pencil size={10} className="text-slate-400 flex-shrink-0" />
                                     </p>
                                     <p className="text-[10px] text-slate-400 font-mono truncate">{item.itemCode || 'Tap to choose'}</p>
                                   </div>
@@ -2176,25 +2184,25 @@ export default function OrdersClient() {
                                   className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                                   title="Remove product"
                                 >
-                                  <Trash2 size={15} />
+                                  <Trash2 size={14} />
                                 </button>
                               </div>
 
                               {/* Price, Quantity, Line Total Grid */}
-                              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200/60">
+                              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200/80">
                                 <div>
-                                  <label className="block text-[10px] font-bold text-slate-500 mb-1">Price (₹)</label>
+                                  <label className="block text-[10px] font-semibold text-slate-500 mb-1">Price (₹)</label>
                                   <input
                                     type="number"
                                     step="0.01"
                                     value={item.unitPrice}
                                     onChange={(e) => handleItemLineChange(lineKey, 'unitPrice', e.target.value)}
-                                    className="w-full px-2 py-1.5 border border-slate-200 rounded-xl font-bold text-slate-800 text-xs bg-white focus:outline-none focus:border-indigo-500"
+                                    className="w-full h-7.5 px-2 border border-slate-300 rounded-md font-semibold text-slate-800 text-xs bg-white focus:outline-none focus:border-[#02626D]"
                                   />
                                 </div>
 
                                 <div>
-                                  <label className="block text-[10px] font-bold text-slate-500 mb-1">Qty ({item.unit})</label>
+                                  <label className="block text-[10px] font-semibold text-slate-500 mb-1">Qty ({item.unit})</label>
                                   <input
                                     type="number"
                                     step="0.1"
@@ -2202,13 +2210,13 @@ export default function OrdersClient() {
                                     placeholder="0"
                                     value={item.quantity === 0 ? '' : item.quantity}
                                     onChange={(e) => handleItemLineChange(lineKey, 'quantity', e.target.value)}
-                                    className="w-full px-2 py-1.5 border border-slate-200 rounded-xl font-black text-indigo-600 text-xs bg-white focus:outline-none focus:border-indigo-500"
+                                    className="w-full h-7.5 px-2 border border-slate-300 rounded-md font-bold text-[#02626D] text-xs bg-white focus:outline-none focus:border-[#02626D]"
                                   />
                                 </div>
 
                                 <div>
-                                  <label className="block text-[10px] font-bold text-slate-500 mb-1">Line Total</label>
-                                  <div className="h-[31px] flex items-center justify-center px-1.5 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-black text-indigo-700">
+                                  <label className="block text-[10px] font-semibold text-slate-500 mb-1">Line Total</label>
+                                  <div className="h-7.5 flex items-center justify-center px-1.5 bg-slate-100 border border-slate-200 rounded-md text-xs font-bold text-slate-900">
                                     ₹ {item.lineTotal.toFixed(2)}
                                   </div>
                                 </div>
@@ -2216,22 +2224,22 @@ export default function OrdersClient() {
 
                               {/* Customisation Packet Toggle */}
                               {isCustomisation && (
-                                <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 bg-white p-2 rounded-xl border border-slate-100">
+                                <div className="flex items-center justify-between pt-1 border-t border-slate-200/80 bg-white p-2 rounded-lg border border-slate-200">
                                   <div className="flex flex-col">
-                                    <span className="text-[11px] font-bold text-slate-800">Individual Packet</span>
-                                    <span className="text-[10px] text-slate-400">₹{packetCostPerBox}/box ({noOfBoxes} boxes = ₹{noOfBoxes * packetCostPerBox})</span>
+                                    <span className="text-[11px] font-semibold text-slate-800">Individual Packet</span>
+                                    <span className="text-[10px] text-slate-400">₹{packetCostPerBox}/box ({numericNoOfBoxes} boxes = ₹{numericNoOfBoxes * packetCostPerBox})</span>
                                   </div>
                                   <button
                                     type="button"
                                     onClick={() => handleItemLineChange(lineKey, 'hasPacket', !item.hasPacket)}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                    className={`px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
                                       item.hasPacket
-                                        ? 'bg-emerald-600 text-white shadow-xs'
-                                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                     }`}
                                   >
                                     {item.hasPacket ? <Check size={12} /> : <X size={12} />}
-                                    <span>{item.hasPacket ? `Yes (+₹${noOfBoxes * packetCostPerBox})` : 'No'}</span>
+                                    <span>{item.hasPacket ? `Yes (+₹${numericNoOfBoxes * packetCostPerBox})` : 'No'}</span>
                                   </button>
                                 </div>
                               )}
@@ -2243,14 +2251,14 @@ export default function OrdersClient() {
                                   placeholder="Mfg notes..."
                                   value={item.manufacturingDescription || ''}
                                   onChange={(e) => handleItemLineChange(lineKey, 'mfgDesc', e.target.value)}
-                                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-indigo-500"
+                                  className="w-full h-7.5 px-2 text-xs border border-slate-200 rounded-md bg-white focus:outline-none focus:border-[#02626D]"
                                 />
                                 <input
                                   type="text"
                                   placeholder="Packing notes..."
                                   value={item.packingDescription || ''}
                                   onChange={(e) => handleItemLineChange(lineKey, 'pckDesc', e.target.value)}
-                                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-indigo-500"
+                                  className="w-full h-7.5 px-2 text-xs border border-slate-200 rounded-md bg-white focus:outline-none focus:border-[#02626D]"
                                 />
                               </div>
                             </div>
@@ -2262,15 +2270,15 @@ export default function OrdersClient() {
                       <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left border-collapse text-xs min-w-[760px]">
                           <thead>
-                            <tr className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                              <th className="py-3 px-4 min-w-[220px]">Item Name</th>
-                              <th className="py-3 px-3">Price (₹)</th>
-                              <th className="py-3 px-3 w-24">Qty</th>
-                              <th className="py-3 px-3">Total (₹)</th>
-                              {isCustomisation && <th className="py-3 px-3 text-center">Packet (₹{packetCostPerBox}/box)</th>}
-                              <th className="py-3 px-3">Mfg Instructions</th>
-                              <th className="py-3 px-3">Packing Instructions</th>
-                              <th className="py-3 px-3 text-center">Action</th>
+                            <tr className="bg-[#f7f7f8] border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                              <th className="py-2.5 px-3 min-w-[200px]">Item Name</th>
+                              <th className="py-2.5 px-3">Price (₹)</th>
+                              <th className="py-2.5 px-3 w-20">Qty</th>
+                              <th className="py-2.5 px-3">Total (₹)</th>
+                              {isCustomisation && <th className="py-2.5 px-3 text-center">Packet (₹{packetCostPerBox}/box)</th>}
+                              <th className="py-2.5 px-3">Mfg Instructions</th>
+                              <th className="py-2.5 px-3">Packing Instructions</th>
+                              <th className="py-2.5 px-3 text-center">Action</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -2278,52 +2286,51 @@ export default function OrdersClient() {
                               const lineKey = item.lineId || `${item.itemId}-${idx}`;
                               return (
                                 <tr key={lineKey} className="hover:bg-slate-50/60 transition-colors">
-                                  <td className="py-3 px-4">
+                                  <td className="py-2 px-3">
                                     {item.itemName ? (
                                       <div
                                         onClick={() => handleOpenProductModal(lineKey)}
-                                        className="flex items-center justify-between gap-2.5 bg-slate-50 hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 p-1.5 rounded-xl transition-all cursor-pointer group shadow-2xs min-w-[200px]"
+                                        className="h-8 px-2 rounded-lg border border-slate-200 hover:border-[#02626D] bg-white flex items-center justify-between gap-2 text-xs cursor-pointer shadow-2xs transition-all min-w-[190px]"
                                         title="Click to change product"
                                       >
-                                        <div className="flex items-center gap-2.5 min-w-0">
-                                          <div className="relative w-8 h-8 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <div className="relative w-6 h-6 rounded bg-slate-50 border border-slate-200 overflow-hidden flex-shrink-0">
                                             <Image
                                               src={item.imageUrl || '/logo.png'}
                                               alt={item.itemName}
                                               fill
-                                              className="object-contain p-1"
+                                              className="object-contain p-0.5"
                                             />
                                           </div>
                                           <div className="min-w-0 text-left">
-                                            <p className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
+                                            <p className="text-xs font-semibold text-slate-900 truncate">
                                               {item.itemName}
                                             </p>
-                                            <p className="text-[10px] text-slate-400 font-mono truncate">{item.itemCode}</p>
                                           </div>
                                         </div>
-                                        <Pencil size={13} className="text-slate-400 group-hover:text-indigo-600 flex-shrink-0 mr-1" />
+                                        <Pencil size={11} className="text-slate-400 flex-shrink-0" />
                                       </div>
                                     ) : (
                                       <button
                                         type="button"
                                         onClick={() => handleOpenProductModal(lineKey)}
-                                        className="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer min-w-[200px]"
+                                        className="h-8 w-full flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-[#02626D]/10 text-[#02626D] border border-slate-300 px-3 rounded-lg text-xs font-semibold transition-all shadow-2xs cursor-pointer min-w-[190px]"
                                       >
-                                        <Plus size={14} />
+                                        <Plus size={13} />
                                         <span>Select Product</span>
                                       </button>
                                     )}
                                   </td>
-                                  <td className="py-3 px-3">
+                                  <td className="py-2 px-3">
                                     <input
                                       type="number"
                                       step="0.01"
                                       value={item.unitPrice}
                                       onChange={(e) => handleItemLineChange(lineKey, 'unitPrice', e.target.value)}
-                                      className="w-20 px-2 py-1 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                                      className="w-20 h-7.5 px-2 border border-slate-300 rounded-md font-semibold text-slate-800 text-xs focus:outline-none focus:border-[#02626D]"
                                     />
                                   </td>
-                                  <td className="py-3 px-3">
+                                  <td className="py-2 px-3">
                                     <div className="flex items-center gap-1">
                                       <input
                                         type="number"
@@ -2332,36 +2339,36 @@ export default function OrdersClient() {
                                         placeholder="0"
                                         value={item.quantity === 0 ? '' : item.quantity}
                                         onChange={(e) => handleItemLineChange(lineKey, 'quantity', e.target.value)}
-                                        className="w-16 px-2 py-1 border border-slate-200 rounded-lg font-bold text-indigo-600 text-xs focus:outline-none focus:border-indigo-500"
+                                        className="w-16 h-7.5 px-2 border border-slate-300 rounded-md font-bold text-[#02626D] text-xs focus:outline-none focus:border-[#02626D]"
                                       />
                                       <span className="text-[10px] font-semibold text-slate-400">{item.unit}</span>
                                     </div>
                                   </td>
-                                  <td className="py-3 px-3 font-extrabold text-slate-900">
+                                  <td className="py-2 px-3 font-bold text-slate-900">
                                     ₹ {item.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                   </td>
 
                                   {isCustomisation && (
-                                    <td className="py-3 px-3 text-center">
+                                    <td className="py-2 px-3 text-center">
                                       <div className="flex items-center justify-center gap-1">
                                         <button
                                           type="button"
                                           onClick={() => handleItemLineChange(lineKey, 'hasPacket', !item.hasPacket)}
-                                          className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                                          className={`h-7 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
                                             item.hasPacket
-                                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                                              : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-2xs'
+                                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                                           }`}
-                                          title={`Packet charge ₹${packetCostPerBox} per box (${noOfBoxes} boxes = ₹${noOfBoxes * packetCostPerBox})`}
+                                          title={`Packet charge ₹${packetCostPerBox} per box (${numericNoOfBoxes} boxes = ₹${numericNoOfBoxes * packetCostPerBox})`}
                                         >
                                           {item.hasPacket ? (
                                             <>
-                                              <Check size={13} />
-                                              <span>₹{noOfBoxes * packetCostPerBox}</span>
+                                              <Check size={12} />
+                                              <span>₹{numericNoOfBoxes * packetCostPerBox}</span>
                                             </>
                                           ) : (
                                             <>
-                                              <X size={13} />
+                                              <X size={12} />
                                               <span>₹{packetCostPerBox}</span>
                                             </>
                                           )}
@@ -2370,31 +2377,31 @@ export default function OrdersClient() {
                                     </td>
                                   )}
 
-                                  <td className="py-3 px-3">
+                                  <td className="py-2 px-3">
                                     <input
                                       type="text"
                                       placeholder="Mfg notes..."
                                       value={item.manufacturingDescription || ''}
                                       onChange={(e) => handleItemLineChange(lineKey, 'mfgDesc', e.target.value)}
-                                      className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                                      className="w-full h-7.5 px-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-[#02626D] bg-[#f7f7f8] focus:bg-white"
                                     />
                                   </td>
-                                  <td className="py-3 px-3">
+                                  <td className="py-2 px-3">
                                     <input
                                       type="text"
                                       placeholder="Packing notes..."
                                       value={item.packingDescription || ''}
                                       onChange={(e) => handleItemLineChange(lineKey, 'pckDesc', e.target.value)}
-                                      className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                                      className="w-full h-7.5 px-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-[#02626D] bg-[#f7f7f8] focus:bg-white"
                                     />
                                   </td>
-                                  <td className="py-3 px-3 text-center">
+                                  <td className="py-2 px-3 text-center">
                                     <button
                                       type="button"
                                       onClick={() => handleRemoveItemLine(lineKey)}
-                                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                      className="p-1 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors cursor-pointer"
                                     >
-                                      <Trash2 size={15} />
+                                      <Trash2 size={14} />
                                     </button>
                                   </td>
                                 </tr>
@@ -2410,26 +2417,26 @@ export default function OrdersClient() {
               </div>
 
               {/* Right Column (4 Cols): Order Summary & Payment Checkout Panel */}
-              <div className="lg:col-span-4 space-y-4 sm:space-y-6">
-                <div className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200/90 shadow-2xs space-y-4 sm:space-y-5 lg:sticky lg:top-6">
-                  <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-100 pb-3">
+              <div className="lg:col-span-4 space-y-4">
+                <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3.5 lg:sticky lg:top-6">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-2">
                     Order Summary
                   </h3>
 
-                  <div className="space-y-2.5 text-xs text-slate-600">
-                    <div className="flex justify-between py-1 border-b border-slate-50">
-                      <span className="text-slate-400">Selected Slot:</span>
-                      <span className="font-bold text-slate-800">{orderSlot}</span>
+                  <div className="space-y-2 text-xs text-slate-600">
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500">Selected Slot:</span>
+                      <span className="font-semibold text-slate-800">{orderSlot}</span>
                     </div>
 
-                    <div className="flex justify-between py-1 border-b border-slate-50">
-                      <span className="text-slate-400">Total Items:</span>
-                      <span className="font-bold text-slate-800">{orderItems.length} products</span>
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500">Total Items:</span>
+                      <span className="font-semibold text-slate-800">{orderItems.length} products</span>
                     </div>
 
-                    <div className="flex justify-between py-1 border-b border-slate-50">
-                      <span className="text-slate-500 font-semibold">Sub Total:</span>
-                      <span className="font-bold text-slate-800">
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500 font-medium">Sub Total:</span>
+                      <span className="font-semibold text-slate-800">
                         ₹ {subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
@@ -2437,44 +2444,44 @@ export default function OrdersClient() {
                     {/* Breakdown based on Customisation Toggle */}
                     {isCustomisation ? (
                       <>
-                        <div className="flex justify-between py-1 border-b border-slate-50">
-                          <span className="text-slate-500 font-semibold">
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500 font-medium">
                             Box Charges ({noOfBoxes} × ₹{selectedBoxPrice}):
                           </span>
-                          <span className="font-bold text-slate-800">
+                          <span className="font-semibold text-slate-800">
                             + ₹ {boxChargesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
 
-                        <div className="flex justify-between py-1 border-b border-slate-50">
-                          <span className="text-slate-500 font-semibold">
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500 font-medium">
                             Sticker Charges ({stickerType !== 'None' ? `${noOfBoxes} × ₹${selectedStickerPrice}` : 'None'}):
                           </span>
-                          <span className="font-bold text-slate-800">
+                          <span className="font-semibold text-slate-800">
                             + ₹ {stickerChargesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
 
-                        <div className="flex justify-between py-1 border-b border-slate-50">
-                          <span className="text-slate-500 font-semibold">
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500 font-medium">
                             Shrink Charges ({shrinkType !== 'None' ? `${noOfBoxes} × ₹${selectedShrinkPrice}` : 'None'}):
                           </span>
-                          <span className="font-bold text-slate-800">
+                          <span className="font-semibold text-slate-800">
                             + ₹ {shrinkChargesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
 
-                        <div className="flex justify-between py-1 border-b border-slate-50">
-                          <span className="text-slate-500 font-semibold">
-                            Packet Charges ({orderItems.filter((i) => i.hasPacket).length} items × {noOfBoxes} boxes × ₹{packetCostPerBox}):
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500 font-medium">
+                            Packet Charges ({orderItems.filter((i) => i.hasPacket).length} items × {noOfBoxes} boxes):
                           </span>
-                          <span className="font-bold text-slate-800">
+                          <span className="font-semibold text-slate-800">
                             + ₹ {packetChargesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
 
-                        <div className="pt-2">
-                          <label className="block text-xs font-bold text-slate-700 mb-1">Discount (₹)</label>
+                        <div className="pt-1.5">
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">Discount (₹)</label>
                           <input
                             type="number"
                             step="1"
@@ -2482,26 +2489,26 @@ export default function OrdersClient() {
                             placeholder="0"
                             value={discountAmount}
                             onChange={(e) => setDiscountAmount(e.target.value)}
-                            className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
+                            className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D] bg-white font-medium shadow-2xs"
                           />
                         </div>
                       </>
                     ) : (
                       <>
-                        <div className="flex justify-between py-1 border-b border-slate-50">
-                          <span className="text-slate-500 font-semibold">
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500 font-medium">
                             Packing Charges ({noOfBoxes} boxes × ₹{globalSettings.globalPackingBoxPrice}):
                           </span>
-                          <span className="font-bold text-slate-800">
+                          <span className="font-semibold text-slate-800">
                             + ₹ {pCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
 
-                        <div className="pt-2 space-y-3">
+                        <div className="pt-1.5 space-y-2.5">
                           <div>
                             <div className="flex items-center justify-between mb-1">
-                              <label className="block text-xs font-bold text-slate-700">No. of Packing Boxes</label>
-                              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                              <label className="block text-xs font-semibold text-slate-700">No. of Packing Boxes</label>
+                              <span className="text-[10px] font-medium text-[#02626D] bg-[#02626D]/10 px-2 py-0.5 rounded-md">
                                 @ ₹{globalSettings.globalPackingBoxPrice}/box
                               </span>
                             </div>
@@ -2512,23 +2519,23 @@ export default function OrdersClient() {
                                 step="1"
                                 value={noOfBoxes}
                                 onChange={(e) => {
-                                  const val = Math.max(0, parseInt(e.target.value) || 0);
-                                  setNoOfBoxes(val);
+                                  const val = e.target.value;
+                                  setNoOfBoxes(val === '' ? '' : Math.max(0, parseInt(val) || 0));
                                 }}
-                                placeholder="1"
-                                className="w-24 px-3 py-2 text-xs sm:text-sm font-bold border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50"
+                                placeholder="0"
+                                className="w-20 h-8 px-2.5 text-xs font-bold border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D] bg-white shadow-2xs"
                               />
-                              <div className="flex-1 px-3 py-2 text-xs font-bold border border-slate-200 bg-slate-50 rounded-xl flex items-center justify-between text-slate-700">
-                                <span className="text-slate-400 font-medium">Packing Charge:</span>
-                                <span className="font-extrabold text-slate-900">
-                                  + ₹ {(Math.max(0, noOfBoxes) * globalSettings.globalPackingBoxPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              <div className="flex-1 h-8 px-2.5 text-xs font-medium border border-slate-200 bg-[#f7f7f8] rounded-lg flex items-center justify-between text-slate-700">
+                                <span className="text-slate-500 text-[11px]">Packing Charge:</span>
+                                <span className="font-bold text-slate-900">
+                                  + ₹ {(Math.max(0, numericNoOfBoxes) * globalSettings.globalPackingBoxPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </span>
                               </div>
                             </div>
                           </div>
 
                           <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1">Additional Charges (₹)</label>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Additional Charges (₹)</label>
                             <input
                               type="number"
                               step="1"
@@ -2536,12 +2543,12 @@ export default function OrdersClient() {
                               placeholder="0"
                               value={additionalCharges}
                               onChange={(e) => setAdditionalCharges(e.target.value)}
-                              className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
+                              className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D] bg-white font-medium shadow-2xs"
                             />
                           </div>
 
                           <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1">Discount (₹)</label>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Discount (₹)</label>
                             <input
                               type="number"
                               step="1"
@@ -2549,28 +2556,28 @@ export default function OrdersClient() {
                               placeholder="0"
                               value={discountAmount}
                               onChange={(e) => setDiscountAmount(e.target.value)}
-                              className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 bg-slate-50/50 font-semibold"
+                              className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D] bg-white font-medium shadow-2xs"
                             />
                           </div>
                         </div>
                       </>
                     )}
 
-                    <div className="flex justify-between py-2.5 border-t border-slate-200 text-base sm:text-lg font-black text-slate-900 mt-2">
+                    <div className="flex justify-between py-2 border-t border-slate-200 text-sm font-bold text-slate-900 mt-2">
                       <span>Grand Total:</span>
-                      <span className="text-indigo-600">
+                      <span className="text-base font-extrabold text-[#02626D]">
                         ₹ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
 
                   {/* Payment Details */}
-                  <div className="space-y-3.5 pt-1">
+                  <div className="space-y-3 pt-1 border-t border-slate-100">
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="block text-xs font-bold text-slate-700">Received Amount (₹)</label>
+                        <label className="block text-xs font-semibold text-slate-700">Received Amount (₹)</label>
                         {parseFloat(receivedAmount) > grandTotal && (
-                          <span className="text-[10px] font-bold text-red-600">Exceeds total!</span>
+                          <span className="text-[10px] font-semibold text-red-600">Exceeds total!</span>
                         )}
                       </div>
                       <input
@@ -2588,26 +2595,26 @@ export default function OrdersClient() {
                             setReceivedAmount(val);
                           }
                         }}
-                        className={`w-full px-3.5 py-2.5 text-sm sm:text-base font-bold border rounded-xl focus:outline-none bg-slate-50/50 ${
+                        className={`w-full h-8.5 px-3 text-sm font-bold border rounded-lg focus:outline-none bg-white shadow-2xs ${
                           parseFloat(receivedAmount) > grandTotal
                             ? 'text-red-600 border-red-300 focus:border-red-500'
-                            : 'text-indigo-600 border-slate-200 focus:border-indigo-500'
+                            : 'text-slate-900 border-slate-300 focus:border-[#02626D]'
                         }`}
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Payment Mode</label>
-                      <div className="grid grid-cols-3 gap-2">
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Mode</label>
+                      <div className="grid grid-cols-3 gap-1.5">
                         {(['UPI', 'Cash', 'Card'] as const).map((mode) => (
                           <button
                             key={mode}
                             type="button"
                             onClick={() => setPaymentMode(mode)}
-                            className={`py-2 px-2 min-h-[36px] rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                            className={`h-7.5 px-2 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
                               paymentMode === mode
-                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                ? 'bg-[#02626D] text-white border-[#02626D] shadow-2xs font-semibold'
+                                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                             }`}
                           >
                             {mode}
@@ -2617,14 +2624,14 @@ export default function OrdersClient() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Payment Status</label>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Status</label>
                       <span
-                        className={`block w-full text-center py-2 rounded-xl text-xs font-extrabold border ${
+                        className={`block w-full text-center h-7.5 leading-7 rounded-lg text-xs font-semibold border ${
                           paymentStatus === 'Completed'
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             : paymentStatus === 'Partial'
                             ? 'bg-sky-50 text-sky-700 border-sky-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
                         }`}
                       >
                         {paymentStatus}
@@ -2632,33 +2639,33 @@ export default function OrdersClient() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Order Status</label>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Order Status</label>
                       <CustomSelect
                         options={ALL_ORDER_STATUSES.map((s) => ({ value: s, label: s }))}
                         value={orderStatus}
                         onChange={(val) => setOrderStatus(val as OrderStatus)}
                         className="w-full"
-                        buttonClassName="w-full"
+                        buttonClassName="w-full h-8 text-xs font-medium rounded-lg border-slate-300 bg-white shadow-2xs"
                       />
                     </div>
                   </div>
 
                   {/* Desktop Submit Buttons */}
-                  <div className="pt-3 border-t border-slate-100 space-y-2 hidden lg:block">
+                  <div className="pt-2 border-t border-slate-100 space-y-2 hidden lg:block">
                     <button
                       type="button"
                       onClick={handleCreateOrderSubmit}
                       disabled={isSubmitting || !selectedCustomer || orderItems.length === 0}
-                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 text-white text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer disabled:opacity-50"
+                      className="w-full h-9 rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-semibold shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
-                      {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                      {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
                       <span>{editingOrder ? 'Update Order' : 'Create Order'}</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setIsAddOrderModalOpen(false)}
-                      className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+                      className="w-full h-8 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold shadow-2xs transition-colors text-center cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -2672,10 +2679,10 @@ export default function OrdersClient() {
           {/* Sticky Mobile Action Footer Bar */}
           <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200/90 p-3 flex items-center justify-between gap-3 shadow-xl z-40">
             <div className="min-w-0">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
                 Total ({orderItems.length} items)
               </span>
-              <span className="text-sm sm:text-base font-black text-indigo-700 truncate block">
+              <span className="text-sm font-bold text-[#02626D] truncate block">
                 ₹ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
             </div>
@@ -2684,7 +2691,7 @@ export default function OrdersClient() {
               <button
                 type="button"
                 onClick={() => setIsAddOrderModalOpen(false)}
-                className="px-3 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                className="px-3 h-8 rounded-lg text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -2692,7 +2699,7 @@ export default function OrdersClient() {
                 type="button"
                 onClick={handleCreateOrderSubmit}
                 disabled={isSubmitting || !selectedCustomer || orderItems.length === 0}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3.5 h-8 rounded-lg text-xs font-semibold bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 <span>{editingOrder ? 'Update Order' : 'Create Order'}</span>
@@ -2705,16 +2712,21 @@ export default function OrdersClient() {
 
       {/* ── 8. INLINE ADD CUSTOMER MODAL ────────────────────────────── */}
       {isAddCustomerModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 font-sans">
+          <div className="bg-white rounded-xl max-w-lg w-full p-5 shadow-xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">Add New Customer</h3>
-              <button onClick={() => setIsAddCustomerModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center">
+                  <UserPlus size={15} />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900">Add New Customer</h3>
+              </div>
+              <button onClick={() => setIsAddCustomerModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveQuickCustomer} className="space-y-3.5">
+            <form onSubmit={handleSaveQuickCustomer} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Customer Name *</label>
                 <input
@@ -2723,7 +2735,7 @@ export default function OrdersClient() {
                   placeholder="e.g. Ramesh Traders"
                   value={newCustomerForm.name}
                   onChange={(e) => setNewCustomerForm({ ...newCustomerForm, name: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-1.5 h-8 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D]"
                 />
               </div>
 
@@ -2736,7 +2748,7 @@ export default function OrdersClient() {
                     placeholder="+91 98765 43210"
                     value={newCustomerForm.mobileNumber}
                     onChange={(e) => setNewCustomerForm({ ...newCustomerForm, mobileNumber: e.target.value })}
-                    className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-1.5 h-8 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D]"
                   />
                 </div>
                 <div>
@@ -2746,7 +2758,7 @@ export default function OrdersClient() {
                     placeholder="email@example.com"
                     value={newCustomerForm.email}
                     onChange={(e) => setNewCustomerForm({ ...newCustomerForm, email: e.target.value })}
-                    className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-1.5 h-8 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D]"
                   />
                 </div>
               </div>
@@ -2759,25 +2771,25 @@ export default function OrdersClient() {
                   placeholder="Full customer address..."
                   value={newCustomerForm.address}
                   onChange={(e) => setNewCustomerForm({ ...newCustomerForm, address: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D]"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsAddCustomerModalOpen(false)}
-                  className="px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  className="px-3 h-8 rounded-lg text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 shadow-2xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
+                  className="flex items-center gap-1.5 px-3.5 h-8 rounded-lg text-xs font-semibold bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs"
                 >
                   {isSubmitting && <Loader2 size={14} className="animate-spin" />}
-                  <span>Save</span>
+                  <span>Save Customer</span>
                 </button>
               </div>
             </form>
@@ -2787,19 +2799,19 @@ export default function OrdersClient() {
 
       {/* ── 8.5. SELECT PRODUCT MODAL ────────────────────────────── */}
       {isAddItemSelectorOpen && (
-        <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 font-sans">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+        <div className="fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-5 shadow-xl border border-slate-200 space-y-3.5 animate-in fade-in zoom-in-95 duration-150 font-sans">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">Select Product</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Search and select a product for the order</p>
+                <h3 className="text-sm font-bold text-slate-900">Select Product</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Search and select a product for the order</p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsAddItemSelectorOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
@@ -2811,15 +2823,15 @@ export default function OrdersClient() {
                 placeholder="Search products by name, code, or category..."
                 value={productSearchQuery}
                 onChange={(e) => setProductSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm border border-slate-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 font-semibold bg-slate-50/50"
+                className="w-full pl-9 pr-3 h-8.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D] font-medium bg-[#f7f7f8] focus:bg-white"
               />
-              <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
 
             {/* Product List Grid */}
-            <div className="max-h-80 overflow-y-auto border border-slate-200/90 rounded-2xl divide-y divide-slate-100 p-1 bg-slate-50/30 no-scrollbar">
+            <div className="max-h-80 overflow-y-auto border border-slate-200/90 rounded-lg divide-y divide-slate-100 p-1 bg-slate-50/30 no-scrollbar">
               {filteredProductMasterForModal.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-400 font-semibold">
+                <div className="p-8 text-center text-xs text-slate-400 font-medium">
                   No matching products found. Try a different search query.
                 </div>
               ) : (
@@ -2827,18 +2839,18 @@ export default function OrdersClient() {
                   <div
                     key={prod.id}
                     onClick={() => handleSelectProductFromModal(prod)}
-                    className="p-3 rounded-xl hover:bg-indigo-50/80 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                    className="p-2.5 rounded-lg hover:bg-slate-50 hover:border-[#02626D] transition-all cursor-pointer flex items-center justify-between gap-3 group"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="relative w-11 h-11 rounded-xl bg-white border border-slate-200 overflow-hidden flex-shrink-0 shadow-2xs group-hover:border-indigo-200">
-                        <Image src={prod.imageUrl || '/logo.png'} alt={prod.name} fill className="object-contain p-1.5" />
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="relative w-9 h-9 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0 shadow-2xs group-hover:border-[#02626D]/40">
+                        <Image src={prod.imageUrl || '/logo.png'} alt={prod.name} fill className="object-contain p-1" />
                       </div>
                       <div className="min-w-0 text-left">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-bold text-slate-900 group-hover:text-[#02626D] transition-colors truncate">
                             {prod.name}
                           </p>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-mono">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
                             {prod.code}
                           </span>
                         </div>
@@ -2848,13 +2860,13 @@ export default function OrdersClient() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <span className="text-xs font-extrabold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-xl border border-indigo-100">
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs font-bold text-[#02626D] bg-[#02626D]/10 px-2.5 py-1 rounded-md">
                         ₹ {prod.price}
                       </span>
                       <button
                         type="button"
-                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs transition-colors cursor-pointer"
+                        className="px-3 h-7.5 rounded-lg text-xs font-semibold bg-[#02626D] text-white hover:bg-[#014d56] shadow-2xs transition-colors cursor-pointer"
                       >
                         Select
                       </button>
@@ -2865,13 +2877,13 @@ export default function OrdersClient() {
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-              <span className="text-xs font-semibold text-slate-500">
+              <span className="text-xs font-medium text-slate-500">
                 Found {filteredProductMasterForModal.length} products
               </span>
               <button
                 type="button"
                 onClick={() => setIsAddItemSelectorOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                className="px-3 h-8 rounded-lg text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
               >
                 Close
               </button>
@@ -2885,27 +2897,27 @@ export default function OrdersClient() {
       {/* ── 10. CUSTOM DELETE CONFIRMATION MODAL ────────────────────── */}
       {deletingOrder && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-full bg-red-50 text-red-500 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle size={20} />
+          <div className="bg-white rounded-xl max-w-md w-full p-5 shadow-xl border border-slate-200 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-red-50 text-red-500 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={18} />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900">Delete Order</h3>
+                <h3 className="text-sm font-bold text-slate-900">Delete Order</h3>
                 <p className="text-xs text-slate-500 mt-1">
                   Are you sure you want to delete order <strong className="text-slate-800">{deletingOrder.code}</strong> for {deletingOrder.customerName}?
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-              <button onClick={() => setDeletingOrder(null)} className="px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button onClick={() => setDeletingOrder(null)} className="px-3 h-8 rounded-lg text-xs font-semibold text-slate-700 border border-slate-300 hover:bg-slate-50 shadow-2xs">
                 Cancel
               </button>
               <button
                 onClick={handleConfirmDeleteOrder}
                 disabled={isDeleting}
-                className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-xs disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-2xs disabled:opacity-50"
               >
                 {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 <span>Delete</span>
@@ -2917,21 +2929,21 @@ export default function OrdersClient() {
 
       {/* ── 11. SLOT ITEM QUANTITY ANALYTICS MODAL ────────────────── */}
       {isSlotAnalyticsModalOpen && selectedSlotForAnalytics && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150 font-sans">
+          <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
             
             {/* Modal Header Bar */}
-            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-                  <BarChart3 size={20} />
+            <div className="p-3.5 sm:p-4 border-b border-slate-200 flex items-center justify-between bg-[#f7f7f8]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#02626D] text-white flex items-center justify-center shadow-2xs">
+                  <BarChart3 size={18} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
+                    <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
                       Slot Analytics & Item Breakdown
                     </h2>
-                    <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-200 text-slate-800">
                       {selectedSlotForAnalytics}
                     </span>
                   </div>
@@ -2942,32 +2954,32 @@ export default function OrdersClient() {
               </div>
               <button
                 onClick={() => setIsSlotAnalyticsModalOpen(false)}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
             {/* Metric Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 sm:p-5 bg-white border-b border-slate-100">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-white border-b border-slate-100">
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/80">
                 <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Slot Orders</span>
-                <p className="text-lg font-extrabold text-slate-900 mt-0.5">{slotAnalyticsData.totalOrders}</p>
+                <p className="text-base font-extrabold text-slate-900 mt-0.5">{slotAnalyticsData.totalOrders}</p>
                 <span className="text-[10px] text-slate-400 font-medium">Orders in slot</span>
               </div>
-              <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100">
-                <span className="text-[10px] font-bold uppercase text-indigo-600 tracking-wider">Unique Items</span>
-                <p className="text-lg font-extrabold text-indigo-700 mt-0.5">{slotAnalyticsData.items.length}</p>
-                <span className="text-[10px] text-indigo-500 font-medium">Product varieties</span>
+              <div className="p-3 rounded-lg bg-teal-50/60 border border-teal-100">
+                <span className="text-[10px] font-bold uppercase text-teal-700 tracking-wider">Unique Items</span>
+                <p className="text-base font-extrabold text-teal-800 mt-0.5">{slotAnalyticsData.items.length}</p>
+                <span className="text-[10px] text-teal-600 font-medium">Product varieties</span>
               </div>
-              <div className="p-3 rounded-xl bg-teal-50/60 border border-teal-100">
-                <span className="text-[10px] font-bold uppercase text-teal-700 tracking-wider">Total Quantity</span>
-                <p className="text-lg font-extrabold text-teal-800 mt-0.5">{slotAnalyticsData.totalUnitsCount}</p>
-                <span className="text-[10px] text-teal-600 font-medium">Aggregated units</span>
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/80">
+                <span className="text-[10px] font-bold uppercase text-slate-600 tracking-wider">Total Quantity</span>
+                <p className="text-base font-extrabold text-slate-900 mt-0.5">{slotAnalyticsData.totalUnitsCount}</p>
+                <span className="text-[10px] text-slate-500 font-medium">Aggregated units</span>
               </div>
-              <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-100">
+              <div className="p-3 rounded-lg bg-emerald-50/60 border border-emerald-100">
                 <span className="text-[10px] font-bold uppercase text-emerald-700 tracking-wider">Total Revenue</span>
-                <p className="text-lg font-extrabold text-emerald-800 mt-0.5">
+                <p className="text-base font-extrabold text-emerald-800 mt-0.5">
                   ₹ {slotAnalyticsData.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </p>
                 <span className="text-[10px] text-emerald-600 font-medium">Slot order value</span>
@@ -2975,7 +2987,7 @@ export default function OrdersClient() {
             </div>
 
             {/* Search Filter Bar */}
-            <div className="p-3 sm:px-5 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between gap-3">
+            <div className="p-3 sm:px-4 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between gap-3">
               <div className="relative flex-1 max-w-sm">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -2983,7 +2995,7 @@ export default function OrdersClient() {
                   value={slotAnalyticsSearchTerm}
                   onChange={(e) => setSlotAnalyticsSearchTerm(e.target.value)}
                   placeholder="Search item name or category..."
-                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                  className="w-full pl-8 pr-3 h-8 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#02626D]"
                 />
               </div>
               <span className="text-xs font-semibold text-slate-500">
@@ -2992,57 +3004,57 @@ export default function OrdersClient() {
             </div>
 
             {/* Item Aggregation Table */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+            <div className="flex-1 overflow-y-auto p-4">
               {filteredSlotAnalyticsItems.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 text-xs font-medium space-y-1">
                   <p className="text-sm font-bold text-slate-600">No items found</p>
                   <p>There are no products in this slot matching your query.</p>
                 </div>
               ) : (
-                <div className="border border-slate-200/90 rounded-xl overflow-hidden shadow-2xs">
-                  <table className="w-full text-left border-collapse">
+                <div className="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+                  <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-bold text-slate-600 uppercase">
-                        <th className="py-3 px-4">Item Name</th>
-                        <th className="py-3 px-4">Category</th>
-                        <th className="py-3 px-4 text-center">Unit</th>
-                        <th className="py-3 px-4 text-right">Total Quantity</th>
-                        <th className="py-3 px-4 text-right">Total Amount</th>
-                        <th className="py-3 px-4">Contributing Orders</th>
+                      <tr className="bg-[#f7f7f8] border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase">
+                        <th className="py-2.5 px-3">Item Name</th>
+                        <th className="py-2.5 px-3">Category</th>
+                        <th className="py-2.5 px-3 text-center">Unit</th>
+                        <th className="py-2.5 px-3 text-right">Total Quantity</th>
+                        <th className="py-2.5 px-3 text-right">Total Amount</th>
+                        <th className="py-2.5 px-3">Contributing Orders</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
                       {filteredSlotAnalyticsItems.map((item, idx) => (
                         <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="py-3 px-4 font-bold text-slate-900">
+                          <td className="py-2.5 px-3 font-bold text-slate-900">
                             {item.itemName}
                             {item.itemCode && (
                               <span className="ml-1.5 text-[10px] text-slate-400 font-mono">({item.itemCode})</span>
                             )}
                           </td>
-                          <td className="py-3 px-4">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
+                          <td className="py-2.5 px-3">
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
                               {item.category || 'General'}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-center font-bold text-slate-700">{item.unit}</td>
-                          <td className="py-3 px-4 text-right">
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          <td className="py-2.5 px-3 text-center font-semibold text-slate-700">{item.unit}</td>
+                          <td className="py-2.5 px-3 text-right">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-[#02626D]/10 text-[#02626D]">
                               {item.totalQuantity} {item.unit}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-right font-extrabold text-slate-900">
+                          <td className="py-2.5 px-3 text-right font-bold text-slate-900">
                             ₹ {item.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-3 px-4">
+                          <td className="py-2.5 px-3">
                             <div className="flex flex-wrap gap-1 max-w-xs">
                               {item.orders.map((ord, oIdx) => (
                                 <span
                                   key={oIdx}
-                                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200"
+                                  className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200"
                                   title={`${ord.customerName} - ${ord.quantity} ${item.unit}${ord.notes ? ` (${ord.notes})` : ''}`}
                                 >
-                                  <strong className="text-indigo-600 font-mono">{ord.orderCode}</strong> ({ord.quantity} {item.unit})
+                                  <strong className="text-[#02626D] font-mono">{ord.orderCode}</strong> ({ord.quantity} {item.unit})
                                 </span>
                               ))}
                             </div>
@@ -3056,13 +3068,13 @@ export default function OrdersClient() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+            <div className="p-3 px-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
               <span className="text-xs text-slate-500 font-medium">
                 Tip: Quantities represent total production requirement for <strong className="text-slate-800">{selectedSlotForAnalytics}</strong>.
               </span>
               <button
                 onClick={() => setIsSlotAnalyticsModalOpen(false)}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white transition-colors cursor-pointer shadow-2xs"
+                className="px-3 h-8 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-900 text-white transition-colors cursor-pointer shadow-2xs"
               >
                 Close
               </button>

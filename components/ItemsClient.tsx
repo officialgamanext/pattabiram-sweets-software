@@ -24,6 +24,8 @@ import {
   FileDown,
   Calendar,
   Tag,
+  Star,
+  Clock,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
@@ -54,6 +56,13 @@ export interface ItemRecord {
   packingUnitId?: string;
   packingUnitName?: string;
   intimateBeforeOneDay?: boolean;
+  isFavorite?: boolean;
+  slotAllowedWeights?: {
+    '9:00 AM - 12:00 PM'?: number | string;
+    '12:00 PM - 3:00 PM'?: number | string;
+    '3:00 PM - 6:00 PM'?: number | string;
+    '6:00 PM - 9:00 PM'?: number | string;
+  };
   status: 'Active' | 'Inactive';
   createdAt?: any;
 }
@@ -126,6 +135,13 @@ export default function ItemsClient() {
     packingUnitName: '',
     imageUrl: '',
     intimateBeforeOneDay: false,
+    isFavorite: false,
+    slotAllowedWeights: {
+      '9:00 AM - 12:00 PM': '',
+      '12:00 PM - 3:00 PM': '',
+      '3:00 PM - 6:00 PM': '',
+      '6:00 PM - 9:00 PM': '',
+    },
     status: 'Active' as 'Active' | 'Inactive',
   };
   const [newItem, setNewItem] = useState(emptyItemForm);
@@ -234,6 +250,25 @@ export default function ItemsClient() {
     }
   };
 
+  // Quick Toggle Favourite directly from table or modal
+  const handleToggleFavorite = async (e: React.MouseEvent, item: ItemRecord) => {
+    e.stopPropagation();
+    try {
+      const nextFav = !item.isFavorite;
+      await updateDoc(doc(db, 'items', item.id), {
+        isFavorite: nextFav,
+        updatedAt: serverTimestamp(),
+      });
+      toast.success(
+        nextFav ? '⭐ Added to Favourites' : 'Removed from Favourites',
+        `"${item.name}" ${nextFav ? 'marked as favourite.' : 'removed from favourites.'}`
+      );
+    } catch (err) {
+      console.error('Failed to toggle favourite:', err);
+      toast.error('Update Failed', 'Failed to update favourite status.');
+    }
+  };
+
   // Handle Add Item (Upload to ImageKit ON CLICK OF SAVE)
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -253,6 +288,14 @@ export default function ItemsClient() {
       const nextNumber = items.length + 1;
       const nextCode = `ITM-${String(nextNumber).padStart(3, '0')}`;
 
+      // Clean slot weights map
+      const slotWeightsToSave = {
+        '9:00 AM - 12:00 PM': newItem.slotAllowedWeights?.['9:00 AM - 12:00 PM'] ? parseFloat(String(newItem.slotAllowedWeights['9:00 AM - 12:00 PM'])) || 0 : 0,
+        '12:00 PM - 3:00 PM': newItem.slotAllowedWeights?.['12:00 PM - 3:00 PM'] ? parseFloat(String(newItem.slotAllowedWeights['12:00 PM - 3:00 PM'])) || 0 : 0,
+        '3:00 PM - 6:00 PM': newItem.slotAllowedWeights?.['3:00 PM - 6:00 PM'] ? parseFloat(String(newItem.slotAllowedWeights['3:00 PM - 6:00 PM'])) || 0 : 0,
+        '6:00 PM - 9:00 PM': newItem.slotAllowedWeights?.['6:00 PM - 9:00 PM'] ? parseFloat(String(newItem.slotAllowedWeights['6:00 PM - 9:00 PM'])) || 0 : 0,
+      };
+
       await addDoc(collection(db, 'items'), {
         code: nextCode,
         name: newItem.name,
@@ -263,6 +306,8 @@ export default function ItemsClient() {
         packingUnitName: newItem.packingUnitName || (pckUnits[0]?.name || 'N/A'),
         imageUrl: finalImageUrl,
         intimateBeforeOneDay: Boolean(newItem.intimateBeforeOneDay),
+        isFavorite: Boolean(newItem.isFavorite),
+        slotAllowedWeights: slotWeightsToSave,
         status: newItem.status,
         createdAt: serverTimestamp(),
       });
@@ -271,9 +316,11 @@ export default function ItemsClient() {
       setNewItem(emptyItemForm);
       setPendingImageBase64('');
       setPendingFileName('');
+      toast.success('Product Added', `"${newItem.name}" has been created successfully.`);
     } catch (err: any) {
       console.error('Failed to add item:', err);
       setFirebaseError(err?.message || 'Failed to save item');
+      toast.error('Save Failed', err?.message || 'Failed to save item');
     } finally {
       setIsSubmitting(false);
     }
@@ -291,6 +338,13 @@ export default function ItemsClient() {
       packingUnitName: item.packingUnitName || (pckUnits[0]?.name || 'N/A'),
       imageUrl: item.imageUrl || '',
       intimateBeforeOneDay: Boolean(item.intimateBeforeOneDay),
+      isFavorite: Boolean(item.isFavorite),
+      slotAllowedWeights: {
+        '9:00 AM - 12:00 PM': item.slotAllowedWeights?.['9:00 AM - 12:00 PM'] !== undefined ? String(item.slotAllowedWeights['9:00 AM - 12:00 PM']) : '',
+        '12:00 PM - 3:00 PM': item.slotAllowedWeights?.['12:00 PM - 3:00 PM'] !== undefined ? String(item.slotAllowedWeights['12:00 PM - 3:00 PM']) : '',
+        '3:00 PM - 6:00 PM': item.slotAllowedWeights?.['3:00 PM - 6:00 PM'] !== undefined ? String(item.slotAllowedWeights['3:00 PM - 6:00 PM']) : '',
+        '6:00 PM - 9:00 PM': item.slotAllowedWeights?.['6:00 PM - 9:00 PM'] !== undefined ? String(item.slotAllowedWeights['6:00 PM - 9:00 PM']) : '',
+      },
       status: item.status || 'Active',
     });
     setPendingImageBase64('');
@@ -313,6 +367,13 @@ export default function ItemsClient() {
         );
       }
 
+      const slotWeightsToSave = {
+        '9:00 AM - 12:00 PM': editItemForm.slotAllowedWeights?.['9:00 AM - 12:00 PM'] ? parseFloat(String(editItemForm.slotAllowedWeights['9:00 AM - 12:00 PM'])) || 0 : 0,
+        '12:00 PM - 3:00 PM': editItemForm.slotAllowedWeights?.['12:00 PM - 3:00 PM'] ? parseFloat(String(editItemForm.slotAllowedWeights['12:00 PM - 3:00 PM'])) || 0 : 0,
+        '3:00 PM - 6:00 PM': editItemForm.slotAllowedWeights?.['3:00 PM - 6:00 PM'] ? parseFloat(String(editItemForm.slotAllowedWeights['3:00 PM - 6:00 PM'])) || 0 : 0,
+        '6:00 PM - 9:00 PM': editItemForm.slotAllowedWeights?.['6:00 PM - 9:00 PM'] ? parseFloat(String(editItemForm.slotAllowedWeights['6:00 PM - 9:00 PM'])) || 0 : 0,
+      };
+
       const itemRef = doc(db, 'items', editingItem.id);
       await updateDoc(itemRef, {
         name: editItemForm.name,
@@ -323,6 +384,8 @@ export default function ItemsClient() {
         packingUnitName: editItemForm.packingUnitName,
         imageUrl: finalImageUrl,
         intimateBeforeOneDay: Boolean(editItemForm.intimateBeforeOneDay),
+        isFavorite: Boolean(editItemForm.isFavorite),
+        slotAllowedWeights: slotWeightsToSave,
         status: editItemForm.status,
         updatedAt: serverTimestamp(),
       });
@@ -330,9 +393,11 @@ export default function ItemsClient() {
       setEditingItem(null);
       setPendingImageBase64('');
       setPendingFileName('');
+      toast.success('Product Updated', `"${editItemForm.name}" updated successfully.`);
     } catch (err: any) {
       console.error('Failed to update item:', err);
       setFirebaseError(err?.message || 'Failed to update item');
+      toast.error('Update Failed', err?.message || 'Failed to update item');
     } finally {
       setIsSubmitting(false);
     }
@@ -721,6 +786,9 @@ export default function ItemsClient() {
           <table className="w-full text-left border-collapse min-w-[980px]">
             <thead>
               <tr className="bg-[#f7f7f8] border-b border-slate-200 text-[11px] font-semibold text-[#5c5f62] tracking-normal">
+                <th className="py-2.5 px-3 w-8 text-center">
+                  <Star size={13} className="text-amber-400 mx-auto" />
+                </th>
                 <th className="py-2.5 px-4 w-10 text-center">
                   <input type="checkbox" className="rounded border-slate-300 text-slate-800 focus:ring-0 cursor-pointer" />
                 </th>
@@ -729,7 +797,7 @@ export default function ItemsClient() {
                 <th className="py-2.5 px-4">Inventory</th>
                 <th className="py-2.5 px-4">Category</th>
                 <th className="py-2.5 px-4 text-center">Channels</th>
-                <th className="py-2.5 px-4 text-center">Catalogs</th>
+                <th className="py-2.5 px-4 text-center">Slot Capacities</th>
                 <th className="py-2.5 px-4">Vendor / Unit</th>
                 <th className="py-2.5 px-4 text-right pr-6">Actions</th>
               </tr>
@@ -737,7 +805,7 @@ export default function ItemsClient() {
             <tbody className="divide-y divide-slate-100 text-xs text-slate-800">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 size={16} className="animate-spin text-slate-600" />
                       <span>Loading products...</span>
@@ -746,7 +814,7 @@ export default function ItemsClient() {
                 </tr>
               ) : filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2 py-4">
                       <Package size={28} className="text-slate-300" />
                       <p className="font-semibold text-slate-600">No products found</p>
@@ -760,16 +828,35 @@ export default function ItemsClient() {
 
                   return (
                     <tr key={item.id} className="hover:bg-[#f7f7f8] transition-colors border-b border-slate-100">
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={(e) => handleToggleFavorite(e, item)}
+                          className="p-1 rounded-md hover:bg-amber-50 transition-colors cursor-pointer"
+                          title={item.isFavorite ? 'Remove from favourites' : 'Add to favourites'}
+                        >
+                          <Star
+                            size={15}
+                            className={item.isFavorite ? 'text-amber-400 fill-amber-400' : 'text-slate-300 hover:text-amber-400'}
+                          />
+                        </button>
+                      </td>
                       <td className="py-3 px-4 text-center">
                         <input type="checkbox" className="rounded border-slate-300 text-slate-800 focus:ring-0 cursor-pointer" />
                       </td>
                       <td className="py-3 px-4 font-semibold text-slate-900">
-                        <div className="flex items-center gap-3">
-                          {/* Thumbnail Icon container matching Shopify screenshot */}
+                        <div className="flex items-center gap-2.5">
+                          {/* Thumbnail Icon container */}
                           <div className={`w-8 h-8 rounded-lg ${thumbnailBg} border flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-2xs`}>
                             {item.name.charAt(0)}
                           </div>
-                          <span>{item.name}</span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate">{item.name}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">({item.code})</span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 font-normal">₹ {item.price} / {item.unit}</p>
+                          </div>
                         </div>
                       </td>
                       <td className="py-3 px-4">
@@ -786,9 +873,17 @@ export default function ItemsClient() {
                         {item.category || 'Personal Care'}
                       </td>
                       <td className="py-3 px-4 text-center text-slate-600 font-medium">9</td>
-                      <td className="py-3 px-4 text-center text-slate-600 font-medium">3</td>
+                      <td className="py-3 px-4 text-center text-slate-600 font-medium">
+                        {item.slotAllowedWeights && Object.values(item.slotAllowedWeights).some((w) => parseFloat(String(w)) > 0) ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-[#02626D] border border-teal-200 text-[10px] font-semibold">
+                            <Clock size={11} /> 4 Slots Set
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">Default</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-slate-600 font-medium">
-                        Pattabiram First
+                        {item.manufacturingUnitName || 'Pattabiram First'}
                       </td>
                       <td className="py-3 px-4 text-right pr-6">
                         <div className="flex items-center justify-end gap-1">
@@ -879,7 +974,7 @@ export default function ItemsClient() {
       {/* ── 5. Add Item Modal ──────────────────────────────────────── */}
       {isAddItemModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900">Add New Item</h3>
               <button onClick={() => setIsAddItemModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
@@ -896,7 +991,7 @@ export default function ItemsClient() {
                 <div className="flex items-center gap-3">
                   <div className="relative w-14 h-14 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
                     <Image
-                      src={newItem.imageUrl || '/logo.png'}
+                      src={newItem.imageUrl || '/app-icon.png'}
                       alt="Preview"
                       fill
                       className="object-contain p-1"
@@ -912,6 +1007,26 @@ export default function ItemsClient() {
                     <p className="text-[10px] text-slate-400 mt-1">Image compresses to &lt;60KB and uploads to ImageKit when you click Save.</p>
                   </div>
                 </div>
+              </div>
+
+              {/* Favorite Toggle */}
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/80">
+                <div className="flex items-center gap-2">
+                  <Star size={16} className={newItem.isFavorite ? 'text-amber-400 fill-amber-400' : 'text-slate-400'} />
+                  <div>
+                    <label htmlFor="addItemFavoriteToggle" className="block text-xs font-bold text-slate-800 cursor-pointer">
+                      ⭐ Add to Favourites
+                    </label>
+                    <p className="text-[10px] text-slate-500">Favourites appear first in product tile lists during order creation.</p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  id="addItemFavoriteToggle"
+                  checked={newItem.isFavorite}
+                  onChange={(e) => setNewItem({ ...newItem, isFavorite: e.target.checked })}
+                  className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 cursor-pointer accent-amber-500"
+                />
               </div>
 
               {/* Item Name */}
@@ -963,6 +1078,45 @@ export default function ItemsClient() {
                   className="w-full"
                   buttonClassName="w-full"
                 />
+              </div>
+
+              {/* Weight Allowed Slots (4 Slots) */}
+              <div className="p-3 rounded-xl bg-[#f7f7f8] border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Weight Allowed per Time Slot (4 Slots)
+                  </label>
+                  <span className="text-[10px] font-medium text-slate-500">Max limit in {newItem.unit || 'KG'}</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { key: '9:00 AM - 12:00 PM', label: '9 AM - 12 PM' },
+                    { key: '12:00 PM - 3:00 PM', label: '12 PM - 3 PM' },
+                    { key: '3:00 PM - 6:00 PM', label: '3 PM - 6 PM' },
+                    { key: '6:00 PM - 9:00 PM', label: '6 PM - 9 PM' },
+                  ].map((slot) => (
+                    <div key={slot.key} className="flex flex-col">
+                      <label className="text-[10px] font-semibold text-slate-600 mb-1 truncate">{slot.label}</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        placeholder="0"
+                        value={newItem.slotAllowedWeights?.[slot.key as keyof typeof newItem.slotAllowedWeights] || ''}
+                        onChange={(e) =>
+                          setNewItem({
+                            ...newItem,
+                            slotAllowedWeights: {
+                              ...newItem.slotAllowedWeights,
+                              [slot.key]: e.target.value,
+                            },
+                          })
+                        }
+                        className="w-full h-8 px-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-indigo-500 font-medium shadow-2xs"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Manufacturing Unit & Packing Unit Dropdowns */}
@@ -1045,7 +1199,7 @@ export default function ItemsClient() {
       {/* ── 5.1 Edit Item Modal ─────────────────────────────────────── */}
       {editingItem && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
@@ -1070,7 +1224,7 @@ export default function ItemsClient() {
                 <div className="flex items-center gap-3">
                   <div className="relative w-14 h-14 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
                     <Image
-                      src={editItemForm.imageUrl || '/logo.png'}
+                      src={editItemForm.imageUrl || '/app-icon.png'}
                       alt="Preview"
                       fill
                       className="object-contain p-1"
@@ -1086,6 +1240,26 @@ export default function ItemsClient() {
                     <p className="text-[10px] text-slate-400 mt-1">Image compresses to &lt;60KB and uploads to ImageKit when you click Save.</p>
                   </div>
                 </div>
+              </div>
+
+              {/* Favorite Toggle */}
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/80">
+                <div className="flex items-center gap-2">
+                  <Star size={16} className={editItemForm.isFavorite ? 'text-amber-400 fill-amber-400' : 'text-slate-400'} />
+                  <div>
+                    <label htmlFor="editItemFavoriteToggle" className="block text-xs font-bold text-slate-800 cursor-pointer">
+                      ⭐ Add to Favourites
+                    </label>
+                    <p className="text-[10px] text-slate-500">Favourites appear first in product tile lists during order creation.</p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  id="editItemFavoriteToggle"
+                  checked={editItemForm.isFavorite}
+                  onChange={(e) => setEditItemForm({ ...editItemForm, isFavorite: e.target.checked })}
+                  className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 cursor-pointer accent-amber-500"
+                />
               </div>
 
               {/* Item Name */}
@@ -1135,6 +1309,45 @@ export default function ItemsClient() {
                   className="w-full"
                   buttonClassName="w-full"
                 />
+              </div>
+
+              {/* Weight Allowed Slots (4 Slots) */}
+              <div className="p-3 rounded-xl bg-[#f7f7f8] border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Weight Allowed per Time Slot (4 Slots)
+                  </label>
+                  <span className="text-[10px] font-medium text-slate-500">Max limit in {editItemForm.unit || 'KG'}</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { key: '9:00 AM - 12:00 PM', label: '9 AM - 12 PM' },
+                    { key: '12:00 PM - 3:00 PM', label: '12 PM - 3 PM' },
+                    { key: '3:00 PM - 6:00 PM', label: '3 PM - 6 PM' },
+                    { key: '6:00 PM - 9:00 PM', label: '6 PM - 9 PM' },
+                  ].map((slot) => (
+                    <div key={slot.key} className="flex flex-col">
+                      <label className="text-[10px] font-semibold text-slate-600 mb-1 truncate">{slot.label}</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        placeholder="0"
+                        value={editItemForm.slotAllowedWeights?.[slot.key as keyof typeof editItemForm.slotAllowedWeights] || ''}
+                        onChange={(e) =>
+                          setEditItemForm({
+                            ...editItemForm,
+                            slotAllowedWeights: {
+                              ...editItemForm.slotAllowedWeights,
+                              [slot.key]: e.target.value,
+                            },
+                          })
+                        }
+                        className="w-full h-8 px-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-indigo-500 font-medium shadow-2xs"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Manufacturing Unit & Packing Unit Dropdowns */}
@@ -1463,13 +1676,16 @@ export default function ItemsClient() {
       {/* ── 10. View Item Details Modal ────────────────────────────── */}
       {viewItem && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-100 font-mono">
                   {viewItem.code}
                 </span>
                 <h3 className="text-base font-bold text-slate-900">{viewItem.name}</h3>
+                {viewItem.isFavorite && (
+                  <Star size={15} className="text-amber-400 fill-amber-400" />
+                )}
               </div>
               <button
                 onClick={() => setViewItem(null)}
@@ -1482,7 +1698,7 @@ export default function ItemsClient() {
             <div className="flex items-center justify-center p-2 bg-slate-50 rounded-xl border border-slate-100">
               <div className="relative w-24 h-24 rounded-lg overflow-hidden">
                 <Image
-                  src={viewItem.imageUrl || '/logo.png'}
+                  src={viewItem.imageUrl || '/app-icon.png'}
                   alt={viewItem.name}
                   fill
                   className="object-contain"
@@ -1515,7 +1731,7 @@ export default function ItemsClient() {
                   {viewItem.intimateBeforeOneDay ? '⚡ Enabled' : 'Disabled'}
                 </span>
               </div>
-              <div className="flex justify-between py-1">
+              <div className="flex justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-400">Status:</span>
                 <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
                   viewItem.status === 'Active' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
@@ -1523,6 +1739,21 @@ export default function ItemsClient() {
                   {viewItem.status}
                 </span>
               </div>
+
+              {/* Slot Allowed Weights */}
+              {viewItem.slotAllowedWeights && (
+                <div className="pt-2">
+                  <span className="block text-[11px] font-bold text-slate-700 mb-1">Slot Allowed Capacities ({viewItem.unit}):</span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {Object.entries(viewItem.slotAllowedWeights).map(([slot, limit]) => (
+                      <div key={slot} className="p-1.5 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 truncate mr-1">{slot.split(' - ')[0]}:</span>
+                        <span className="font-bold text-slate-800">{limit ? `${limit} ${viewItem.unit}` : 'No limit'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="pt-3 flex justify-end gap-2">

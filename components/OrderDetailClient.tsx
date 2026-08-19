@@ -655,7 +655,7 @@ export default function OrderDetailClient({ orderId }: Props) {
                       <td className="py-3.5 px-5">
                         <div className="flex items-center gap-3">
                           <div className="relative w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0">
-                            <Image src={item.imageUrl || '/logo.png'} alt={item.itemName} fill className="object-contain p-1" />
+                            <Image src={item.imageUrl || '/app-icon.png'} alt={item.itemName} fill className="object-contain p-1" />
                           </div>
                           <div>
                             <p className="text-xs font-bold text-slate-900">{item.itemName}</p>

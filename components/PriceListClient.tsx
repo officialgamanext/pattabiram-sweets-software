@@ -742,7 +742,7 @@ export default function PriceListClient() {
                                 <div className="flex items-center gap-3">
                                   <div className="relative w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center shadow-2xs">
                                     <Image
-                                      src={item.imageUrl || '/logo.png'}
+                                      src={item.imageUrl || '/app-icon.png'}
                                       alt={item.itemName}
                                       fill
                                       className="object-contain p-1"

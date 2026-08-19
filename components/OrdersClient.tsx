@@ -36,6 +36,8 @@ import {
   PieChart,
   Layers,
   Boxes,
+  Star,
+  Minus,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
 import CustomDatePicker from '@/components/CustomDatePicker';
@@ -62,8 +64,6 @@ export type SlotTime =
   | '3:00 PM - 6:00 PM'
   | '6:00 PM - 9:00 PM';
 
-export type PaymentStatus = 'Pending' | 'Partial' | 'Completed';
-
 export type OrderStatus =
   | 'Order Created'
   | 'Moved to Manufacturing'
@@ -75,34 +75,20 @@ export type OrderStatus =
   | 'Moved to Store'
   | 'Received at Store'
   | 'Awaiting for Delivery'
-  | 'Ready For Dispatch'
-  | 'Dispatched'
   | 'Delivered'
   | 'Confirmed'
   | 'Processing'
-  | 'Pending'
-  | 'Cancelled';
+  | 'Pending';
 
-export interface CustomisationDetails {
-  noOfBoxes: number;
-  boxType: string;
-  boxPrice: number;
-  boxImageUrl?: string;
-  shrinkType?: string;
-  shrinkPrice?: number;
-  hasShrink?: boolean;
-  stickerType?: string;
-  stickerPrice?: number;
-  hasSticker?: boolean;
-}
+export type PaymentStatus = 'Paid' | 'Partial' | 'Pending' | 'Completed';
 
 export interface OrderItemLine {
   lineId?: string;
   itemId: string;
-  itemCode: string;
+  itemCode?: string;
   itemName: string;
-  category: string;
-  unit: string;
+  category?: string;
+  unit?: string;
   imageUrl?: string;
   unitPrice: number;
   quantity: number;
@@ -115,22 +101,36 @@ export interface OrderItemLine {
   pckStatus?: 'Pending' | 'Packing Started' | 'Moved to Store';
 }
 
+export interface CustomisationData {
+  noOfBoxes: number;
+  boxType: string;
+  boxPrice: number;
+  boxImageUrl?: string;
+  hasShrink: boolean;
+  shrinkType: string;
+  shrinkPrice: number;
+  hasSticker: boolean;
+  stickerType: string;
+  stickerPrice: number;
+}
+
 export interface OrderRecord {
   id: string;
   code: string;
+  customerId: string;
   customerName: string;
   customerMobile: string;
-  customerId: string;
-  customerType: string;
-  slot: SlotTime;
-  orderTime: string;
+  customerType?: 'Customer' | 'Wholesaler';
+  customerAddress?: string;
   orderDate: string;
+  orderTime: string;
   manufacturingDate?: string;
   expectedDeliveryDate?: string;
-  isCustomisation?: boolean;
-  customisationDetails?: CustomisationDetails | null;
+  slot: SlotTime;
+  isCustomisation: boolean;
+  customisationDetails?: CustomisationData | null;
   items: OrderItemLine[];
-  totalItems: number;
+  totalItems?: number;
   subTotal: number;
   boxChargesTotal?: number;
   stickerChargesTotal?: number;
@@ -166,6 +166,13 @@ interface ItemMasterOption {
   unit: string;
   price: number;
   imageUrl?: string;
+  isFavorite?: boolean;
+  slotAllowedWeights?: {
+    '9:00 AM - 12:00 PM'?: number | string;
+    '12:00 PM - 3:00 PM'?: number | string;
+    '3:00 PM - 6:00 PM'?: number | string;
+    '6:00 PM - 9:00 PM'?: number | string;
+  };
 }
 
 export const SLOT_TIMES: SlotTime[] = [
@@ -512,16 +519,178 @@ export default function OrdersClient() {
     setIsAddItemSelectorOpen(false);
   };
 
-  // Filter products for Product Modal
-  const filteredProductMasterForModal = itemsMaster.filter((item) => {
-    if (!productSearchQuery.trim()) return true;
-    const q = productSearchQuery.toLowerCase().trim();
-    return (
-      item.name.toLowerCase().includes(q) ||
-      item.code.toLowerCase().includes(q) ||
-      item.category.toLowerCase().includes(q)
+  // Product Catalog Grid States in Create Order Modal
+  const [productGridSearch, setProductGridSearch] = useState('');
+  const [productGridCategory, setProductGridCategory] = useState('All');
+  const [productGridOnlyFavorites, setProductGridOnlyFavorites] = useState(false);
+
+  // Unique categories for filtering tiles
+  const productCategories = useMemo(() => {
+    const cats = Array.from(new Set(itemsMaster.map((i) => i.category).filter(Boolean)));
+    return ['All', ...cats];
+  }, [itemsMaster]);
+
+  // Filtered and Sorted products for the in-modal Product Tile Grid (Favourites FIRST)
+  const filteredProductTiles = useMemo(() => {
+    let list = [...itemsMaster];
+
+    if (productGridSearch.trim()) {
+      const q = productGridSearch.toLowerCase().trim();
+      list = list.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.code.toLowerCase().includes(q) ||
+          p.category.toLowerCase().includes(q)
+      );
+    }
+
+    if (productGridCategory !== 'All') {
+      list = list.filter((p) => p.category === productGridCategory);
+    }
+
+    if (productGridOnlyFavorites) {
+      list = list.filter((p) => p.isFavorite);
+    }
+
+    // Sort: Favourites ALWAYS first, then by product name
+    list.sort((a, b) => {
+      if (a.isFavorite && !b.isFavorite) return -1;
+      if (!a.isFavorite && b.isFavorite) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return list;
+  }, [itemsMaster, productGridSearch, productGridCategory, productGridOnlyFavorites]);
+
+  // Toggle product addition from tile click
+  const handleToggleTileProduct = (prod: ItemMasterOption) => {
+    const existingIndex = orderItems.findIndex((it) => it.itemId === prod.id);
+    if (existingIndex >= 0) {
+      setOrderItems((prev) => prev.filter((it) => it.itemId !== prod.id));
+    } else {
+      const uniqueLineId = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const newLine: OrderItemLine = {
+        lineId: uniqueLineId,
+        itemId: prod.id,
+        itemCode: prod.code,
+        itemName: prod.name,
+        category: prod.category,
+        unit: prod.unit || 'KG',
+        imageUrl: prod.imageUrl || '',
+        unitPrice: prod.price,
+        quantity: 1,
+        lineTotal: prod.price * 1,
+        hasPacket: false,
+        packetCharge: 0,
+        manufacturingDescription: '',
+        packingDescription: '',
+      };
+      setOrderItems((prev) => [...prev, newLine]);
+    }
+  };
+
+  // Quick increment/decrement quantity on product tile
+  const handleTileQuantityChange = (prodId: string, delta: number) => {
+    setOrderItems((prev) => {
+      const existing = prev.find((it) => it.itemId === prodId);
+      if (!existing) {
+        const prod = itemsMaster.find((p) => p.id === prodId);
+        if (!prod) return prev;
+        const uniqueLineId = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        return [
+          ...prev,
+          {
+            lineId: uniqueLineId,
+            itemId: prod.id,
+            itemCode: prod.code,
+            itemName: prod.name,
+            category: prod.category,
+            unit: prod.unit || 'KG',
+            imageUrl: prod.imageUrl || '',
+            unitPrice: prod.price,
+            quantity: 1,
+            lineTotal: prod.price * 1,
+            hasPacket: false,
+            packetCharge: 0,
+            manufacturingDescription: '',
+            packingDescription: '',
+          },
+        ];
+      }
+
+      const nextQty = Math.max(0, Math.round(((existing.quantity || 0) + delta) * 10) / 10);
+      if (nextQty === 0) {
+        return prev.filter((it) => it.itemId !== prodId);
+      }
+
+      return prev.map((it) => {
+        if (it.itemId === prodId) {
+          return {
+            ...it,
+            quantity: nextQty,
+            lineTotal: Math.round(nextQty * it.unitPrice * 100) / 100,
+          };
+        }
+        return it;
+      });
+    });
+  };
+
+  // Update line field directly from tile (quantity, unitPrice, mfgDesc, pckDesc, hasPacket)
+  const handleTileFieldChange = (
+    prodId: string,
+    field: 'quantity' | 'unitPrice' | 'mfgDesc' | 'pckDesc' | 'hasPacket',
+    val: any
+  ) => {
+    setOrderItems((prev) =>
+      prev.map((item) => {
+        if (item.itemId !== prodId) return item;
+
+        let qty = item.quantity;
+        let price = item.unitPrice;
+        let mfgDesc = item.manufacturingDescription;
+        let pckDesc = item.packingDescription;
+        let packet = item.hasPacket;
+
+        if (field === 'quantity') qty = val === '' ? 0 : Math.max(0, parseFloat(val) || 0);
+        if (field === 'unitPrice') price = Math.max(0, parseFloat(val) || 0);
+        if (field === 'mfgDesc') mfgDesc = val;
+        if (field === 'pckDesc') pckDesc = val;
+        if (field === 'hasPacket') packet = Boolean(val);
+
+        return {
+          ...item,
+          quantity: qty,
+          unitPrice: price,
+          lineTotal: Math.round(qty * price * 100) / 100,
+          manufacturingDescription: mfgDesc,
+          packingDescription: pckDesc,
+          hasPacket: packet,
+          packetCharge: packet ? 5 : 0,
+        };
+      })
     );
-  });
+  };
+
+  // Filter products for Product Modal (Favourites sorted first)
+  const filteredProductMasterForModal = useMemo(() => {
+    let list = [...itemsMaster];
+    if (productSearchQuery.trim()) {
+      const q = productSearchQuery.toLowerCase().trim();
+      list = list.filter(
+        (item) =>
+          item.name.toLowerCase().includes(q) ||
+          item.code.toLowerCase().includes(q) ||
+          item.category.toLowerCase().includes(q)
+      );
+    }
+    list.sort((a, b) => {
+      if (a.isFavorite && !b.isFavorite) return -1;
+      if (!a.isFavorite && b.isFavorite) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    return list;
+  }, [itemsMaster, productSearchQuery]);
 
   const [boxImageFile, setBoxImageFile] = useState<File | null>(null);
 
@@ -602,16 +771,25 @@ export default function OrdersClient() {
   // 3. Subscribe to Items collection to populate product items selector
   useEffect(() => {
     const unsubItems = onSnapshot(query(collection(db, 'items')), (snap) => {
-      const items: ItemMasterOption[] = snap.docs.map((d) => ({
-        id: d.id,
-        code: d.data().code || 'ITM-000',
-        name: d.data().name || 'Unnamed Item',
-        category: d.data().category || 'General',
-        unit: d.data().unit || 'KG',
-        price: parseFloat(d.data().price || 0),
-        imageUrl: d.data().imageUrl || '',
-      }));
-      items.sort((a, b) => a.code.localeCompare(b.code));
+      const items: ItemMasterOption[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          code: data.code || 'ITM-000',
+          name: data.name || 'Unnamed Item',
+          category: data.category || 'General',
+          unit: data.unit || 'KG',
+          price: parseFloat(data.price || 0),
+          imageUrl: data.imageUrl || '',
+          isFavorite: Boolean(data.isFavorite),
+          slotAllowedWeights: data.slotAllowedWeights || undefined,
+        };
+      });
+      items.sort((a, b) => {
+        if (a.isFavorite && !b.isFavorite) return -1;
+        if (!a.isFavorite && b.isFavorite) return 1;
+        return a.name.localeCompare(b.name);
+      });
       setItemsMaster(items);
     });
 
@@ -2119,299 +2297,270 @@ export default function OrdersClient() {
                   )}
                 </div>
 
-                {/* 4. Products Selector Section */}
-                <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
-                  <div className="p-3.5 sm:p-4 border-b border-slate-100 flex items-center justify-between bg-[#f7f7f8]">
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-bold text-slate-900">
-                        Order Products ({orderItems.length})
-                      </h3>
-                      <p className="text-[11px] text-slate-500 mt-0.5 hidden sm:block">Add products, set quantities, packet options, and instructions</p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleOpenProductModal(null)}
-                      className="h-8 px-3 rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Plus size={14} />
-                      <span>Add Item</span>
-                    </button>
-                  </div>
-
-                  {/* Empty State */}
-                  {orderItems.length === 0 ? (
-                    <div className="py-8 sm:py-10 text-center text-slate-400 p-4">
-                      <ShoppingBag size={26} className="mx-auto text-slate-300 mb-1.5 stroke-[1.5]" />
-                      <p className="font-semibold text-slate-600 text-xs sm:text-sm">No items added yet</p>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenProductModal(null)}
-                        className="mt-2 px-3 py-1.5 rounded-lg bg-[#02626D]/10 text-[#02626D] text-xs font-semibold hover:bg-[#02626D]/20 transition-colors cursor-pointer"
-                      >
-                        + Click here to add item
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {/* MOBILE CARD VIEW (Visible on screens < md) */}
-                      <div className="md:hidden divide-y divide-slate-100 p-3 space-y-3">
-                        {orderItems.map((item, idx) => {
-                          const lineKey = item.lineId || `${item.itemId}-${idx}`;
-                          return (
-                            <div key={lineKey} className="bg-[#f7f7f8] border border-slate-200 rounded-xl p-3 space-y-2.5 shadow-2xs">
-                              {/* Top Row: Thumbnail, Name & Remove */}
-                              <div className="flex items-center justify-between gap-2">
-                                <div
-                                  onClick={() => handleOpenProductModal(lineKey)}
-                                  className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
-                                >
-                                  <div className="relative w-8 h-8 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0">
-                                    <Image src={item.imageUrl || '/logo.png'} alt={item.itemName} fill className="object-contain p-0.5" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-bold text-slate-900 truncate flex items-center gap-1">
-                                      <span>{item.itemName || 'Choose Product'}</span>
-                                      <Pencil size={10} className="text-slate-400 flex-shrink-0" />
-                                    </p>
-                                    <p className="text-[10px] text-slate-400 font-mono truncate">{item.itemCode || 'Tap to choose'}</p>
-                                  </div>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveItemLine(lineKey)}
-                                  className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                                  title="Remove product"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-
-                              {/* Price, Quantity, Line Total Grid */}
-                              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200/80">
-                                <div>
-                                  <label className="block text-[10px] font-semibold text-slate-500 mb-1">Price (₹)</label>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={item.unitPrice}
-                                    onChange={(e) => handleItemLineChange(lineKey, 'unitPrice', e.target.value)}
-                                    className="w-full h-7.5 px-2 border border-slate-300 rounded-md font-semibold text-slate-800 text-xs bg-white focus:outline-none focus:border-[#02626D]"
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="block text-[10px] font-semibold text-slate-500 mb-1">Qty ({item.unit})</label>
-                                  <input
-                                    type="number"
-                                    step="0.1"
-                                    min="0"
-                                    placeholder="0"
-                                    value={item.quantity === 0 ? '' : item.quantity}
-                                    onChange={(e) => handleItemLineChange(lineKey, 'quantity', e.target.value)}
-                                    className="w-full h-7.5 px-2 border border-slate-300 rounded-md font-bold text-[#02626D] text-xs bg-white focus:outline-none focus:border-[#02626D]"
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="block text-[10px] font-semibold text-slate-500 mb-1">Line Total</label>
-                                  <div className="h-7.5 flex items-center justify-center px-1.5 bg-slate-100 border border-slate-200 rounded-md text-xs font-bold text-slate-900">
-                                    ₹ {item.lineTotal.toFixed(2)}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Customisation Packet Toggle */}
-                              {isCustomisation && (
-                                <div className="flex items-center justify-between pt-1 border-t border-slate-200/80 bg-white p-2 rounded-lg border border-slate-200">
-                                  <div className="flex flex-col">
-                                    <span className="text-[11px] font-semibold text-slate-800">Individual Packet</span>
-                                    <span className="text-[10px] text-slate-400">₹{packetCostPerBox}/box ({numericNoOfBoxes} boxes = ₹{numericNoOfBoxes * packetCostPerBox})</span>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleItemLineChange(lineKey, 'hasPacket', !item.hasPacket)}
-                                    className={`px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
-                                      item.hasPacket
-                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                    }`}
-                                  >
-                                    {item.hasPacket ? <Check size={12} /> : <X size={12} />}
-                                    <span>{item.hasPacket ? `Yes (+₹${numericNoOfBoxes * packetCostPerBox})` : 'No'}</span>
-                                  </button>
-                                </div>
-                              )}
-
-                              {/* Instructions Row */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                                <input
-                                  type="text"
-                                  placeholder="Mfg notes..."
-                                  value={item.manufacturingDescription || ''}
-                                  onChange={(e) => handleItemLineChange(lineKey, 'mfgDesc', e.target.value)}
-                                  className="w-full h-7.5 px-2 text-xs border border-slate-200 rounded-md bg-white focus:outline-none focus:border-[#02626D]"
-                                />
-                                <input
-                                  type="text"
-                                  placeholder="Packing notes..."
-                                  value={item.packingDescription || ''}
-                                  onChange={(e) => handleItemLineChange(lineKey, 'pckDesc', e.target.value)}
-                                  className="w-full h-7.5 px-2 text-xs border border-slate-200 rounded-md bg-white focus:outline-none focus:border-[#02626D]"
-                                />
-                              </div>
-                            </div>
-                          );
-                        })}
+                {/* 4. Products Selector Section with All-In-One Product Tiles */}
+                <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden space-y-3.5 p-3.5 sm:p-4">
+                  
+                  {/* Catalog Header & Filters */}
+                  <div className="space-y-3 pb-3 border-b border-slate-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                            Select Products Catalog
+                          </h3>
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#02626D]/10 text-[#02626D]">
+                            {filteredProductTiles.length} items
+                          </span>
+                          {orderItems.length > 0 && (
+                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              {orderItems.length} selected
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Tap any product tile to select and customize quantity, packet, and notes directly on the tile.
+                        </p>
                       </div>
 
-                      {/* DESKTOP TABLE VIEW (Visible on screens >= md) */}
-                      <div className="hidden md:block overflow-x-auto">
-                        <table className="w-full text-left border-collapse text-xs min-w-[760px]">
-                          <thead>
-                            <tr className="bg-[#f7f7f8] border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                              <th className="py-2.5 px-3 min-w-[200px]">Item Name</th>
-                              <th className="py-2.5 px-3">Price (₹)</th>
-                              <th className="py-2.5 px-3 w-20">Qty</th>
-                              <th className="py-2.5 px-3">Total (₹)</th>
-                              {isCustomisation && <th className="py-2.5 px-3 text-center">Packet (₹{packetCostPerBox}/box)</th>}
-                              <th className="py-2.5 px-3">Mfg Instructions</th>
-                              <th className="py-2.5 px-3">Packing Instructions</th>
-                              <th className="py-2.5 px-3 text-center">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                            {orderItems.map((item, idx) => {
-                              const lineKey = item.lineId || `${item.itemId}-${idx}`;
-                              return (
-                                <tr key={lineKey} className="hover:bg-slate-50/60 transition-colors">
-                                  <td className="py-2 px-3">
-                                    {item.itemName ? (
-                                      <div
-                                        onClick={() => handleOpenProductModal(lineKey)}
-                                        className="h-8 px-2 rounded-lg border border-slate-200 hover:border-[#02626D] bg-white flex items-center justify-between gap-2 text-xs cursor-pointer shadow-2xs transition-all min-w-[190px]"
-                                        title="Click to change product"
-                                      >
-                                        <div className="flex items-center gap-2 min-w-0">
-                                          <div className="relative w-6 h-6 rounded bg-slate-50 border border-slate-200 overflow-hidden flex-shrink-0">
-                                            <Image
-                                              src={item.imageUrl || '/logo.png'}
-                                              alt={item.itemName}
-                                              fill
-                                              className="object-contain p-0.5"
-                                            />
-                                          </div>
-                                          <div className="min-w-0 text-left">
-                                            <p className="text-xs font-semibold text-slate-900 truncate">
-                                              {item.itemName}
-                                            </p>
-                                          </div>
-                                        </div>
-                                        <Pencil size={11} className="text-slate-400 flex-shrink-0" />
-                                      </div>
-                                    ) : (
+                      {/* Search Bar */}
+                      <div className="relative w-full sm:w-64 flex-shrink-0">
+                        <input
+                          type="text"
+                          placeholder="Search product name or code..."
+                          value={productGridSearch}
+                          onChange={(e) => setProductGridSearch(e.target.value)}
+                          className="w-full pl-8 pr-7 h-8 text-xs border border-slate-300 rounded-lg bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] font-medium"
+                        />
+                        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        {productGridSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setProductGridSearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Category Filter Pills & Favourites Filter */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+                      {/* Favorites Pill */}
+                      <button
+                        type="button"
+                        onClick={() => setProductGridOnlyFavorites(!productGridOnlyFavorites)}
+                        className={`h-7 px-2.5 rounded-lg font-semibold flex items-center gap-1.5 flex-shrink-0 transition-all cursor-pointer ${
+                          productGridOnlyFavorites
+                            ? 'bg-amber-500 text-white shadow-2xs'
+                            : 'bg-amber-50 text-amber-900 border border-amber-200/80 hover:bg-amber-100'
+                        }`}
+                      >
+                        <Star size={12} className={productGridOnlyFavorites ? 'fill-white text-white' : 'fill-amber-400 text-amber-500'} />
+                        <span>Favourites ({itemsMaster.filter((i) => i.isFavorite).length})</span>
+                      </button>
+
+                      {/* Categories */}
+                      {productCategories.map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setProductGridCategory(cat)}
+                          className={`h-7 px-2.5 rounded-lg font-semibold flex-shrink-0 transition-all cursor-pointer ${
+                            productGridCategory === cat
+                              ? 'bg-[#02626D] text-white shadow-2xs'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 4 Items in a Row Responsive Product Tiles Grid with ALL Controls inside the Tile */}
+                  <div className="max-h-[580px] overflow-y-auto p-1 no-scrollbar">
+                    {filteredProductTiles.length === 0 ? (
+                      <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        <ShoppingBag size={28} className="mx-auto text-slate-300 mb-1.5" />
+                        <p className="font-semibold text-xs sm:text-sm text-slate-600">No products match your filter</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Try clearing your search or category filter</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                        {filteredProductTiles.map((prod) => {
+                          const addedItem = orderItems.find((it) => it.itemId === prod.id);
+                          const isAdded = Boolean(addedItem);
+                          const currentSlotLimit = orderSlot && prod.slotAllowedWeights?.[orderSlot as keyof typeof prod.slotAllowedWeights];
+
+                          return (
+                            <div
+                              key={prod.id}
+                              className={`relative rounded-2xl p-3 flex flex-col justify-between transition-all duration-150 ${
+                                isAdded
+                                  ? 'bg-[#02626D]/[0.025] border-2 border-[#02626D] shadow-sm ring-2 ring-[#02626D]/15'
+                                  : 'bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md'
+                              }`}
+                            >
+                              {/* Top Bar: Image + Badges */}
+                              <div>
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="relative w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden flex-shrink-0 shadow-2xs">
+                                    <Image
+                                      src={prod.imageUrl || '/app-icon.png'}
+                                      alt={prod.name}
+                                      fill
+                                      className="object-contain p-1"
+                                    />
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    {prod.isFavorite && (
+                                      <span className="p-1 rounded-md bg-amber-50 text-amber-500 shadow-2xs" title="Favourite Product">
+                                        <Star size={13} className="fill-amber-400 text-amber-400" />
+                                      </span>
+                                    )}
+                                    {isAdded ? (
                                       <button
                                         type="button"
-                                        onClick={() => handleOpenProductModal(lineKey)}
-                                        className="h-8 w-full flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-[#02626D]/10 text-[#02626D] border border-slate-300 px-3 rounded-lg text-xs font-semibold transition-all shadow-2xs cursor-pointer min-w-[190px]"
+                                        onClick={() => handleToggleTileProduct(prod)}
+                                        className="w-6.5 h-6.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 flex items-center justify-center transition-colors cursor-pointer"
+                                        title="Remove product"
                                       >
-                                        <Plus size={13} />
-                                        <span>Select Product</span>
+                                        <Trash2 size={13} />
                                       </button>
-                                    )}
-                                  </td>
-                                  <td className="py-2 px-3">
-                                    <input
-                                      type="number"
-                                      step="0.01"
-                                      value={item.unitPrice}
-                                      onChange={(e) => handleItemLineChange(lineKey, 'unitPrice', e.target.value)}
-                                      className="w-20 h-7.5 px-2 border border-slate-300 rounded-md font-semibold text-slate-800 text-xs focus:outline-none focus:border-[#02626D]"
-                                    />
-                                  </td>
-                                  <td className="py-2 px-3">
-                                    <div className="flex items-center gap-1">
+                                    ) : null}
+                                  </div>
+                                </div>
+
+                                {/* Title & Code/Category */}
+                                <div className="mt-2 min-w-0">
+                                  <h4 className={`text-xs sm:text-[13px] font-bold leading-snug truncate ${isAdded ? 'text-[#02626D]' : 'text-slate-900'}`} title={prod.name}>
+                                    {prod.name}
+                                  </h4>
+                                  <div className="flex items-center gap-1 text-[10.5px] text-slate-400 mt-0.5">
+                                    <span className="font-mono">{prod.code}</span>
+                                    <span>•</span>
+                                    <span className="truncate">{prod.category}</span>
+                                  </div>
+                                </div>
+
+                                {/* Slot Limit Chip */}
+                                {currentSlotLimit ? (
+                                  <div className="mt-1.5 inline-flex items-center gap-1 text-[9.5px] text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200/80 font-medium">
+                                    <Clock size={9} /> Slot Max: {currentSlotLimit} {prod.unit}
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              {/* Bottom Action Area */}
+                              {!addedItem ? (
+                                /* UNSELECTED STATE: Clean Price & + Add Button */
+                                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-1">
+                                  <div>
+                                    <span className="text-xs sm:text-sm font-extrabold text-[#02626D]">₹{prod.price}</span>
+                                    <span className="text-[10px] text-slate-400 font-normal"> /{prod.unit}</span>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleTileProduct(prod)}
+                                    className="h-7 px-3 rounded-lg bg-slate-100 hover:bg-[#02626D] hover:text-white text-slate-700 font-bold text-xs transition-all shadow-2xs cursor-pointer flex items-center gap-1"
+                                  >
+                                    <Plus size={13} />
+                                    <span>Add</span>
+                                  </button>
+                                </div>
+                              ) : (
+                                /* SELECTED / ACTIVE STATE: Full options inside this tile! */
+                                <div className="mt-2.5 pt-2 border-t border-slate-200/80 space-y-2">
+                                  {/* Stepper + Price & Line Total */}
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-300 shadow-2xs">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleTileQuantityChange(prod.id, -1)}
+                                        className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs transition-colors cursor-pointer"
+                                        title="Decrease"
+                                      >
+                                        -
+                                      </button>
                                       <input
                                         type="number"
                                         step="0.1"
                                         min="0"
-                                        placeholder="0"
-                                        value={item.quantity === 0 ? '' : item.quantity}
-                                        onChange={(e) => handleItemLineChange(lineKey, 'quantity', e.target.value)}
-                                        className="w-16 h-7.5 px-2 border border-slate-300 rounded-md font-bold text-[#02626D] text-xs focus:outline-none focus:border-[#02626D]"
+                                        value={addedItem.quantity === 0 ? '' : addedItem.quantity}
+                                        onChange={(e) => handleTileFieldChange(prod.id, 'quantity', e.target.value)}
+                                        className="w-11 h-6 text-center font-extrabold text-xs text-[#02626D] bg-transparent focus:outline-none"
                                       />
-                                      <span className="text-[10px] font-semibold text-slate-400">{item.unit}</span>
+                                      <span className="text-[10px] font-bold text-slate-400 pr-1">{prod.unit}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleTileQuantityChange(prod.id, 1)}
+                                        className="w-6 h-6 rounded bg-[#02626D] hover:bg-[#014d56] text-white flex items-center justify-center font-bold text-xs transition-colors cursor-pointer shadow-2xs"
+                                        title="Increase"
+                                      >
+                                        +
+                                      </button>
                                     </div>
-                                  </td>
-                                  <td className="py-2 px-3 font-bold text-slate-900">
-                                    ₹ {item.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                  </td>
 
+                                    <div className="text-right">
+                                      <span className="text-[9.5px] text-slate-400 block font-medium uppercase tracking-tight">Total</span>
+                                      <span className="text-xs font-bold text-slate-900">
+                                        ₹ {addedItem.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Customisation Packet Toggle (if Customisation enabled) */}
                                   {isCustomisation && (
-                                    <td className="py-2 px-3 text-center">
-                                      <div className="flex items-center justify-center gap-1">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleItemLineChange(lineKey, 'hasPacket', !item.hasPacket)}
-                                          className={`h-7 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
-                                            item.hasPacket
-                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-2xs'
-                                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                                          }`}
-                                          title={`Packet charge ₹${packetCostPerBox} per box (${numericNoOfBoxes} boxes = ₹${numericNoOfBoxes * packetCostPerBox})`}
-                                        >
-                                          {item.hasPacket ? (
-                                            <>
-                                              <Check size={12} />
-                                              <span>₹{numericNoOfBoxes * packetCostPerBox}</span>
-                                            </>
-                                          ) : (
-                                            <>
-                                              <X size={12} />
-                                              <span>₹{packetCostPerBox}</span>
-                                            </>
-                                          )}
-                                        </button>
-                                      </div>
-                                    </td>
+                                    <div className="flex items-center justify-between bg-white p-1.5 rounded-lg border border-slate-200 text-[10.5px]">
+                                      <span className="font-semibold text-slate-700">
+                                        Packet (+₹{numericNoOfBoxes * packetCostPerBox})
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleTileFieldChange(prod.id, 'hasPacket', !addedItem.hasPacket)}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                          addedItem.hasPacket
+                                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                        }`}
+                                      >
+                                        {addedItem.hasPacket ? <Check size={10} /> : <X size={10} />}
+                                        <span>{addedItem.hasPacket ? 'Yes' : 'No'}</span>
+                                      </button>
+                                    </div>
                                   )}
 
-                                  <td className="py-2 px-3">
+                                  {/* Manufacturing & Packing Notes */}
+                                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                                     <input
                                       type="text"
                                       placeholder="Mfg notes..."
-                                      value={item.manufacturingDescription || ''}
-                                      onChange={(e) => handleItemLineChange(lineKey, 'mfgDesc', e.target.value)}
-                                      className="w-full h-7.5 px-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-[#02626D] bg-[#f7f7f8] focus:bg-white"
+                                      value={addedItem.manufacturingDescription || ''}
+                                      onChange={(e) => handleTileFieldChange(prod.id, 'mfgDesc', e.target.value)}
+                                      className="w-full h-6 px-1.5 text-[10px] bg-white border border-slate-200 rounded-md focus:border-[#02626D] focus:outline-none text-slate-700"
+                                      title="Manufacturing instructions"
                                     />
-                                  </td>
-                                  <td className="py-2 px-3">
                                     <input
                                       type="text"
                                       placeholder="Packing notes..."
-                                      value={item.packingDescription || ''}
-                                      onChange={(e) => handleItemLineChange(lineKey, 'pckDesc', e.target.value)}
-                                      className="w-full h-7.5 px-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-[#02626D] bg-[#f7f7f8] focus:bg-white"
+                                      value={addedItem.packingDescription || ''}
+                                      onChange={(e) => handleTileFieldChange(prod.id, 'pckDesc', e.target.value)}
+                                      className="w-full h-6 px-1.5 text-[10px] bg-white border border-slate-200 rounded-md focus:border-[#02626D] focus:outline-none text-slate-700"
+                                      title="Packing instructions"
                                     />
-                                  </td>
-                                  <td className="py-2 px-3 text-center">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveItemLine(lineKey)}
-                                      className="p-1 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors cursor-pointer"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    </>
-                  )}
+                    )}
+                  </div>
+
                 </div>
 
               </div>
@@ -2828,51 +2977,56 @@ export default function OrdersClient() {
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
 
-            {/* Product List Grid */}
-            <div className="max-h-80 overflow-y-auto border border-slate-200/90 rounded-lg divide-y divide-slate-100 p-1 bg-slate-50/30 no-scrollbar">
+            {/* Product List Responsive Grid (4 items in a row, Favourites first) */}
+            <div className="max-h-96 overflow-y-auto border border-slate-200/90 rounded-lg p-2 bg-slate-50/30 no-scrollbar">
               {filteredProductMasterForModal.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400 font-medium">
                   No matching products found. Try a different search query.
                 </div>
               ) : (
-                filteredProductMasterForModal.map((prod) => (
-                  <div
-                    key={prod.id}
-                    onClick={() => handleSelectProductFromModal(prod)}
-                    className="p-2.5 rounded-lg hover:bg-slate-50 hover:border-[#02626D] transition-all cursor-pointer flex items-center justify-between gap-3 group"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="relative w-9 h-9 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0 shadow-2xs group-hover:border-[#02626D]/40">
-                        <Image src={prod.imageUrl || '/logo.png'} alt={prod.name} fill className="object-contain p-1" />
-                      </div>
-                      <div className="min-w-0 text-left">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-xs font-bold text-slate-900 group-hover:text-[#02626D] transition-colors truncate">
-                            {prod.name}
-                          </p>
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
-                            {prod.code}
-                          </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                  {filteredProductMasterForModal.map((prod) => (
+                    <div
+                      key={prod.id}
+                      onClick={() => handleSelectProductFromModal(prod)}
+                      className="p-2.5 rounded-xl border border-slate-200 hover:border-[#02626D] hover:bg-white bg-white/80 shadow-2xs hover:shadow-xs transition-all cursor-pointer flex flex-col justify-between group select-none"
+                    >
+                      <div className="flex items-start justify-between gap-1.5 mb-1.5">
+                        <div className="relative w-11 h-11 rounded-lg bg-slate-50 border border-slate-100 overflow-hidden flex-shrink-0 group-hover:border-[#02626D]/30">
+                          <Image src={prod.imageUrl || '/app-icon.png'} alt={prod.name} fill className="object-contain p-1" />
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          {prod.category} • Unit: <span className="font-semibold text-slate-700">{prod.unit}</span>
+                        {prod.isFavorite && (
+                          <span className="p-0.5 rounded-md bg-amber-50 text-amber-500 shadow-2xs" title="Favourite">
+                            <Star size={12} className="fill-amber-400 text-amber-400" />
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-slate-900 group-hover:text-[#02626D] transition-colors truncate">
+                          {prod.name}
                         </p>
+                        <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5">
+                          <span className="font-mono">{prod.code}</span>
+                          <span>•</span>
+                          <span className="truncate">{prod.category}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between gap-1">
+                        <span className="text-xs font-extrabold text-[#02626D]">
+                          ₹ {prod.price} <span className="text-[10px] text-slate-400 font-normal">/{prod.unit}</span>
+                        </span>
+                        <button
+                          type="button"
+                          className="px-2 h-5.5 rounded-md text-[10.5px] font-bold bg-[#02626D] text-white hover:bg-[#014d56] shadow-2xs transition-colors cursor-pointer"
+                        >
+                          Select
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs font-bold text-[#02626D] bg-[#02626D]/10 px-2.5 py-1 rounded-md">
-                        ₹ {prod.price}
-                      </span>
-                      <button
-                        type="button"
-                        className="px-3 h-7.5 rounded-lg text-xs font-semibold bg-[#02626D] text-white hover:bg-[#014d56] shadow-2xs transition-colors cursor-pointer"
-                      >
-                        Select
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
 

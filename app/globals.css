@@ -53,10 +53,10 @@ body {
 
 @media (max-width: 1023px) {
   .shopify-main-layout {
-    padding-top: 76px !important;
-    padding-left: 16px !important;
-    padding-right: 16px !important;
-    padding-bottom: 32px !important;
+    padding-top: 68px !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
 

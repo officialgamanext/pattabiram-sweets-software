@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
+import Pagination from '@/components/Pagination';
 import { db } from '@/lib/firebase';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 import { toast } from '@/context/ToastContext';
@@ -631,6 +632,8 @@ export default function ItemsClient() {
     }
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+
   // Filtered items
   const filteredItems = items.filter((item) => {
     const term = searchTerm.toLowerCase();
@@ -644,6 +647,13 @@ export default function ItemsClient() {
 
     return matchesSearch && matchesStatus;
   });
+
+  // Reset pagination on search or filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
+
+  const paginatedItems = filteredItems.slice((currentPage - 1) * 45, currentPage * 45);
 
   // Custom Select Dropdowns Options
   const categoryOptions: CustomSelectOption[] = categories.map((c) => ({
@@ -822,7 +832,7 @@ export default function ItemsClient() {
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item, idx) => {
+                paginatedItems.map((item, idx) => {
                   const bgColors = ['bg-amber-100 text-amber-800 border-amber-200', 'bg-emerald-100 text-emerald-800 border-emerald-200', 'bg-purple-100 text-purple-800 border-purple-200', 'bg-sky-100 text-sky-800 border-sky-200', 'bg-rose-100 text-rose-800 border-rose-200'];
                   const thumbnailBg = bgColors[idx % bgColors.length];
 
@@ -917,6 +927,14 @@ export default function ItemsClient() {
             </tbody>
           </table>
         </div>
+
+        {/* 45 Items Per Page Pagination */}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredItems.length}
+          pageSize={45}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
 

@@ -1337,6 +1337,21 @@ export default function OrdersClient() {
     return true;
   });
 
+  // Pagination states (45 items per page)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [slotPages, setSlotPages] = useState<Record<string, number>>({});
+
+  // Reset pagination to page 1 on filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+    setSlotPages({});
+  }, [selectedDate, orderStatusFilter, paymentStatusFilter, searchTerm]);
+
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * 45;
+    return filteredOrders.slice(start, start + 45);
+  }, [filteredOrders, currentPage]);
+
   // Calculate Aggregated Item Breakdown for Selected Slot Analytics Modal
   const slotAnalyticsData = useMemo(() => {
     if (!selectedSlotForAnalytics) return { items: [], totalOrders: 0, totalRevenue: 0, totalUnitsCount: 0 };
@@ -1417,12 +1432,6 @@ export default function OrdersClient() {
       (item.itemCode || '').toLowerCase().includes(q)
     );
   });
-
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const paginatedOrders = useMemo(() => {
-    const start = (currentPage - 1) * 45;
-    return filteredOrders.slice(start, start + 45);
-  }, [filteredOrders, currentPage]);
 
   // Calculate Order Statistics for Summary Bar from filtered orders
   const totalOrdersCount = filteredOrders.length;
@@ -1729,92 +1738,127 @@ export default function OrdersClient() {
                   </div>
                 </div>
 
-                {/* Order Cards List inside Slot (Full Natural Height - No Internal Scroll) */}
+                {/* Order Cards List inside Slot (45 Items Per Page) */}
                 <div className="p-3 space-y-2.5 flex-1">
                   {slotOrders.length === 0 ? (
                     <div className="py-10 text-center text-slate-400 text-xs font-medium">
                       No orders in this slot for the selected filters.
                     </div>
                   ) : (
-                    slotOrders.map((order) => (
-                      <div
-                        key={order.id}
-                        onClick={() => navigateToOrder(order.id)}
-                        className="bg-white border border-slate-200/90 hover:border-[#02626D]/50 rounded-lg p-3 shadow-2xs hover:shadow-xs transition-all space-y-2 relative group cursor-pointer"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-xs text-[#02626D] font-mono">{order.code}</span>
-                          <span className="font-bold text-xs text-slate-900">
-                            ₹ {(order.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
+                    (() => {
+                      const currentSlotPage = slotPages[slotTime] || 1;
+                      const slotPageSize = 45;
+                      const paginatedSlotOrders = slotOrders.slice((currentSlotPage - 1) * slotPageSize, currentSlotPage * slotPageSize);
+                      const totalSlotPages = Math.ceil(slotOrders.length / slotPageSize) || 1;
 
-                        <div className="flex items-center justify-between gap-1">
-                          <h4 className="text-xs font-semibold text-slate-900 truncate max-w-[120px]" title={order.customerName}>
-                            {order.customerName}
-                          </h4>
-                          <div className="flex items-center gap-1 flex-wrap justify-end">
-                            <span
-                              className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${
-                                order.paymentStatus === 'Completed'
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                  : order.paymentStatus === 'Partial'
-                                    ? 'bg-sky-50 text-sky-700 border-sky-200'
-                                    : 'bg-amber-50 text-amber-700 border-amber-200'
-                              }`}
+                      return (
+                        <>
+                          {paginatedSlotOrders.map((order) => (
+                            <div
+                              key={order.id}
+                              onClick={() => navigateToOrder(order.id)}
+                              className="bg-white border border-slate-200/90 hover:border-[#02626D]/50 rounded-lg p-3 shadow-2xs hover:shadow-xs transition-all space-y-2 relative group cursor-pointer"
                             >
-                              {order.paymentStatus}
-                            </span>
-                            {(() => {
-                              const osStyle = getOrderStatusBadgeStyle(order.orderStatus);
-                              return (
-                                <span
-                                  className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${osStyle.bg} ${osStyle.text} ${osStyle.border}`}
-                                >
-                                  {order.orderStatus}
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-xs text-[#02626D] font-mono">{order.code}</span>
+                                <span className="font-bold text-xs text-slate-900">
+                                  ₹ {(order.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </span>
-                              );
-                            })()}
-                          </div>
-                        </div>
+                              </div>
 
-                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-100">
-                          <div className="flex items-center gap-1">
-                            <ShoppingBag size={12} />
-                            <span>{order.totalItems || order.items?.length || 0} Items</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Clock size={12} />
-                            <span>{order.orderTime || '10:00 AM'}</span>
-                          </div>
+                              <div className="flex items-center justify-between gap-1">
+                                <h4 className="text-xs font-semibold text-slate-900 truncate max-w-[120px]" title={order.customerName}>
+                                  {order.customerName}
+                                </h4>
+                                <div className="flex items-center gap-1 flex-wrap justify-end">
+                                  <span
+                                    className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${
+                                      order.paymentStatus === 'Completed'
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : order.paymentStatus === 'Partial'
+                                          ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                                    }`}
+                                  >
+                                    {order.paymentStatus}
+                                  </span>
+                                  {(() => {
+                                    const osStyle = getOrderStatusBadgeStyle(order.orderStatus);
+                                    return (
+                                      <span
+                                        className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${osStyle.bg} ${osStyle.text} ${osStyle.border}`}
+                                      >
+                                        {order.orderStatus}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
 
-                          {/* Icon-Only Action Buttons for View, Print, Edit */}
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
-                              className="flex items-center justify-center h-6.5 w-6.5 rounded-md text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-300 shadow-2xs"
-                              title="View Order Details"
-                            >
-                              <Eye size={12} />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handlePrintOrderSlip(order); }}
-                              className="flex items-center justify-center h-6.5 w-6.5 rounded-md text-[#02626D] bg-[#02626D]/10 hover:bg-[#02626D]/20 transition-colors cursor-pointer border border-[#02626D]/30 shadow-2xs"
-                              title="Print Thermal Receipt"
-                            >
-                              <Printer size={12} />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}
-                              className="flex items-center justify-center h-6.5 w-6.5 rounded-md text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-300 shadow-2xs"
-                              title="Edit Order"
-                            >
-                              <Pencil size={12} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
+                              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-100">
+                                <div className="flex items-center gap-1">
+                                  <ShoppingBag size={12} />
+                                  <span>{order.totalItems || order.items?.length || 0} Items</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Clock size={12} />
+                                  <span>{order.orderTime || '10:00 AM'}</span>
+                                </div>
+
+                                {/* Icon-Only Action Buttons for View, Print, Edit */}
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
+                                    className="flex items-center justify-center h-6.5 w-6.5 rounded-md text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-300 shadow-2xs"
+                                    title="View Order Details"
+                                  >
+                                    <Eye size={12} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handlePrintOrderSlip(order); }}
+                                    className="flex items-center justify-center h-6.5 w-6.5 rounded-md text-[#02626D] bg-[#02626D]/10 hover:bg-[#02626D]/20 transition-colors cursor-pointer border border-[#02626D]/30 shadow-2xs"
+                                    title="Print Thermal Receipt"
+                                  >
+                                    <Printer size={12} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}
+                                    className="flex items-center justify-center h-6.5 w-6.5 rounded-md text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-300 shadow-2xs"
+                                    title="Edit Order"
+                                  >
+                                    <Pencil size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+
+                          {totalSlotPages > 1 && (
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                              <button
+                                type="button"
+                                disabled={currentSlotPage <= 1}
+                                onClick={() => setSlotPages((prev) => ({ ...prev, [slotTime]: Math.max(1, currentSlotPage - 1) }))}
+                                className="px-2 py-1 rounded border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-50 font-semibold cursor-pointer text-[11px]"
+                              >
+                                Prev
+                              </button>
+                              <span className="text-[10px] font-bold text-slate-600">
+                                Page {currentSlotPage} of {totalSlotPages}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={currentSlotPage >= totalSlotPages}
+                                onClick={() => setSlotPages((prev) => ({ ...prev, [slotTime]: Math.min(totalSlotPages, currentSlotPage + 1) }))}
+                                className="px-2 py-1 rounded border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-50 font-semibold cursor-pointer text-[11px]"
+                              >
+                                Next
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()
                   )}
                 </div>
 

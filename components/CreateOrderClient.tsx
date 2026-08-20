@@ -190,8 +190,15 @@ const ProductCatalogTile = React.memo(function ProductCatalogTile({
 
         {/* Slot Limit Chip */}
         {currentSlotLimit ? (
-          <div className="mt-2 inline-flex items-center gap-1 text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/80 font-semibold">
-            <Clock size={10} /> Slot Max: {currentSlotLimit} {prod.unit}
+          <div className="mt-2 space-y-1">
+            <div className="inline-flex items-center gap-1 text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/80 font-semibold">
+              <Clock size={10} /> Slot Max: {currentSlotLimit} {prod.unit}
+            </div>
+            {isAdded && addedItem && addedItem.quantity > (parseFloat(String(currentSlotLimit)) || 0) && (
+              <div className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded flex items-center gap-1 animate-pulse">
+                <span>⚠️ Exceeds max limit ({currentSlotLimit} {prod.unit})</span>
+              </div>
+            )}
           </div>
         ) : null}
       </div>
@@ -555,11 +562,24 @@ export default function CreateOrderClient() {
   }, []);
 
   const handleTileQuantityChange = useCallback((prodId: string, delta: number) => {
+    const prod = itemsMaster.find((p) => p.id === prodId);
+    const existing = orderItems.find((it) => it.itemId === prodId);
+    const currentQty = existing?.quantity || 0;
+    const nextQty = existing ? Math.max(0, Math.round((currentQty + delta) * 10) / 10) : 1;
+
+    const rawLimit = prod?.slotAllowedWeights?.[orderSlot as keyof typeof prod.slotAllowedWeights];
+    const slotLimit = rawLimit !== undefined ? parseFloat(String(rawLimit)) : 0;
+    if (slotLimit > 0 && nextQty > slotLimit) {
+      toast.error(
+        'Slot Limit Exceeded',
+        `"${prod?.name || 'Item'}" allowed weight for ${orderSlot} is ${slotLimit} ${prod?.unit || 'KG'}. Current: ${nextQty} ${prod?.unit || 'KG'}.`
+      );
+    }
+
     setOrderItems((prev) => {
-      const existing = prev.find((it) => it.itemId === prodId);
-      if (!existing) {
-        const prod = itemsMaster.find((p) => p.id === prodId);
-        if (!prod) return prev;
+      const existingItem = prev.find((it) => it.itemId === prodId);
+      if (!existingItem) {
+        if (delta <= 0 || !prod) return prev;
         const uniqueLineId = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         return [
           ...prev,
@@ -582,8 +602,8 @@ export default function CreateOrderClient() {
         ];
       }
 
-      const nextQty = Math.max(0, Math.round(((existing.quantity || 0) + delta) * 10) / 10);
-      if (nextQty === 0) {
+      const updatedQty = Math.max(0, Math.round(((existingItem.quantity || 0) + delta) * 10) / 10);
+      if (updatedQty === 0) {
         return prev.filter((it) => it.itemId !== prodId);
       }
 
@@ -591,20 +611,33 @@ export default function CreateOrderClient() {
         if (it.itemId === prodId) {
           return {
             ...it,
-            quantity: nextQty,
-            lineTotal: Math.round(nextQty * it.unitPrice * 100) / 100,
+            quantity: updatedQty,
+            lineTotal: Math.round(updatedQty * it.unitPrice * 100) / 100,
           };
         }
         return it;
       });
     });
-  }, [itemsMaster]);
+  }, [itemsMaster, orderItems, orderSlot]);
 
   const handleTileFieldChange = useCallback((
     prodId: string,
     field: 'quantity' | 'unitPrice' | 'mfgDesc' | 'pckDesc' | 'hasPacket',
     val: any
   ) => {
+    if (field === 'quantity') {
+      const qty = val === '' ? 0 : Math.max(0, parseFloat(val) || 0);
+      const prod = itemsMaster.find((p) => p.id === prodId);
+      const rawLimit = prod?.slotAllowedWeights?.[orderSlot as keyof typeof prod.slotAllowedWeights];
+      const slotLimit = rawLimit !== undefined ? parseFloat(String(rawLimit)) : 0;
+      if (slotLimit > 0 && qty > slotLimit) {
+        toast.error(
+          'Slot Limit Exceeded',
+          `"${prod?.name || 'Item'}" allowed weight for ${orderSlot} is ${slotLimit} ${prod?.unit || 'KG'}. You entered ${qty} ${prod?.unit || 'KG'}.`
+        );
+      }
+    }
+
     setOrderItems((prev) =>
       prev.map((item) => {
         if (item.itemId !== prodId) return item;
@@ -633,7 +666,7 @@ export default function CreateOrderClient() {
         };
       })
     );
-  }, []);
+  }, [itemsMaster, orderSlot]);
 
   // Box Image File Upload
   const handleBoxImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -763,6 +796,22 @@ export default function CreateOrderClient() {
     if (missingQtyItem) {
       toast.warning('Quantity Required', `Please enter a valid quantity for "${missingQtyItem.itemName}".`);
       return;
+    }
+
+    // Strict slot allowed weight / capacity enforcement
+    for (const item of validItems) {
+      const prod = itemsMaster.find((p) => p.id === item.itemId || p.name === item.itemName);
+      if (prod?.slotAllowedWeights && orderSlot) {
+        const rawLimit = prod.slotAllowedWeights[orderSlot as keyof typeof prod.slotAllowedWeights];
+        const limit = rawLimit !== undefined ? parseFloat(String(rawLimit)) : 0;
+        if (limit > 0 && item.quantity > limit) {
+          toast.error(
+            'Slot Weight Limit Exceeded',
+            `Cannot create order: "${item.itemName}" has exceeded the maximum allowed weight for slot "${orderSlot}". Maximum limit is ${limit} ${prod.unit}, but order requested ${item.quantity} ${prod.unit}. Please reduce the quantity.`
+          );
+          return;
+        }
+      }
     }
 
     const recv = parseFloat(String(receivedAmount)) || 0;

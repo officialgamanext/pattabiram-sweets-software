@@ -36,6 +36,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const isLoginPage = pathname === '/login';
+  const isCreateOrderPage = pathname === '/orders/create' || pathname.startsWith('/orders/create');
 
   const isAuthenticated = Boolean(user || employeeProfile);
 
@@ -68,6 +69,11 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   // If on login page, render children directly without Header
   if (isLoginPage) {
     return <>{children}</>;
+  }
+
+  // If on create order page, render full screen workspace directly without Header & Sidebar
+  if (isCreateOrderPage) {
+    return <div className="min-h-screen bg-[#f6f6f7] font-sans antialiased text-[#1a1a1a]">{children}</div>;
   }
 
   // If not authenticated and not on login page

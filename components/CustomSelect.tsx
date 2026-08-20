@@ -47,9 +47,9 @@ export default function CustomSelect({
   }, []);
 
   const sizeClasses = {
-    sm: 'px-2.5 py-1 text-xs rounded-lg',
-    md: 'px-3.5 py-2 text-xs sm:text-sm rounded-xl',
-    lg: 'px-4 py-2.5 text-sm rounded-xl',
+    sm: 'px-2.5 py-1 text-xs rounded-md h-[32px] max-h-[36px]',
+    md: 'px-3 py-1.5 text-xs sm:text-sm rounded-md h-[36px] max-h-[36px]',
+    lg: 'px-3.5 py-1.5 text-xs sm:text-sm rounded-md h-[36px] max-h-[36px]',
   };
 
   return (

@@ -1,7 +1,74 @@
 @import "tailwindcss";
 
+@theme {
+  --radius-xs: 6px;
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: 6px;
+  --radius-2xl: 6px;
+  --radius-3xl: 6px;
+  --radius-4xl: 6px;
+  --radius: 6px;
+}
+
 :root {
   --font-sora: 'Inter', 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --radius-xs: 6px;
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: 6px;
+  --radius-2xl: 6px;
+  --radius-3xl: 6px;
+  --radius-4xl: 6px;
+  --radius: 6px;
+}
+
+/* ── Global 6px Border Radius Rule ── */
+.rounded-xs,
+.rounded-sm,
+.rounded-md,
+.rounded,
+.rounded-lg,
+.rounded-xl,
+.rounded-2xl,
+.rounded-3xl,
+.rounded-4xl {
+  border-radius: 6px !important;
+}
+
+.rounded-t-xs, .rounded-t-sm, .rounded-t-md, .rounded-t, .rounded-t-lg, .rounded-t-xl, .rounded-t-2xl, .rounded-t-3xl {
+  border-top-left-radius: 6px !important;
+  border-top-right-radius: 6px !important;
+}
+
+.rounded-b-xs, .rounded-b-sm, .rounded-b-md, .rounded-b, .rounded-b-lg, .rounded-b-xl, .rounded-b-2xl, .rounded-b-3xl {
+  border-bottom-left-radius: 6px !important;
+  border-bottom-right-radius: 6px !important;
+}
+
+.rounded-l-xs, .rounded-l-sm, .rounded-l-md, .rounded-l, .rounded-l-lg, .rounded-l-xl, .rounded-l-2xl, .rounded-l-3xl {
+  border-top-left-radius: 6px !important;
+  border-bottom-left-radius: 6px !important;
+}
+
+.rounded-r-xs, .rounded-r-sm, .rounded-r-md, .rounded-r, .rounded-r-lg, .rounded-r-xl, .rounded-r-2xl, .rounded-r-3xl {
+  border-top-right-radius: 6px !important;
+  border-bottom-right-radius: 6px !important;
+}
+
+.rounded-tl-xs, .rounded-tl-sm, .rounded-tl-md, .rounded-tl, .rounded-tl-lg, .rounded-tl-xl, .rounded-tl-2xl, .rounded-tl-3xl {
+  border-top-left-radius: 6px !important;
+}
+.rounded-tr-xs, .rounded-tr-sm, .rounded-tr-md, .rounded-tr, .rounded-tr-lg, .rounded-tr-xl, .rounded-tr-2xl, .rounded-tr-3xl {
+  border-top-right-radius: 6px !important;
+}
+.rounded-bl-xs, .rounded-bl-sm, .rounded-bl-md, .rounded-bl, .rounded-bl-lg, .rounded-bl-xl, .rounded-bl-2xl, .rounded-bl-3xl {
+  border-bottom-left-radius: 6px !important;
+}
+.rounded-br-xs, .rounded-br-sm, .rounded-br-md, .rounded-br, .rounded-br-lg, .rounded-br-xl, .rounded-br-2xl, .rounded-br-3xl {
+  border-bottom-right-radius: 6px !important;
 }
 
 body {
@@ -19,6 +86,16 @@ body {
 
 html, body, button, a, input, select, textarea, [role="button"], label {
   touch-action: manipulation;
+}
+
+/* ── Universal 36px Max Height for Buttons, Inputs, Selects & Tabs ── */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not(.allow-any-height),
+select:not(.allow-any-height) {
+  max-height: 36px !important;
+}
+
+button:not(.allow-any-height):not(.h-auto):not([class*="h-full"]):not([class*="h-screen"]):not([class*="min-h-"]):not([class*="h-max"]):not([class*="h-min"]):not(.card-button) {
+  max-height: 36px !important;
 }
 
 /* Custom scrollbar utility */

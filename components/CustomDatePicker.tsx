@@ -175,9 +175,9 @@ export default function CustomDatePicker({
   const prevMonthDays = getDaysInMonth(viewYear, viewMonth - 1 < 0 ? 11 : viewMonth - 1);
 
   const sizeClasses = {
-    sm: 'px-2.5 py-1 text-xs rounded-lg h-[32px]',
-    md: 'px-3 py-1.5 text-xs sm:text-sm rounded-xl h-[36px]',
-    lg: 'px-4 py-2 text-sm rounded-xl h-[40px]',
+    sm: 'px-2.5 py-1 text-xs rounded-md h-[32px] max-h-[36px]',
+    md: 'px-3 py-1 text-xs rounded-md h-[36px] max-h-[36px]',
+    lg: 'px-3.5 py-1 text-xs rounded-md h-[36px] max-h-[36px]',
   };
 
   return (

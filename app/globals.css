@@ -12,6 +12,15 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* High Performance & Instant Tap Responsiveness */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body, button, a, input, select, textarea, [role="button"], label {
+  touch-action: manipulation;
+}
+
 /* Custom scrollbar utility */
 .no-scrollbar::-webkit-scrollbar {
   display: none;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -241,6 +241,205 @@ export function getOrderStatusBadgeStyle(status?: string) {
       return { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' };
   }
 }
+
+// ── MEMOIZED HIGH-PERFORMANCE PRODUCT TILE COMPONENT ────────────────────────
+interface ProductCatalogTileProps {
+  prod: ItemMasterOption;
+  addedItem?: OrderItemLine;
+  currentSlotLimit?: number | string;
+  isCustomisation: boolean;
+  numericNoOfBoxes: number;
+  packetCostPerBox: number;
+  onToggle: (prod: ItemMasterOption) => void;
+  onQuantityChange: (prodId: string, delta: number) => void;
+  onFieldChange: (
+    prodId: string,
+    field: 'quantity' | 'unitPrice' | 'mfgDesc' | 'pckDesc' | 'hasPacket',
+    val: any
+  ) => void;
+}
+
+const ProductCatalogTile = React.memo(function ProductCatalogTile({
+  prod,
+  addedItem,
+  currentSlotLimit,
+  isCustomisation,
+  numericNoOfBoxes,
+  packetCostPerBox,
+  onToggle,
+  onQuantityChange,
+  onFieldChange,
+}: ProductCatalogTileProps) {
+  const isAdded = Boolean(addedItem);
+
+  return (
+    <div
+      className={`group relative rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between transition-all duration-150 select-none ${
+        isAdded
+          ? 'bg-[#02626D]/[0.035] border-2 border-[#02626D] shadow-sm ring-2 ring-[#02626D]/15'
+          : 'bg-white border border-slate-200/90 hover:border-slate-300 hover:shadow-md'
+      }`}
+    >
+      {/* Top Bar: Image + Name + Badges */}
+      <div>
+        <div className="flex items-start justify-between gap-2">
+          <div className="relative w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden flex-shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+            <Image
+              src={prod.imageUrl || '/app-icon.png'}
+              alt={prod.name}
+              fill
+              className="object-contain p-1"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {prod.isFavorite && (
+              <span className="p-1 rounded-md bg-amber-50 text-amber-500 shadow-2xs" title="Favourite Product">
+                <Star size={13} className="fill-amber-400 text-amber-400" />
+              </span>
+            )}
+            {isAdded ? (
+              <button
+                type="button"
+                onClick={() => onToggle(prod)}
+                className="w-7 h-7 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                title="Remove product"
+              >
+                <Trash2 size={13} />
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Title & Code/Category */}
+        <div className="mt-2 min-w-0">
+          <h4
+            className={`text-xs sm:text-[13px] font-bold leading-snug truncate ${
+              isAdded ? 'text-[#02626D]' : 'text-slate-900 group-hover:text-[#02626D]'
+            }`}
+            title={prod.name}
+          >
+            {prod.name}
+          </h4>
+          <div className="flex items-center gap-1 text-[10.5px] text-slate-400 mt-0.5 font-medium">
+            <span className="font-mono">{prod.code}</span>
+            <span>•</span>
+            <span className="truncate">{prod.category}</span>
+          </div>
+        </div>
+
+        {/* Slot Limit Chip */}
+        {currentSlotLimit ? (
+          <div className="mt-1.5 inline-flex items-center gap-1 text-[9.5px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/80 font-semibold">
+            <Clock size={9} /> Slot Max: {currentSlotLimit} {prod.unit}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Bottom Action Area */}
+      {!addedItem ? (
+        /* UNSELECTED STATE: Clean Price & + Add Button */
+        <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-1">
+          <div>
+            <span className="text-xs sm:text-sm font-extrabold text-[#02626D]">₹{prod.price}</span>
+            <span className="text-[10px] text-slate-400 font-normal"> /{prod.unit}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onToggle(prod)}
+            className="h-7.5 px-3 rounded-xl bg-slate-100 hover:bg-[#02626D] hover:text-white text-slate-700 font-bold text-xs transition-all shadow-2xs cursor-pointer flex items-center gap-1 active:scale-95"
+          >
+            <Plus size={13} />
+            <span>Add</span>
+          </button>
+        </div>
+      ) : (
+        /* SELECTED / ACTIVE STATE: Full options inside this tile */
+        <div className="mt-2.5 pt-2 border-t border-slate-200/80 space-y-2">
+          {/* Stepper + Price & Line Total */}
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1 bg-white p-0.5 rounded-xl border border-slate-300 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => onQuantityChange(prod.id, -1)}
+                className="w-6.5 h-6.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-extrabold text-xs transition-colors cursor-pointer active:scale-90"
+                title="Decrease"
+              >
+                -
+              </button>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={addedItem.quantity === 0 ? '' : addedItem.quantity}
+                onChange={(e) => onFieldChange(prod.id, 'quantity', e.target.value)}
+                className="w-11 h-6.5 text-center font-extrabold text-xs text-[#02626D] bg-transparent focus:outline-none"
+              />
+              <span className="text-[10px] font-bold text-slate-400 pr-1">{prod.unit}</span>
+              <button
+                type="button"
+                onClick={() => onQuantityChange(prod.id, 1)}
+                className="w-6.5 h-6.5 rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white flex items-center justify-center font-extrabold text-xs transition-colors cursor-pointer shadow-2xs active:scale-90"
+                title="Increase"
+              >
+                +
+              </button>
+            </div>
+
+            <div className="text-right">
+              <span className="text-[9.5px] text-slate-400 block font-medium uppercase tracking-tight">Total</span>
+              <span className="text-xs font-bold text-slate-900">
+                ₹ {addedItem.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+
+          {/* Customisation Packet Toggle */}
+          {isCustomisation && (
+            <div className="flex items-center justify-between bg-white p-1.5 rounded-xl border border-slate-200 text-[10.5px]">
+              <span className="font-semibold text-slate-700">
+                Packet (+₹{numericNoOfBoxes * packetCostPerBox})
+              </span>
+              <button
+                type="button"
+                onClick={() => onFieldChange(prod.id, 'hasPacket', !addedItem.hasPacket)}
+                className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  addedItem.hasPacket
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {addedItem.hasPacket ? <Check size={10} /> : <X size={10} />}
+                <span>{addedItem.hasPacket ? 'Yes' : 'No'}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Manufacturing & Packing Notes */}
+          <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+            <input
+              type="text"
+              placeholder="Mfg notes..."
+              value={addedItem.manufacturingDescription || ''}
+              onChange={(e) => onFieldChange(prod.id, 'mfgDesc', e.target.value)}
+              className="w-full h-6.5 px-2 text-[10px] bg-white border border-slate-200 rounded-lg focus:border-[#02626D] focus:outline-none text-slate-700"
+              title="Manufacturing instructions"
+            />
+            <input
+              type="text"
+              placeholder="Packing notes..."
+              value={addedItem.packingDescription || ''}
+              onChange={(e) => onFieldChange(prod.id, 'pckDesc', e.target.value)}
+              className="w-full h-6.5 px-2 text-[10px] bg-white border border-slate-200 rounded-lg focus:border-[#02626D] focus:outline-none text-slate-700"
+              title="Packing instructions"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
 
 export default function OrdersClient() {
   const router = useRouter();
@@ -562,35 +761,37 @@ export default function OrdersClient() {
     return list;
   }, [itemsMaster, productGridSearch, productGridCategory, productGridOnlyFavorites]);
 
-  // Toggle product addition from tile click
-  const handleToggleTileProduct = (prod: ItemMasterOption) => {
-    const existingIndex = orderItems.findIndex((it) => it.itemId === prod.id);
-    if (existingIndex >= 0) {
-      setOrderItems((prev) => prev.filter((it) => it.itemId !== prod.id));
-    } else {
-      const uniqueLineId = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-      const newLine: OrderItemLine = {
-        lineId: uniqueLineId,
-        itemId: prod.id,
-        itemCode: prod.code,
-        itemName: prod.name,
-        category: prod.category,
-        unit: prod.unit || 'KG',
-        imageUrl: prod.imageUrl || '',
-        unitPrice: prod.price,
-        quantity: 1,
-        lineTotal: prod.price * 1,
-        hasPacket: false,
-        packetCharge: 0,
-        manufacturingDescription: '',
-        packingDescription: '',
-      };
-      setOrderItems((prev) => [...prev, newLine]);
-    }
-  };
+  // Toggle product addition from tile click (useCallback for instant click performance)
+  const handleToggleTileProduct = useCallback((prod: ItemMasterOption) => {
+    setOrderItems((prev) => {
+      const existingIndex = prev.findIndex((it) => it.itemId === prod.id);
+      if (existingIndex >= 0) {
+        return prev.filter((it) => it.itemId !== prod.id);
+      } else {
+        const uniqueLineId = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        const newLine: OrderItemLine = {
+          lineId: uniqueLineId,
+          itemId: prod.id,
+          itemCode: prod.code,
+          itemName: prod.name,
+          category: prod.category,
+          unit: prod.unit || 'KG',
+          imageUrl: prod.imageUrl || '',
+          unitPrice: prod.price,
+          quantity: 1,
+          lineTotal: prod.price * 1,
+          hasPacket: false,
+          packetCharge: 0,
+          manufacturingDescription: '',
+          packingDescription: '',
+        };
+        return [...prev, newLine];
+      }
+    });
+  }, []);
 
-  // Quick increment/decrement quantity on product tile
-  const handleTileQuantityChange = (prodId: string, delta: number) => {
+  // Quick increment/decrement quantity on product tile (useCallback for instant click performance)
+  const handleTileQuantityChange = useCallback((prodId: string, delta: number) => {
     setOrderItems((prev) => {
       const existing = prev.find((it) => it.itemId === prodId);
       if (!existing) {
@@ -634,10 +835,10 @@ export default function OrdersClient() {
         return it;
       });
     });
-  };
+  }, [itemsMaster]);
 
-  // Update line field directly from tile (quantity, unitPrice, mfgDesc, pckDesc, hasPacket)
-  const handleTileFieldChange = (
+  // Update line field directly from tile (useCallback for instant keystroke performance)
+  const handleTileFieldChange = useCallback((
     prodId: string,
     field: 'quantity' | 'unitPrice' | 'mfgDesc' | 'pckDesc' | 'hasPacket',
     val: any
@@ -670,7 +871,7 @@ export default function OrdersClient() {
         };
       })
     );
-  };
+  }, []);
 
   // Filter products for Product Modal (Favourites sorted first)
   const filteredProductMasterForModal = useMemo(() => {
@@ -2390,171 +2591,21 @@ export default function OrdersClient() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                         {filteredProductTiles.map((prod) => {
                           const addedItem = orderItems.find((it) => it.itemId === prod.id);
-                          const isAdded = Boolean(addedItem);
                           const currentSlotLimit = orderSlot && prod.slotAllowedWeights?.[orderSlot as keyof typeof prod.slotAllowedWeights];
 
                           return (
-                            <div
+                            <ProductCatalogTile
                               key={prod.id}
-                              className={`relative rounded-2xl p-3 flex flex-col justify-between transition-all duration-150 ${
-                                isAdded
-                                  ? 'bg-[#02626D]/[0.025] border-2 border-[#02626D] shadow-sm ring-2 ring-[#02626D]/15'
-                                  : 'bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md'
-                              }`}
-                            >
-                              {/* Top Bar: Image + Badges */}
-                              <div>
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="relative w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden flex-shrink-0 shadow-2xs">
-                                    <Image
-                                      src={prod.imageUrl || '/app-icon.png'}
-                                      alt={prod.name}
-                                      fill
-                                      className="object-contain p-1"
-                                    />
-                                  </div>
-
-                                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                                    {prod.isFavorite && (
-                                      <span className="p-1 rounded-md bg-amber-50 text-amber-500 shadow-2xs" title="Favourite Product">
-                                        <Star size={13} className="fill-amber-400 text-amber-400" />
-                                      </span>
-                                    )}
-                                    {isAdded ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleToggleTileProduct(prod)}
-                                        className="w-6.5 h-6.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 flex items-center justify-center transition-colors cursor-pointer"
-                                        title="Remove product"
-                                      >
-                                        <Trash2 size={13} />
-                                      </button>
-                                    ) : null}
-                                  </div>
-                                </div>
-
-                                {/* Title & Code/Category */}
-                                <div className="mt-2 min-w-0">
-                                  <h4 className={`text-xs sm:text-[13px] font-bold leading-snug truncate ${isAdded ? 'text-[#02626D]' : 'text-slate-900'}`} title={prod.name}>
-                                    {prod.name}
-                                  </h4>
-                                  <div className="flex items-center gap-1 text-[10.5px] text-slate-400 mt-0.5">
-                                    <span className="font-mono">{prod.code}</span>
-                                    <span>•</span>
-                                    <span className="truncate">{prod.category}</span>
-                                  </div>
-                                </div>
-
-                                {/* Slot Limit Chip */}
-                                {currentSlotLimit ? (
-                                  <div className="mt-1.5 inline-flex items-center gap-1 text-[9.5px] text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200/80 font-medium">
-                                    <Clock size={9} /> Slot Max: {currentSlotLimit} {prod.unit}
-                                  </div>
-                                ) : null}
-                              </div>
-
-                              {/* Bottom Action Area */}
-                              {!addedItem ? (
-                                /* UNSELECTED STATE: Clean Price & + Add Button */
-                                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-1">
-                                  <div>
-                                    <span className="text-xs sm:text-sm font-extrabold text-[#02626D]">₹{prod.price}</span>
-                                    <span className="text-[10px] text-slate-400 font-normal"> /{prod.unit}</span>
-                                  </div>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleTileProduct(prod)}
-                                    className="h-7 px-3 rounded-lg bg-slate-100 hover:bg-[#02626D] hover:text-white text-slate-700 font-bold text-xs transition-all shadow-2xs cursor-pointer flex items-center gap-1"
-                                  >
-                                    <Plus size={13} />
-                                    <span>Add</span>
-                                  </button>
-                                </div>
-                              ) : (
-                                /* SELECTED / ACTIVE STATE: Full options inside this tile! */
-                                <div className="mt-2.5 pt-2 border-t border-slate-200/80 space-y-2">
-                                  {/* Stepper + Price & Line Total */}
-                                  <div className="flex items-center justify-between gap-1.5">
-                                    <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-300 shadow-2xs">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleTileQuantityChange(prod.id, -1)}
-                                        className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs transition-colors cursor-pointer"
-                                        title="Decrease"
-                                      >
-                                        -
-                                      </button>
-                                      <input
-                                        type="number"
-                                        step="0.1"
-                                        min="0"
-                                        value={addedItem.quantity === 0 ? '' : addedItem.quantity}
-                                        onChange={(e) => handleTileFieldChange(prod.id, 'quantity', e.target.value)}
-                                        className="w-11 h-6 text-center font-extrabold text-xs text-[#02626D] bg-transparent focus:outline-none"
-                                      />
-                                      <span className="text-[10px] font-bold text-slate-400 pr-1">{prod.unit}</span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleTileQuantityChange(prod.id, 1)}
-                                        className="w-6 h-6 rounded bg-[#02626D] hover:bg-[#014d56] text-white flex items-center justify-center font-bold text-xs transition-colors cursor-pointer shadow-2xs"
-                                        title="Increase"
-                                      >
-                                        +
-                                      </button>
-                                    </div>
-
-                                    <div className="text-right">
-                                      <span className="text-[9.5px] text-slate-400 block font-medium uppercase tracking-tight">Total</span>
-                                      <span className="text-xs font-bold text-slate-900">
-                                        ₹ {addedItem.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  {/* Customisation Packet Toggle (if Customisation enabled) */}
-                                  {isCustomisation && (
-                                    <div className="flex items-center justify-between bg-white p-1.5 rounded-lg border border-slate-200 text-[10.5px]">
-                                      <span className="font-semibold text-slate-700">
-                                        Packet (+₹{numericNoOfBoxes * packetCostPerBox})
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleTileFieldChange(prod.id, 'hasPacket', !addedItem.hasPacket)}
-                                        className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                                          addedItem.hasPacket
-                                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                        }`}
-                                      >
-                                        {addedItem.hasPacket ? <Check size={10} /> : <X size={10} />}
-                                        <span>{addedItem.hasPacket ? 'Yes' : 'No'}</span>
-                                      </button>
-                                    </div>
-                                  )}
-
-                                  {/* Manufacturing & Packing Notes */}
-                                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                                    <input
-                                      type="text"
-                                      placeholder="Mfg notes..."
-                                      value={addedItem.manufacturingDescription || ''}
-                                      onChange={(e) => handleTileFieldChange(prod.id, 'mfgDesc', e.target.value)}
-                                      className="w-full h-6 px-1.5 text-[10px] bg-white border border-slate-200 rounded-md focus:border-[#02626D] focus:outline-none text-slate-700"
-                                      title="Manufacturing instructions"
-                                    />
-                                    <input
-                                      type="text"
-                                      placeholder="Packing notes..."
-                                      value={addedItem.packingDescription || ''}
-                                      onChange={(e) => handleTileFieldChange(prod.id, 'pckDesc', e.target.value)}
-                                      className="w-full h-6 px-1.5 text-[10px] bg-white border border-slate-200 rounded-md focus:border-[#02626D] focus:outline-none text-slate-700"
-                                      title="Packing instructions"
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
+                              prod={prod}
+                              addedItem={addedItem}
+                              currentSlotLimit={currentSlotLimit}
+                              isCustomisation={isCustomisation}
+                              numericNoOfBoxes={numericNoOfBoxes}
+                              packetCostPerBox={packetCostPerBox}
+                              onToggle={handleToggleTileProduct}
+                              onQuantityChange={handleTileQuantityChange}
+                              onFieldChange={handleTileFieldChange}
+                            />
                           );
                         })}
                       </div>

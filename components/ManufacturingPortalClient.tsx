@@ -19,12 +19,15 @@ import {
   Building2,
   Calendar,
   X,
+  ShieldAlert,
+  Lock
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, updateDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import type { OrderRecord, OrderItemLine } from './OrdersClient';
 import CustomSelect from '@/components/CustomSelect';
 import CustomDatePicker from '@/components/CustomDatePicker';
+import { useAuth } from '@/context/AuthContext';
 
 export interface DynamicUnit {
   id: string;
@@ -97,6 +100,11 @@ function getOrderEffectiveMfgDate(order: OrderRecord): string {
 }
 
 export default function ManufacturingPortalClient() {
+  const { employeeProfile } = useAuth();
+  const isSuperAdmin = Boolean(employeeProfile?.isSuperAdmin);
+  const assignedMfgUnits = Array.isArray(employeeProfile?.assignedMfgUnits) ? employeeProfile.assignedMfgUnits : ['All'];
+  const isAllUnitsAllowed = isSuperAdmin || assignedMfgUnits.includes('All');
+
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [mfgUnits, setMfgUnits] = useState<DynamicUnit[]>([]);
   const [itemInfoMap, setItemInfoMap] = useState<Map<string, ItemMasterInfo>>(new Map());
@@ -114,6 +122,14 @@ export default function ManufacturingPortalClient() {
   const [isAlertDismissed, setIsAlertDismissed] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'item_wise' | 'order_wise'>('item_wise');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // Accessible manufacturing units for the logged-in employee
+  const accessibleMfgUnits = useMemo(() => {
+    if (isAllUnitsAllowed) return mfgUnits;
+    return mfgUnits.filter((u) =>
+      assignedMfgUnits.some((assigned) => assigned.toLowerCase() === u.name.toLowerCase())
+    );
+  }, [mfgUnits, isAllUnitsAllowed, assignedMfgUnits]);
 
   // Extract all manufacturing dates from active orders
   const availableMfgDates = useMemo(() => {
@@ -197,17 +213,26 @@ export default function ManufacturingPortalClient() {
     return () => unsub();
   }, []);
 
-  // Unit Options
+  // Unit Options based on accessible units
   const unitOptions = useMemo(() => {
-    const opts = [{ value: 'all', label: 'All Manufacturing Units' }];
-    mfgUnits.forEach((u) => {
+    if (!isAllUnitsAllowed && accessibleMfgUnits.length === 0) {
+      return [{ value: 'none', label: 'No Units Assigned' }];
+    }
+    const opts = [];
+    if (isAllUnitsAllowed || accessibleMfgUnits.length > 1) {
+      opts.push({
+        value: 'all',
+        label: isAllUnitsAllowed ? 'All Manufacturing Units' : `All Assigned Units (${accessibleMfgUnits.length})`
+      });
+    }
+    accessibleMfgUnits.forEach((u) => {
       opts.push({
         value: u.name,
         label: `${u.name} (${u.code})`
       });
     });
     return opts;
-  }, [mfgUnits]);
+  }, [accessibleMfgUnits, isAllUnitsAllowed]);
 
   // The date currently being viewed in the Manufacturing Portal
   const activeViewingDateStr = useMemo(() => {
@@ -236,6 +261,12 @@ export default function ManufacturingPortalClient() {
   useEffect(() => {
     setIsAlertDismissed(false);
   }, [activeViewingDateStr]);
+
+  // Helper to check if a specific unit is authorized for the logged-in employee
+  const isItemUnitAllowed = (unitName: string) => {
+    if (isAllUnitsAllowed) return true;
+    return assignedMfgUnits.some((u) => u.toLowerCase() === (unitName || '').toLowerCase());
+  };
 
   // Compute items that require 1-day advance intimation for the next day relative to current view
   const tomorrowIntimationAlerts = useMemo(() => {
@@ -273,8 +304,11 @@ export default function ManufacturingPortalClient() {
 
         const mfgUnit = itemMaster?.mfgUnitName || 'Main Factory';
 
+        // Check employee unit authorization
+        if (!isItemUnitAllowed(mfgUnit)) return;
+
         // Filter by selectedUnit if a specific unit is filtered
-        if (selectedUnit !== 'all' && mfgUnit !== selectedUnit) return;
+        if (selectedUnit !== 'all' && mfgUnit.toLowerCase() !== selectedUnit.toLowerCase()) return;
 
         const qty = parseFloat(item.quantity as any) || 0;
         const unit = item.unit || 'KG';
@@ -304,7 +338,7 @@ export default function ManufacturingPortalClient() {
     });
 
     return Array.from(map.values());
-  }, [orders, itemInfoMap, nextDayDateStr, selectedUnit]);
+  }, [orders, itemInfoMap, nextDayDateStr, selectedUnit, isAllUnitsAllowed, assignedMfgUnits]);
 
   // Aggregate items across active orders that are still pending cooking in Manufacturing (mfgStatus !== 'Moved to Packing')
   const aggregatedItems = useMemo(() => {
@@ -334,6 +368,9 @@ export default function ManufacturingPortalClient() {
         const mfgUnitName = (item as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
         const pckUnitName = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
         const category = item.category || masterInfo?.category || 'General';
+
+        // Check employee unit authorization
+        if (!isItemUnitAllowed(mfgUnitName)) return;
 
         // Filter by selected Manufacturing Unit
         if (selectedUnit !== 'all' && mfgUnitName.toLowerCase() !== selectedUnit.toLowerCase()) {
@@ -394,7 +431,7 @@ export default function ManufacturingPortalClient() {
     });
 
     return Array.from(map.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
-  }, [filteredOrders, itemInfoMap, selectedUnit, searchTerm]);
+  }, [filteredOrders, itemInfoMap, selectedUnit, searchTerm, isAllUnitsAllowed, assignedMfgUnits]);
 
   // Order-wise active manufacturing list
   const filteredOrderWiseList = useMemo(() => {
@@ -402,8 +439,15 @@ export default function ManufacturingPortalClient() {
       const st = order.orderStatus as string;
       if (st === 'Delivered' || st === 'Cancelled') return false;
 
-      // Order must have at least 1 item still pending manufacturing
-      const hasPendingItem = order.items?.some((item) => {
+      // Order must have at least 1 item that is accessible for this employee and pending manufacturing
+      const hasPendingAccessibleItem = order.items?.some((item) => {
+        const key = (item.itemName || (item as any).name || '').toLowerCase().trim();
+        const masterInfo = itemInfoMap.get(key);
+        const unit = (item as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
+
+        if (!isItemUnitAllowed(unit)) return false;
+        if (selectedUnit !== 'all' && unit.toLowerCase() !== selectedUnit.toLowerCase()) return false;
+
         const status = item.mfgStatus || (
           order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
             ? 'Moved to Packing'
@@ -414,17 +458,7 @@ export default function ManufacturingPortalClient() {
         return status !== 'Moved to Packing';
       });
 
-      if (!hasPendingItem) return false;
-
-      if (selectedUnit !== 'all') {
-        const hasMatchingItem = order.items?.some((i) => {
-          const key = (i.itemName || (i as any).name || '').toLowerCase().trim();
-          const masterInfo = itemInfoMap.get(key);
-          const unit = (i as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
-          return (unit || '').toLowerCase() === selectedUnit.toLowerCase();
-        });
-        if (!hasMatchingItem) return false;
-      }
+      if (!hasPendingAccessibleItem) return false;
 
       if (searchTerm) {
         const ordCode = order.code || (order as any).orderId || order.id || '';
@@ -437,7 +471,7 @@ export default function ManufacturingPortalClient() {
 
       return true;
     });
-  }, [filteredOrders, selectedUnit, searchTerm, itemInfoMap]);
+  }, [filteredOrders, selectedUnit, searchTerm, itemInfoMap, isAllUnitsAllowed, assignedMfgUnits]);
 
   // Helper to remove any undefined fields before writing to Firestore
   const sanitizeForFirestore = (obj: any): any => {
@@ -612,6 +646,17 @@ export default function ManufacturingPortalClient() {
           </div>
         </div>
       </div>
+
+      {/* Unassigned Units Notice */}
+      {!isAllUnitsAllowed && accessibleMfgUnits.length === 0 && (
+        <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl text-center space-y-2">
+          <ShieldAlert size={36} className="text-amber-600 mx-auto" />
+          <h3 className="text-sm font-bold text-amber-900">No Manufacturing Units Assigned</h3>
+          <p className="text-xs text-amber-700 max-w-md mx-auto">
+            You are logged in as <strong>{employeeProfile?.name || 'Staff'}</strong>, but no manufacturing kitchen units have been assigned to your account. Please contact your SuperAdmin to assign units in the Employees section.
+          </p>
+        </div>
+      )}
 
       {/* Advance Preparation Alert Banner for Tomorrow's Manufacturing */}
       {tomorrowIntimationAlerts.length > 0 && !isAlertDismissed && (
@@ -905,7 +950,15 @@ export default function ManufacturingPortalClient() {
                     <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-200/80">
                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Order Items to Produce</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                        {order.items?.map((item, idx) => {
+                        {order.items?.filter((item) => {
+                          const rawItemName = item.itemName || (item as any).name || 'Unknown Item';
+                          const key = rawItemName.toLowerCase().trim();
+                          const masterInfo = itemInfoMap.get(key);
+                          const mfgUnit = (item as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
+                          if (!isItemUnitAllowed(mfgUnit)) return false;
+                          if (selectedUnit !== 'all' && mfgUnit.toLowerCase() !== selectedUnit.toLowerCase()) return false;
+                          return true;
+                        }).map((item, idx) => {
                           const rawItemName = item.itemName || (item as any).name || 'Unknown Item';
                           const key = rawItemName.toLowerCase().trim();
                           const masterInfo = itemInfoMap.get(key);

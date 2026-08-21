@@ -21,7 +21,7 @@ const ROUTE_MENU_KEY_MAP: Record<string, string> = {
   '/wholesalers': 'wholesalers',
   '/wholesaler-orders': 'wholesaler_orders',
   '/customers': 'customers',
-  '/employees': 'employee_portal',
+  '/employees': 'employees',
   '/payroll': 'payroll',
   '/manufacturing-portal': 'manufacturing_portal',
   '/packing-portal': 'packing_portal',

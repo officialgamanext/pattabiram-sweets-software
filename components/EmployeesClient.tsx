@@ -27,7 +27,10 @@ import {
   Upload,
   User,
   Lock,
-  ShieldCheck
+  ShieldCheck,
+  Factory,
+  Package,
+  Boxes
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import {
@@ -68,6 +71,8 @@ export interface EmployeeRecord {
   department: string;
   status: 'active' | 'inactive';
   permissions?: MenuAccessPermission[];
+  assignedMfgUnits?: string[];
+  assignedPckUnits?: string[];
   createdAt?: any;
 }
 
@@ -77,6 +82,10 @@ export default function EmployeesClient() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<string>('all');
   
+  // Real-time Units Lists for assignment
+  const [mfgUnitsList, setMfgUnitsList] = useState<{ id: string; name: string; code: string }[]>([]);
+  const [pckUnitsList, setPckUnitsList] = useState<{ id: string; name: string; code: string }[]>([]);
+
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmp, setEditingEmp] = useState<EmployeeRecord | null>(null);
@@ -95,6 +104,10 @@ export default function EmployeesClient() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDetectingGps, setIsDetectingGps] = useState(false);
   const [formPermissions, setFormPermissions] = useState<Record<string, MenuAccessPermission>>({});
+  
+  // Assigned Units state for the employee
+  const [formAssignedMfgUnits, setFormAssignedMfgUnits] = useState<string[]>(['All']);
+  const [formAssignedPckUnits, setFormAssignedPckUnits] = useState<string[]>(['All']);
   
   // Camera capture state
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -123,7 +136,35 @@ export default function EmployeesClient() {
       }
     );
 
-    return () => unsubscribe();
+    // Fetch active manufacturing units
+    const unsubMfg = onSnapshot(
+      collection(db, 'manufacturing_units'),
+      (snap) => {
+        const list = snap.docs
+          .map((d) => ({ id: d.id, name: d.data().name || '', code: d.data().code || '', status: d.data().status }))
+          .filter((u) => u.status !== 'Inactive' && u.name);
+        setMfgUnitsList(list);
+      },
+      (err) => console.warn('Error fetching mfg units for assignment:', err)
+    );
+
+    // Fetch active packing units
+    const unsubPck = onSnapshot(
+      collection(db, 'packing_units'),
+      (snap) => {
+        const list = snap.docs
+          .map((d) => ({ id: d.id, name: d.data().name || '', code: d.data().code || '', status: d.data().status }))
+          .filter((u) => u.status !== 'Inactive' && u.name);
+        setPckUnitsList(list);
+      },
+      (err) => console.warn('Error fetching pck units for assignment:', err)
+    );
+
+    return () => {
+      unsubscribe();
+      unsubMfg();
+      unsubPck();
+    };
   }, []);
 
   const saveEmployeesToStateAndStorage = (newList: EmployeeRecord[]) => {
@@ -147,6 +188,9 @@ export default function EmployeesClient() {
       setFormDepartment(emp.department || 'Production');
       setFormPhotoUrl(emp.photoUrl || '');
 
+      setFormAssignedMfgUnits(Array.isArray(emp.assignedMfgUnits) && emp.assignedMfgUnits.length > 0 ? emp.assignedMfgUnits : ['All']);
+      setFormAssignedPckUnits(Array.isArray(emp.assignedPckUnits) && emp.assignedPckUnits.length > 0 ? emp.assignedPckUnits : ['All']);
+
       // Load dynamically merged permissions (any new menu added to APP_MENUS automatically appears!)
       setFormPermissions(getMergedEmployeePermissions(emp.permissions));
     } else {
@@ -161,9 +205,59 @@ export default function EmployeesClient() {
       setFormAddress('');
       setFormDepartment('Production');
       setFormPhotoUrl('');
+      setFormAssignedMfgUnits(['All']);
+      setFormAssignedPckUnits(['All']);
       setFormPermissions(getMergedEmployeePermissions());
     }
     setIsModalOpen(true);
+  };
+
+  const handleToggleMfgUnit = (unitName: string) => {
+    if (unitName === 'All') {
+      if (formAssignedMfgUnits.includes('All')) {
+        setFormAssignedMfgUnits([]);
+      } else {
+        setFormAssignedMfgUnits(['All']);
+      }
+      return;
+    }
+
+    setFormAssignedMfgUnits((prev) => {
+      const withoutAll = prev.filter((u) => u !== 'All');
+      if (withoutAll.includes(unitName)) {
+        return withoutAll.filter((u) => u !== unitName);
+      } else {
+        const next = [...withoutAll, unitName];
+        if (mfgUnitsList.length > 0 && next.length === mfgUnitsList.length) {
+          return ['All'];
+        }
+        return next;
+      }
+    });
+  };
+
+  const handleTogglePckUnit = (unitName: string) => {
+    if (unitName === 'All') {
+      if (formAssignedPckUnits.includes('All')) {
+        setFormAssignedPckUnits([]);
+      } else {
+        setFormAssignedPckUnits(['All']);
+      }
+      return;
+    }
+
+    setFormAssignedPckUnits((prev) => {
+      const withoutAll = prev.filter((u) => u !== 'All');
+      if (withoutAll.includes(unitName)) {
+        return withoutAll.filter((u) => u !== unitName);
+      } else {
+        const next = [...withoutAll, unitName];
+        if (pckUnitsList.length > 0 && next.length === pckUnitsList.length) {
+          return ['All'];
+        }
+        return next;
+      }
+    });
   };
 
   const handleCloseModal = () => {
@@ -327,6 +421,8 @@ export default function EmployeesClient() {
         photoUrl: finalPhotoUrl,
         department: formDepartment,
         status: 'active' as const,
+        assignedMfgUnits: formAssignedMfgUnits,
+        assignedPckUnits: formAssignedPckUnits,
         permissions: Object.values(formPermissions)
       };
 
@@ -582,6 +678,22 @@ export default function EmployeesClient() {
                   <div className="flex items-start gap-1.5 text-slate-500 text-[11px] mt-1">
                     <MapPin size={13} className="text-slate-400 flex-shrink-0 mt-0.5" />
                     <span className="truncate">{emp.address || 'Address not registered'}</span>
+                  </div>
+
+                  {/* Assigned Factory & Packing Units Badges */}
+                  <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1 text-[10px]">
+                    <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold flex items-center gap-1">
+                      <Factory size={10} />
+                      <span>
+                        Mfg: {!emp.assignedMfgUnits || emp.assignedMfgUnits.includes('All') ? 'All Units' : `${emp.assignedMfgUnits.length} Units`}
+                      </span>
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 font-semibold flex items-center gap-1">
+                      <Package size={10} />
+                      <span>
+                        Pck: {!emp.assignedPckUnits || emp.assignedPckUnits.includes('All') ? 'All Units' : `${emp.assignedPckUnits.length} Units`}
+                      </span>
+                    </span>
                   </div>
                 </div>
 
@@ -897,6 +1009,115 @@ export default function EmployeesClient() {
                             className="hidden"
                           />
                         </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Unit & Section Access Assignment Section */}
+                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+                  <div className="border-b border-slate-200/80 pb-3">
+                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                      <Building2 size={16} className="text-indigo-600" />
+                      Manufacturing &amp; Packing Unit Section Access
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Assign which specific factory kitchen unit(s) and packing section(s) this employee is authorized to access and view.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Manufacturing Units */}
+                    <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Factory size={14} className="text-amber-600" />
+                          Manufacturing Units
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                          {formAssignedMfgUnits.includes('All') ? 'All Units' : `${formAssignedMfgUnits.length} Selected`}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleMfgUnit('All')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                            formAssignedMfgUnits.includes('All')
+                              ? 'bg-amber-600 text-white shadow-2xs'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {formAssignedMfgUnits.includes('All') && <Check size={12} />}
+                          <span>All Units (Full Access)</span>
+                        </button>
+
+                        {mfgUnitsList.map((unit) => {
+                          const isSelected = formAssignedMfgUnits.includes('All') || formAssignedMfgUnits.includes(unit.name);
+                          return (
+                            <button
+                              key={unit.id}
+                              type="button"
+                              onClick={() => handleToggleMfgUnit(unit.name)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                isSelected
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300 font-bold'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-transparent'
+                              }`}
+                            >
+                              {isSelected && <Check size={12} className="text-amber-700" />}
+                              <span>{unit.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Packing Units */}
+                    <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Package size={14} className="text-teal-600" />
+                          Packing Units
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
+                          {formAssignedPckUnits.includes('All') ? 'All Units' : `${formAssignedPckUnits.length} Selected`}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePckUnit('All')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                            formAssignedPckUnits.includes('All')
+                              ? 'bg-[#02626D] text-white shadow-2xs'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {formAssignedPckUnits.includes('All') && <Check size={12} />}
+                          <span>All Units (Full Access)</span>
+                        </button>
+
+                        {pckUnitsList.map((unit) => {
+                          const isSelected = formAssignedPckUnits.includes('All') || formAssignedPckUnits.includes(unit.name);
+                          return (
+                            <button
+                              key={unit.id}
+                              type="button"
+                              onClick={() => handleTogglePckUnit(unit.name)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                isSelected
+                                  ? 'bg-teal-50 text-[#02626D] border border-teal-300 font-bold'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-transparent'
+                              }`}
+                            >
+                              {isSelected && <Check size={12} className="text-[#02626D]" />}
+                              <span>{unit.name}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>

@@ -38,6 +38,8 @@ export interface ReceiptData {
   packetCharges?: number;
   packingCharges?: number;
   additionalCharges?: number;
+  transportCharges?: number;
+  deliveryAddress?: string;
   grandTotal: number;
   footerNote?: string;
   cashierName?: string;
@@ -499,6 +501,10 @@ export function generateReceiptEscPos(
 
   if (data.additionalCharges && data.additionalCharges > 0) {
     builder.row2('Additional Charges:', `+Rs.${data.additionalCharges.toFixed(2)}`);
+  }
+
+  if (data.transportCharges && data.transportCharges > 0) {
+    builder.row2('Transport Charges:', `+Rs.${data.transportCharges.toFixed(2)}`);
   }
 
   if (data.discount && data.discount > 0) {

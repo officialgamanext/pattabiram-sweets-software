@@ -14,12 +14,15 @@ import {
   Store,
   Boxes,
   ListOrdered,
-  Building2
+  Building2,
+  ShieldAlert,
+  Lock
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, updateDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import type { OrderRecord, OrderItemLine } from './OrdersClient';
 import CustomSelect from '@/components/CustomSelect';
+import { useAuth } from '@/context/AuthContext';
 
 export interface DynamicUnit {
   id: string;
@@ -77,6 +80,11 @@ function isOrderEligibleForPacking(order: OrderRecord): boolean {
 }
 
 export default function PackingPortalClient() {
+  const { employeeProfile } = useAuth();
+  const isSuperAdmin = Boolean(employeeProfile?.isSuperAdmin);
+  const assignedPckUnits = Array.isArray(employeeProfile?.assignedPckUnits) ? employeeProfile.assignedPckUnits : ['All'];
+  const isAllUnitsAllowed = isSuperAdmin || assignedPckUnits.includes('All');
+
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [pckUnits, setPckUnits] = useState<DynamicUnit[]>([]);
   const [itemInfoMap, setItemInfoMap] = useState<Map<string, ItemMasterInfo>>(new Map());
@@ -86,6 +94,14 @@ export default function PackingPortalClient() {
   const [selectedUnit, setSelectedUnit] = useState('all');
   const [activeTab, setActiveTab] = useState<'item_wise' | 'order_wise'>('item_wise');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // Accessible packing units for the logged-in employee
+  const accessiblePckUnits = useMemo(() => {
+    if (isAllUnitsAllowed) return pckUnits;
+    return pckUnits.filter((u) =>
+      assignedPckUnits.some((assigned) => assigned.toLowerCase() === u.name.toLowerCase())
+    );
+  }, [pckUnits, isAllUnitsAllowed, assignedPckUnits]);
 
   // 1. Subscribe to real-time packing units
   useEffect(() => {
@@ -145,17 +161,32 @@ export default function PackingPortalClient() {
     return () => unsub();
   }, []);
 
-  // Unit options
+  // Unit options based on accessible units
   const unitOptions = useMemo(() => {
-    const opts = [{ value: 'all', label: 'All Packing Units' }];
-    pckUnits.forEach((u) => {
+    if (!isAllUnitsAllowed && accessiblePckUnits.length === 0) {
+      return [{ value: 'none', label: 'No Units Assigned' }];
+    }
+    const opts = [];
+    if (isAllUnitsAllowed || accessiblePckUnits.length > 1) {
+      opts.push({
+        value: 'all',
+        label: isAllUnitsAllowed ? 'All Packing Units' : `All Assigned Units (${accessiblePckUnits.length})`
+      });
+    }
+    accessiblePckUnits.forEach((u) => {
       opts.push({
         value: u.name,
         label: `${u.name} (${u.code})`
       });
     });
     return opts;
-  }, [pckUnits]);
+  }, [accessiblePckUnits, isAllUnitsAllowed]);
+
+  // Helper to check if a specific packing unit is authorized for the logged-in employee
+  const isItemUnitAllowed = (unitName: string) => {
+    if (isAllUnitsAllowed) return true;
+    return assignedPckUnits.some((u) => u.toLowerCase() === (unitName || '').toLowerCase());
+  };
 
   // Aggregate items across active packing stage orders (mfgStatus === 'Moved to Packing' AND pckStatus !== 'Moved to Store')
   const aggregatedItems = useMemo(() => {
@@ -189,6 +220,9 @@ export default function PackingPortalClient() {
         const mfgUnitName = (item as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
         const pckUnitName = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
         const category = item.category || masterInfo?.category || 'General';
+
+        // Check employee unit authorization
+        if (!isItemUnitAllowed(pckUnitName)) return;
 
         // Filter by selected Packing Unit
         if (selectedUnit !== 'all' && pckUnitName.toLowerCase() !== selectedUnit.toLowerCase()) {
@@ -246,14 +280,21 @@ export default function PackingPortalClient() {
     });
 
     return Array.from(map.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
-  }, [orders, itemInfoMap, selectedUnit, searchTerm]);
+  }, [orders, itemInfoMap, selectedUnit, searchTerm, isAllUnitsAllowed, assignedPckUnits]);
 
   const filteredOrderWiseList = useMemo(() => {
     return orders.filter((order) => {
       if (!isOrderEligibleForPacking(order)) return false;
 
-      // Order must have at least 1 item pending packing
+      // Order must have at least 1 item accessible and pending packing
       const hasPendingPackingItem = order.items?.some((item) => {
+        const key = (item.itemName || (item as any).name || '').toLowerCase().trim();
+        const masterInfo = itemInfoMap.get(key);
+        const pckUnit = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
+
+        if (!isItemUnitAllowed(pckUnit)) return false;
+        if (selectedUnit !== 'all' && pckUnit.toLowerCase() !== selectedUnit.toLowerCase()) return false;
+
         const itemMfgStatus = item.mfgStatus || (
           order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
             ? 'Moved to Packing'
@@ -271,16 +312,6 @@ export default function PackingPortalClient() {
 
       if (!hasPendingPackingItem) return false;
 
-      if (selectedUnit !== 'all') {
-        const hasMatchingItem = order.items?.some((i) => {
-          const key = (i.itemName || (i as any).name || '').toLowerCase().trim();
-          const masterInfo = itemInfoMap.get(key);
-          const unit = (i as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
-          return (unit || '').toLowerCase() === selectedUnit.toLowerCase();
-        });
-        if (!hasMatchingItem) return false;
-      }
-
       if (searchTerm) {
         return (
           (order.code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -291,7 +322,7 @@ export default function PackingPortalClient() {
 
       return true;
     });
-  }, [orders, selectedUnit, searchTerm, itemInfoMap]);
+  }, [orders, selectedUnit, searchTerm, itemInfoMap, isAllUnitsAllowed, assignedPckUnits]);
 
   // Helper to remove any undefined fields before writing to Firestore
   const sanitizeForFirestore = (obj: any): any => {
@@ -446,6 +477,17 @@ export default function PackingPortalClient() {
           />
         </div>
       </div>
+
+      {/* Unassigned Packing Units Notice */}
+      {!isAllUnitsAllowed && accessiblePckUnits.length === 0 && (
+        <div className="bg-teal-50 border border-teal-200 p-6 rounded-2xl text-center space-y-2">
+          <ShieldAlert size={36} className="text-[#02626D] mx-auto" />
+          <h3 className="text-sm font-bold text-teal-950">No Packing Units Assigned</h3>
+          <p className="text-xs text-teal-800 max-w-md mx-auto">
+            You are logged in as <strong>{employeeProfile?.name || 'Staff'}</strong>, but no packing units have been assigned to your account. Please contact your SuperAdmin to assign units in the Employees section.
+          </p>
+        </div>
+      )}
 
       {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -682,7 +724,14 @@ export default function PackingPortalClient() {
                     <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-200/80">
                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Order Items to Pack</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                        {order.items?.map((item, idx) => {
+                        {order.items?.filter((item) => {
+                          const key = (item.itemName || '').toLowerCase().trim();
+                          const masterInfo = itemInfoMap.get(key);
+                          const pckUnit = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
+                          if (!isItemUnitAllowed(pckUnit)) return false;
+                          if (selectedUnit !== 'all' && pckUnit.toLowerCase() !== selectedUnit.toLowerCase()) return false;
+                          return true;
+                        }).map((item, idx) => {
                           const key = (item.itemName || '').toLowerCase().trim();
                           const masterInfo = itemInfoMap.get(key);
                           const pckUnit = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';

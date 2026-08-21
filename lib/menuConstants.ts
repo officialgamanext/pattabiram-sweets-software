@@ -28,6 +28,7 @@ export const APP_MENUS: MenuItemDefinition[] = [
   { key: 'packing', name: 'Packing Setup', path: '/packing' },
   { key: 'store', name: 'Store', path: '/store' },
   { key: 'utilities', name: 'Utilities Setup', path: '/utilities' },
+  { key: 'employees', name: 'Employees Management', path: '/employees' },
   { key: 'payroll', name: 'Payroll & Attendance', path: '/payroll' },
   { key: 'employee_portal', name: 'Employee Portal', path: '/employee-portal' },
   { key: 'support', name: 'Support & Tickets', path: '/support' },

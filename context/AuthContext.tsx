@@ -14,6 +14,8 @@ export interface EmployeeAuthProfile {
   department?: string;
   photoUrl?: string;
   isSuperAdmin?: boolean;
+  assignedMfgUnits?: string[];
+  assignedPckUnits?: string[];
   permissions: Record<string, MenuAccessPermission>;
 }
 
@@ -66,6 +68,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           mobile: '+91 98765 43210',
           department: 'Management',
           isSuperAdmin: true,
+          assignedMfgUnits: ['All'],
+          assignedPckUnits: ['All'],
           permissions: fullPerms,
         };
         setEmployeeProfile(adminProf);
@@ -109,6 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               department: matched.department || 'Staff',
               photoUrl: matched.photoUrl,
               isSuperAdmin: false,
+              assignedMfgUnits: Array.isArray(matched.assignedMfgUnits) ? matched.assignedMfgUnits : ['All'],
+              assignedPckUnits: Array.isArray(matched.assignedPckUnits) ? matched.assignedPckUnits : ['All'],
               permissions: mergedPermissions,
             };
 

@@ -100,7 +100,7 @@ export default function Header() {
       '/wholesalers': 'wholesalers',
       '/wholesaler-orders': 'wholesaler_orders',
       '/customers': 'customers',
-      '/employees': 'employee_portal',
+      '/employees': 'employees',
       '/payroll': 'payroll',
       '/utilities': 'utilities',
       '/manufacturing-portal': 'manufacturing_portal',

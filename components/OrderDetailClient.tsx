@@ -32,6 +32,7 @@ import {
   BadgeCheck,
   Banknote,
   Smartphone,
+  MapPin,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { usePrinter } from '@/context/PrinterContext';
@@ -887,6 +888,34 @@ export default function OrderDetailClient({ orderId }: Props) {
                   <p className="text-xs font-bold text-slate-800">{order.customerMobile || '—'}</p>
                 </div>
               </div>
+
+              {(order.customerAddress || order.deliveryAddress) && (
+                <div className="pt-2 border-t border-slate-100 flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <MapPin size={12} className="text-emerald-500" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-semibold">Address</p>
+                    <p className="text-xs font-semibold text-slate-700">
+                      {order.deliveryAddress || order.customerAddress}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {order.isTransportRequired && (
+                <div className="pt-2 border-t border-slate-100 flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Truck size={12} className="text-indigo-600" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-semibold">Transport / Logistics</p>
+                    <p className="text-xs font-bold text-slate-800">
+                      Required {order.transportCharges ? `(+${fmtCurrency(order.transportCharges)})` : ''}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -952,7 +981,7 @@ export default function OrderDetailClient({ orderId }: Props) {
                   <>
                     {(order.packingCharges || 0) > 0 && (
                       <div className="flex justify-between items-center text-slate-600">
-                        <span>Packing Charges:</span>
+                        <span>Packing Charges {order.noOfBoxes ? `(${order.noOfBoxes} boxes)` : ''}:</span>
                         <span className="font-semibold text-slate-800">+ {fmtCurrency(order.packingCharges || 0)}</span>
                       </div>
                     )}
@@ -963,6 +992,13 @@ export default function OrderDetailClient({ orderId }: Props) {
                       </div>
                     )}
                   </>
+                )}
+
+                {(order.transportCharges || 0) > 0 && (
+                  <div className="flex justify-between items-center text-emerald-700 font-medium">
+                    <span>Transport Charges:</span>
+                    <span className="font-bold">+ {fmtCurrency(order.transportCharges || 0)}</span>
+                  </div>
                 )}
 
                 {(order.discountAmount || 0) > 0 && (

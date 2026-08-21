@@ -28,6 +28,9 @@ import {
   CheckCircle2,
   ChevronDown,
   ShoppingBag,
+  Truck,
+  MapPin,
+  Minus,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp, onSnapshot, query } from 'firebase/firestore';
@@ -367,6 +370,17 @@ export default function CreateOrderClient() {
   const [shrinkType, setShrinkType] = useState('None');
   const [stickerType, setStickerType] = useState('None');
 
+  // Transport State
+  const [isTransportRequired, setIsTransportRequired] = useState(false);
+  const [transportCharges, setTransportCharges] = useState<string | number>('');
+  const [deliveryAddress, setDeliveryAddress] = useState<string>('');
+
+  // Global Settings from Firestore utilities/global_settings
+  const [globalSettings, setGlobalSettings] = useState<{ globalPackingBoxPrice: number; individualItemPackingCost: number }>({
+    globalPackingBoxPrice: 0,
+    individualItemPackingCost: 0,
+  });
+
   // Items State
   const [itemsMaster, setItemsMaster] = useState<ItemMasterOption[]>([]);
   const [utilitiesMaster, setUtilitiesMaster] = useState<UtilityOption[]>([]);
@@ -448,6 +462,18 @@ export default function CreateOrderClient() {
           if (data.boxImageUrl) setBoxImageUrl(data.boxImageUrl);
           setShrinkType('None');
           setStickerType('None');
+        }
+
+        if (data.isTransportRequired !== undefined) {
+          setIsTransportRequired(Boolean(data.isTransportRequired));
+        }
+        if (data.transportCharges !== undefined) {
+          setTransportCharges(data.transportCharges ? String(data.transportCharges) : '');
+        }
+        if (data.deliveryAddress) {
+          setDeliveryAddress(data.deliveryAddress);
+        } else if (data.customerAddress) {
+          setDeliveryAddress(data.customerAddress);
         }
 
         if (Array.isArray(data.items)) {
@@ -582,6 +608,20 @@ export default function CreateOrderClient() {
     return () => unsubUtil();
   }, []);
 
+  // 4. Subscribe to Firestore `utilities/global_settings`
+  useEffect(() => {
+    const unsubGlobal = onSnapshot(doc(db, 'utilities', 'global_settings'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setGlobalSettings({
+          globalPackingBoxPrice: typeof data.globalPackingBoxPrice === 'number' ? data.globalPackingBoxPrice : (parseFloat(data.globalPackingBoxPrice) || 0),
+          individualItemPackingCost: typeof data.individualItemPackingCost === 'number' ? data.individualItemPackingCost : (parseFloat(data.individualItemPackingCost) || 0),
+        });
+      }
+    });
+    return () => unsubGlobal();
+  }, []);
+
   // Active Utilities
   const activeBoxes = useMemo(() => utilitiesMaster.filter((u) => u.type === 'box' && u.status === 'Active'), [utilitiesMaster]);
   const activeShrinks = useMemo(() => utilitiesMaster.filter((u) => u.type === 'shrink' && u.status === 'Active'), [utilitiesMaster]);
@@ -593,12 +633,6 @@ export default function CreateOrderClient() {
   const selectedShrinkPrice = shrinkType === 'None' ? 0 : selectedShrinkObj?.price || 0;
   const selectedStickerObj = activeStickers.find((st) => st.name === stickerType);
   const selectedStickerPrice = stickerType === 'None' ? 0 : selectedStickerObj?.price || 0;
-
-  // Global Settings Values
-  const globalSettings = {
-    globalPackingBoxPrice: 10,
-    individualItemPackingCost: 5,
-  };
 
   // Filter Customers
   const filteredCustomers = useMemo(() => {
@@ -785,6 +819,41 @@ export default function CreateOrderClient() {
     );
   }, [itemsMaster, orderSlot]);
 
+  // Summary Quantity Modifier
+  const handleSummaryQuantityChange = useCallback((itemId: string, newQty: number) => {
+    const prod = itemsMaster.find((p) => p.id === itemId);
+    const safeQty = Math.max(0, Math.round(newQty * 100) / 100);
+
+    if (safeQty <= 0) {
+      setOrderItems((prev) => prev.filter((it) => it.itemId !== itemId));
+      return;
+    }
+
+    const rawLimit = prod?.slotAllowedWeights?.[orderSlot as keyof typeof prod.slotAllowedWeights];
+    const slotLimit = rawLimit !== undefined ? parseFloat(String(rawLimit)) : 0;
+    if (slotLimit > 0 && safeQty > slotLimit) {
+      toast.error(
+        'Slot Limit Exceeded',
+        `"${prod?.name || 'Item'}" allowed weight for ${orderSlot} is ${slotLimit} ${prod?.unit || 'KG'}. Current: ${safeQty} ${prod?.unit || 'KG'}.`
+      );
+    }
+
+    setOrderItems((prev) =>
+      prev.map((item) => {
+        if (item.itemId !== itemId) return item;
+        return {
+          ...item,
+          quantity: safeQty,
+          lineTotal: Math.round(safeQty * item.unitPrice * 100) / 100,
+        };
+      })
+    );
+  }, [itemsMaster, orderSlot]);
+
+  const handleSummaryRemoveItem = useCallback((itemId: string) => {
+    setOrderItems((prev) => prev.filter((it) => it.itemId !== itemId));
+  }, []);
+
   // Box Image File Upload
   const handleBoxImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -799,7 +868,7 @@ export default function CreateOrderClient() {
 
   // Totals & Pricing Calculations
   const subTotal = orderItems.reduce((acc, curr) => acc + curr.lineTotal, 0);
-  const packetCostPerBox = globalSettings.individualItemPackingCost;
+  const packetCostPerBox = globalSettings.individualItemPackingCost || 0;
   const packetChargesTotal = isCustomisation
     ? orderItems.reduce((acc, curr) => acc + (curr.hasPacket ? Math.max(0, numericNoOfBoxes) * packetCostPerBox : 0), 0)
     : 0;
@@ -808,13 +877,14 @@ export default function CreateOrderClient() {
   const stickerChargesTotal = isCustomisation && stickerType !== 'None' ? Math.max(0, numericNoOfBoxes) * selectedStickerPrice : 0;
   const shrinkChargesTotal = isCustomisation && shrinkType !== 'None' ? Math.max(0, numericNoOfBoxes) * selectedShrinkPrice : 0;
 
-  const pCharges = !isCustomisation ? Math.max(0, numericNoOfBoxes) * globalSettings.globalPackingBoxPrice : 0;
-  const addCharges = !isCustomisation ? parseFloat(String(additionalCharges)) || 0 : 0;
+  const pCharges = !isCustomisation ? Math.max(0, numericNoOfBoxes) * (globalSettings.globalPackingBoxPrice || 0) : 0;
+  const addCharges = !isCustomisation ? (parseFloat(String(additionalCharges)) || 0) : 0;
+  const transportChargesVal = isTransportRequired ? (parseFloat(String(transportCharges)) || 0) : 0;
   const discountVal = parseFloat(String(discountAmount)) || 0;
 
   const grandTotal = isCustomisation
-    ? Math.max(0, subTotal + boxChargesTotal + stickerChargesTotal + shrinkChargesTotal + packetChargesTotal - discountVal)
-    : Math.max(0, subTotal + pCharges + addCharges - discountVal);
+    ? Math.max(0, subTotal + boxChargesTotal + stickerChargesTotal + shrinkChargesTotal + packetChargesTotal + transportChargesVal - discountVal)
+    : Math.max(0, subTotal + pCharges + addCharges + transportChargesVal - discountVal);
 
   // Auto Payment Status calculation
   useEffect(() => {
@@ -858,6 +928,9 @@ export default function CreateOrderClient() {
 
       setSelectedCustomer(newlyCreatedCustomer);
       setCustomerSearchTerm(`${newlyCreatedCustomer.name} (${newlyCreatedCustomer.mobile})`);
+      if (!deliveryAddress && newlyCreatedCustomer.address) {
+        setDeliveryAddress(newlyCreatedCustomer.address);
+      }
       setIsAddCustomerModalOpen(false);
       setNewCustomerForm({
         name: '',
@@ -946,6 +1019,11 @@ export default function CreateOrderClient() {
       return;
     }
 
+    if (isTransportRequired && !deliveryAddress.trim()) {
+      toast.warning('Address Required', 'Please enter a delivery / transport address for this transport order.');
+      return;
+    }
+
     const isTuesdayDate = (dateStr: string) => {
       if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
       const [y, m, d] = dateStr.split('-').map(Number);
@@ -1015,10 +1093,14 @@ export default function CreateOrderClient() {
                 hasSticker: stickerType !== 'None' && selectedStickerPrice > 0,
               }
             : null,
+          isTransportRequired: isTransportRequired,
+          transportCharges: transportChargesVal,
+          deliveryAddress: isTransportRequired ? deliveryAddress : (selectedCustomer.address || ''),
           items: validItems,
           totalItems: validItems.length,
           subTotal: subTotal,
           noOfBoxes: savedNoOfBoxes,
+          globalPackingBoxPrice: !isCustomisation ? (globalSettings.globalPackingBoxPrice || 0) : 0,
           boxChargesTotal: isCustomisation ? boxChargesTotal : 0,
           stickerChargesTotal: isCustomisation ? stickerChargesTotal : 0,
           shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
@@ -1066,10 +1148,14 @@ export default function CreateOrderClient() {
               hasSticker: stickerType !== 'None' && selectedStickerPrice > 0,
             }
           : null,
+        isTransportRequired: isTransportRequired,
+        transportCharges: transportChargesVal,
+        deliveryAddress: isTransportRequired ? deliveryAddress : (selectedCustomer.address || ''),
         items: validItems,
         totalItems: validItems.length,
         subTotal: subTotal,
         noOfBoxes: savedNoOfBoxes,
+        globalPackingBoxPrice: !isCustomisation ? (globalSettings.globalPackingBoxPrice || 0) : 0,
         boxChargesTotal: isCustomisation ? boxChargesTotal : 0,
         stickerChargesTotal: isCustomisation ? stickerChargesTotal : 0,
         shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
@@ -1360,7 +1446,7 @@ export default function CreateOrderClient() {
               )}
             </div>
 
-            {/* 3. Customisation Box Section */}
+            {/* 3. Packaging & Customisation Section */}
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
@@ -1369,26 +1455,95 @@ export default function CreateOrderClient() {
                   </div>
                   <div>
                     <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
-                      3. Customisation &amp; Packaging
+                      3. Packaging &amp; Customisation
                     </h3>
-                    <p className="text-[10.5px] text-slate-400">Custom sweet boxes, shrink wrap, and branding stickers</p>
+                    <p className="text-[10.5px] text-slate-400">
+                      {isCustomisation ? 'Custom sweet boxes, shrink wrap, and branding stickers' : 'Standard packaging boxes with global utility rates'}
+                    </p>
                   </div>
                 </div>
 
                 {/* Toggle Switch */}
-                <button
-                  type="button"
-                  onClick={() => setIsCustomisation(!isCustomisation)}
-                  className={`h-7 px-3 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    isCustomisation
-                      ? 'bg-[#02626D] text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <span>{isCustomisation ? 'Enabled' : 'Disabled'}</span>
-                </button>
+                <label className="flex items-center gap-3 cursor-pointer select-none group">
+                  <span className={`text-xs font-bold transition-colors ${
+                    isCustomisation ? 'text-[#02626D]' : 'text-slate-500 group-hover:text-slate-700'
+                  }`}>
+                    {isCustomisation ? 'Customised Order' : 'Standard Order'}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isCustomisation}
+                    onClick={() => setIsCustomisation(!isCustomisation)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:ring-offset-1 ${
+                      isCustomisation ? 'bg-[#02626D]' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                        isCustomisation ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </label>
               </div>
 
+              {/* Standard Packaging UI (When isCustomisation is OFF) */}
+              {!isCustomisation && (
+                <div className="space-y-3 pt-1 animate-in fade-in duration-150">
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-800">Standard Box Packaging Rate</span>
+                        <span className="text-[10.5px] font-extrabold px-2 py-0.5 rounded-md bg-[#02626D]/10 text-[#02626D] border border-teal-200">
+                          ₹{globalSettings.globalPackingBoxPrice} / box
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Default standard sweet box rate configured in Global Utilities settings.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <label className="text-xs font-bold text-slate-700 whitespace-nowrap">No. of Boxes:</label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={noOfBoxes}
+                        onChange={(e) => setNoOfBoxes(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        className="w-24 h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D] text-center"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-teal-50/50 border border-teal-200/60 text-xs">
+                    <span className="font-semibold text-teal-900">
+                      Packing Charges ({numericNoOfBoxes} boxes × ₹{globalSettings.globalPackingBoxPrice}):
+                    </span>
+                    <span className="font-extrabold text-[#02626D]">
+                      ₹ {pCharges.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Additional Charges (₹, Optional)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={additionalCharges}
+                      onChange={(e) => setAdditionalCharges(e.target.value)}
+                      className="w-full sm:w-64 h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Customised Order UI (When isCustomisation is ON) */}
               {isCustomisation && (
                 <div className="space-y-3.5 pt-1 animate-in fade-in duration-150">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1486,7 +1641,94 @@ export default function CreateOrderClient() {
               )}
             </div>
 
-            {/* 4. Products Selector Section with Spacious, Premium Product Tiles Grid */}
+            {/* 4. Transport & Delivery Details Section */}
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                    <Truck size={15} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
+                      4. Transport &amp; Delivery
+                    </h3>
+                    <p className="text-[10.5px] text-slate-400">Specify transport freight charges and delivery destination address</p>
+                  </div>
+                </div>
+
+                {/* Toggle Switch */}
+                <label className="flex items-center gap-3 cursor-pointer select-none group">
+                  <span className={`text-xs font-bold transition-colors ${
+                    isTransportRequired ? 'text-emerald-700' : 'text-slate-500 group-hover:text-slate-700'
+                  }`}>
+                    {isTransportRequired ? 'Transport Required' : 'No Transport'}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isTransportRequired}
+                    onClick={() => setIsTransportRequired(!isTransportRequired)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-1 ${
+                      isTransportRequired ? 'bg-emerald-600' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                        isTransportRequired ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </label>
+              </div>
+
+              {isTransportRequired && (
+                <div className="space-y-3.5 pt-1 animate-in fade-in duration-150">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-1">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Transport Charges (₹) <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={transportCharges}
+                          onChange={(e) => setTransportCharges(e.target.value)}
+                          className="w-full h-8.5 pl-8 pr-3 border border-slate-300 rounded-xl text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D]"
+                        />
+                        <IndianRupee size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                        <span>Delivery / Transport Address <span className="text-rose-500">*</span></span>
+                        {selectedCustomer?.address && deliveryAddress !== selectedCustomer.address && (
+                          <button
+                            type="button"
+                            onClick={() => setDeliveryAddress(selectedCustomer.address || '')}
+                            className="text-[10.5px] font-semibold text-[#02626D] hover:underline cursor-pointer"
+                          >
+                            Use Customer Address
+                          </button>
+                        )}
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Enter destination delivery address for logistics/transport..."
+                        value={deliveryAddress}
+                        onChange={(e) => setDeliveryAddress(e.target.value)}
+                        className="w-full p-2.5 text-xs font-medium border border-slate-300 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 5. Products Selector Section with Spacious, Premium Product Tiles Grid */}
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4">
               
               {/* Header & Filter Controls */}
@@ -1495,7 +1737,7 @@ export default function CreateOrderClient() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
-                        4. Select Products Catalog
+                        5. Select Products Catalog
                       </h3>
                       <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#02626D]/10 text-[#02626D]">
                         {filteredProductTiles.length} products
@@ -1613,18 +1855,125 @@ export default function CreateOrderClient() {
                 <p className="text-[11px] text-slate-400">Live bill calculation &amp; checkout</p>
               </div>
 
-              <div className="space-y-2.5 text-xs text-slate-600">
+              {/* Summary Header Badges */}
+              <div className="space-y-1.5 text-xs text-slate-600">
                 <div className="flex justify-between py-0.5">
                   <span className="text-slate-500">Delivery Slot:</span>
                   <span className="font-bold text-slate-900">{orderSlot}</span>
                 </div>
 
                 <div className="flex justify-between py-0.5">
-                  <span className="text-slate-500">Selected Products:</span>
-                  <span className="font-bold text-slate-900">{orderItems.length} items</span>
+                  <span className="text-slate-500">Packaging Mode:</span>
+                  <span className={`font-bold ${isCustomisation ? 'text-amber-700' : 'text-teal-700'}`}>
+                    {isCustomisation ? 'Customised' : 'Standard'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Selected Items List with Quantity Controls */}
+              <div className="space-y-2 border-t border-b border-slate-100 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Selected Items ({orderItems.length})
+                  </span>
+                  {orderItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setOrderItems([])}
+                      className="text-[10px] font-bold text-red-500 hover:text-red-700 hover:underline cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  )}
                 </div>
 
-                <div className="flex justify-between py-0.5 border-t border-slate-100 pt-2">
+                {orderItems.length === 0 ? (
+                  <div className="py-4 text-center text-slate-400 bg-[#f7f7f8] rounded-xl border border-dashed border-slate-200">
+                    <ShoppingBag size={20} className="mx-auto mb-1 text-slate-300" />
+                    <p className="text-[11px] font-medium">No products added</p>
+                    <p className="text-[10px] text-slate-400">Click items from catalog to add</p>
+                  </div>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto space-y-2 pr-0.5 no-scrollbar divide-y divide-slate-100">
+                    {orderItems.map((item) => (
+                      <div key={item.lineId || item.itemId} className="pt-2 first:pt-0 space-y-1">
+                        <div className="flex items-start justify-between gap-1.5">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-slate-900 truncate" title={item.itemName}>
+                              {item.itemName}
+                            </p>
+                            <p className="text-[10px] text-slate-500">
+                              ₹{item.unitPrice} / {item.unit}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleSummaryRemoveItem(item.itemId)}
+                            className="text-slate-400 hover:text-red-500 p-0.5 rounded transition-colors cursor-pointer flex-shrink-0"
+                            title="Remove item"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+
+                        {/* Inline Quantity Modifier */}
+                        <div className="flex items-center justify-between gap-2 pt-0.5">
+                          <div className="flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={() => handleSummaryQuantityChange(item.itemId, (item.quantity || 1) - (item.unit?.toUpperCase() === 'KG' ? 0.5 : 1))}
+                              className="w-6 h-6 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors cursor-pointer"
+                              title="Decrease quantity"
+                            >
+                              <Minus size={11} />
+                            </button>
+                            <input
+                              type="number"
+                              step={item.unit?.toUpperCase() === 'KG' ? '0.25' : '1'}
+                              min="0.1"
+                              value={item.quantity}
+                              onChange={(e) => handleSummaryQuantityChange(item.itemId, parseFloat(e.target.value) || 0)}
+                              className="w-12 h-6 text-center text-xs font-bold text-slate-900 bg-transparent border-x border-slate-200 focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSummaryQuantityChange(item.itemId, (item.quantity || 0) + (item.unit?.toUpperCase() === 'KG' ? 0.5 : 1))}
+                              className="w-6 h-6 flex items-center justify-center text-[#02626D] hover:bg-teal-50 active:bg-teal-100 transition-colors cursor-pointer"
+                              title="Increase quantity"
+                            >
+                              <Plus size={11} />
+                            </button>
+                          </div>
+
+                          <span className="text-xs font-black text-slate-900">
+                            ₹ {item.lineTotal.toFixed(2)}
+                          </span>
+                        </div>
+
+                        {/* Optional Packing note badge */}
+                        {(item.packingDescription || item.manufacturingDescription || item.hasPacket) && (
+                          <div className="flex items-center gap-1.5 text-[9.5px] text-slate-500 pt-0.5 flex-wrap">
+                            {item.hasPacket && (
+                              <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
+                                Packet (+₹5)
+                              </span>
+                            )}
+                            {item.packingDescription && (
+                              <span className="truncate max-w-[160px] italic">
+                                {item.packingDescription}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Pricing Breakdown */}
+              <div className="space-y-2 text-xs text-slate-600">
+                <div className="flex justify-between py-0.5">
                   <span className="text-slate-500">Items Subtotal:</span>
                   <span className="font-bold text-slate-900">₹ {subTotal.toFixed(2)}</span>
                 </div>
@@ -1661,7 +2010,7 @@ export default function CreateOrderClient() {
                   <>
                     {pCharges > 0 && (
                       <div className="flex justify-between py-0.5 text-slate-600">
-                        <span>Packing Charges:</span>
+                        <span>Packing Charges ({numericNoOfBoxes} × ₹{globalSettings.globalPackingBoxPrice}):</span>
                         <span className="font-bold">+ ₹ {pCharges.toFixed(2)}</span>
                       </div>
                     )}
@@ -1672,6 +2021,14 @@ export default function CreateOrderClient() {
                       </div>
                     )}
                   </>
+                )}
+
+                {/* Transport Charges */}
+                {isTransportRequired && transportChargesVal > 0 && (
+                  <div className="flex justify-between py-0.5 text-emerald-800">
+                    <span>Transport Charges:</span>
+                    <span className="font-bold">+ ₹ {transportChargesVal.toFixed(2)}</span>
+                  </div>
                 )}
 
                 {/* Discount */}

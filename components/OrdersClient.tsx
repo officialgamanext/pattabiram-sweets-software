@@ -137,8 +137,12 @@ export interface OrderRecord {
   shrinkChargesTotal?: number;
   packetChargesTotal?: number;
   packingCharges?: number;
+  globalPackingBoxPrice?: number;
   noOfBoxes?: number;
   additionalCharges?: number;
+  isTransportRequired?: boolean;
+  transportCharges?: number;
+  deliveryAddress?: string;
   discountAmount?: number;
   totalAmount: number;
   receivedAmount: number;

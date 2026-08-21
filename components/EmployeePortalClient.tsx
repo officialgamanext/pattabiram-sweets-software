@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -85,24 +85,34 @@ export default function EmployeePortalClient() {
   const [attendanceList, setAttendanceList] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const isSuperAdmin = Boolean(employeeProfile?.isSuperAdmin);
+
+  // Match the logged in employee's profile against the employee records
+  const matchedLoggedEmp = useMemo(() => {
+    if (!employeeProfile || isSuperAdmin || employees.length === 0) return null;
+    const cleanMobile = (employeeProfile.mobile || '').replace(/\D/g, '');
+    return employees.find((emp) => {
+      const empMobClean = (emp.mobile || '').replace(/\D/g, '');
+      return (
+        emp.id === employeeProfile.id ||
+        emp.empId === employeeProfile.empId ||
+        (cleanMobile && empMobClean && (cleanMobile === empMobClean || cleanMobile.endsWith(empMobClean) || empMobClean.endsWith(cleanMobile)))
+      );
+    }) || null;
+  }, [employeeProfile, isSuperAdmin, employees]);
+
   // Lock selectedEmpId to logged-in employee for non-SuperAdmin users
   useEffect(() => {
-    if (employeeProfile && !employeeProfile.isSuperAdmin && employees.length > 0) {
-      const cleanMobile = (employeeProfile.mobile || '').replace(/\D/g, '');
-      const matched = employees.find((emp) => {
-        const empMobClean = (emp.mobile || '').replace(/\D/g, '');
-        return (
-          emp.id === employeeProfile.id ||
-          emp.empId === employeeProfile.empId ||
-          (cleanMobile && empMobClean && (cleanMobile === empMobClean || cleanMobile.endsWith(empMobClean) || empMobClean.endsWith(cleanMobile)))
-        );
-      });
-
-      if (matched) {
-        setSelectedEmpId(matched.id);
+    if (isSuperAdmin) {
+      if (queryEmpId && employees.some((e) => e.id === queryEmpId)) {
+        setSelectedEmpId(queryEmpId);
+      } else if (!selectedEmpId && employees[0]) {
+        setSelectedEmpId(employees[0].id);
       }
+    } else if (matchedLoggedEmp) {
+      setSelectedEmpId(matchedLoggedEmp.id);
     }
-  }, [employeeProfile, employees]);
+  }, [isSuperAdmin, queryEmpId, matchedLoggedEmp, employees, selectedEmpId]);
 
   // Tab State
   const [activeTab, setActiveTab] = useState<'attendance' | 'salary' | 'profile'>('attendance');
@@ -238,8 +248,13 @@ export default function EmployeePortalClient() {
     };
   }, []);
 
-  // Selected Employee object
-  const selectedEmp = employees.find((e) => e.id === selectedEmpId) || employees[0];
+  // Selected Employee object (strictly locked to matchedLoggedEmp for non-SuperAdmin users)
+  const selectedEmp = useMemo(() => {
+    if (!isSuperAdmin) {
+      return matchedLoggedEmp;
+    }
+    return employees.find((e) => e.id === selectedEmpId) || employees[0] || null;
+  }, [isSuperAdmin, matchedLoggedEmp, employees, selectedEmpId]);
 
   useEffect(() => {
     if (selectedEmp) {
@@ -247,20 +262,23 @@ export default function EmployeePortalClient() {
     }
   }, [selectedEmp]);
 
-  // Attendance for selected employee (match by id, empId, or name)
-  const selectedEmpAttendance = attendanceList.filter(
-    (a) =>
-      a.employeeId === selectedEmp?.id ||
-      a.employeeId === selectedEmp?.empId ||
-      (a.employeeName && selectedEmp?.name && a.employeeName.toLowerCase().trim() === selectedEmp.name.toLowerCase().trim())
-  );
+  // Attendance for selected employee (strictly isolated for non-SuperAdmin)
+  const selectedEmpAttendance = useMemo(() => {
+    if (!selectedEmp) return [];
+    return attendanceList.filter(
+      (a: AttendanceRecord) =>
+        a.employeeId === selectedEmp.id ||
+        a.employeeId === selectedEmp.empId ||
+        (a.employeeName && selectedEmp.name && a.employeeName.toLowerCase().trim() === selectedEmp.name.toLowerCase().trim())
+    );
+  }, [attendanceList, selectedEmp]);
   const todayStr = new Date().toISOString().slice(0, 10);
-  const todayAttendance = selectedEmpAttendance.find((a) => a.date === todayStr && a.status === 'Present');
+  const todayAttendance = selectedEmpAttendance.find((a: AttendanceRecord) => a.date === todayStr && a.status === 'Present');
 
   // Month stats calculation
-  const monthAttendance = selectedEmpAttendance.filter((a) => a.date.startsWith(selectedMonth));
-  const presentDays = monthAttendance.filter((a) => a.status === 'Present').length;
-  const leaveDays = monthAttendance.filter((a) => a.status === 'Leave' || a.status === 'Absent').length;
+  const monthAttendance = selectedEmpAttendance.filter((a: AttendanceRecord) => a.date.startsWith(selectedMonth));
+  const presentDays = monthAttendance.filter((a: AttendanceRecord) => a.status === 'Present').length;
+  const leaveDays = monthAttendance.filter((a: AttendanceRecord) => a.status === 'Leave' || a.status === 'Absent').length;
 
   const perDayRate = selectedEmp
     ? selectedEmp.paymentMode === 'monthly'
@@ -372,7 +390,7 @@ export default function EmployeePortalClient() {
     } catch (e) {}
   };
 
-  const handleConfirmAttendance = async (overrideEmp?: EmployeeRecord) => {
+  const handleConfirmAttendance = async (overrideEmp?: EmployeeRecord | null) => {
     const empToSave = overrideEmp || targetEmpRef.current || selectedEmp;
     if (!empToSave) return;
 
@@ -646,10 +664,23 @@ export default function EmployeePortalClient() {
     setVerificationStep('idle');
   };
 
+  if (loading) {
+    return (
+      <div className="p-12 text-center text-slate-500 font-semibold flex items-center justify-center gap-2">
+        <RefreshCw size={18} className="animate-spin text-indigo-600" />
+        <span>Loading employee workspace...</span>
+      </div>
+    );
+  }
+
   if (!selectedEmp) {
     return (
-      <div className="p-12 text-center text-slate-500 font-semibold">
-        No employee selected or found.
+      <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 font-semibold space-y-2">
+        <Lock size={36} className="text-slate-400 mx-auto" />
+        <h3 className="text-base font-bold text-slate-800">Employee Workspace Restricted</h3>
+        <p className="text-xs text-slate-400 max-w-sm mx-auto">
+          No employee profile matches your logged-in credentials. Please contact your SuperAdmin to verify your account registration.
+        </p>
       </div>
     );
   }
@@ -870,7 +901,7 @@ export default function EmployeePortalClient() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs font-semibold">
-                    {selectedEmpAttendance.map((row) => (
+                    {selectedEmpAttendance.map((row: AttendanceRecord) => (
                       <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="py-3.5 px-5 font-bold text-slate-900">{row.date}</td>
                         <td className="py-3.5 px-4 text-slate-700 font-mono">{row.checkInTime}</td>

@@ -46,11 +46,30 @@ export type SlotTime =
   | '3:00 PM - 6:00 PM'
   | '6:00 PM - 9:00 PM';
 
-const ALL_SLOTS: SlotTime[] = [
+export const ALL_SLOTS: SlotTime[] = [
   '9:00 AM - 12:00 PM',
   '12:00 PM - 3:00 PM',
   '3:00 PM - 6:00 PM',
   '6:00 PM - 9:00 PM',
+];
+
+export const DELIVERY_TIME_OPTIONS = [
+  '07:00 AM',
+  '08:00 AM',
+  '09:00 AM',
+  '10:00 AM',
+  '11:00 AM',
+  '12:00 PM',
+  '01:00 PM',
+  '02:00 PM',
+  '03:00 PM',
+  '04:00 PM',
+  '05:00 PM',
+  '06:00 PM',
+  '07:00 PM',
+  '08:00 PM',
+  '09:00 PM',
+  '10:00 PM',
 ];
 
 export interface OrderItemLine {
@@ -240,7 +259,7 @@ const ProductCatalogTile = React.memo(function ProductCatalogTile({
               </button>
               <input
                 type="number"
-                step="0.1"
+                step="any"
                 min="0"
                 value={addedItem.quantity === 0 ? '' : addedItem.quantity}
                 onChange={(e) => onFieldChange(prod.id, 'quantity', e.target.value)}
@@ -333,8 +352,17 @@ export default function CreateOrderClient() {
 
   // Order Core State
   const [orderSlot, setOrderSlot] = useState<SlotTime>(initialSlot);
+  const [deliveryTime, setDeliveryTime] = useState<string>('10:00 AM');
   const [mfgDate, setMfgDate] = useState<string>(initialDate || getTodayDateStr());
   const [expDeliveryDate, setExpDeliveryDate] = useState<string>(initialDate || getTodayDateStr());
+
+  const handleSelectSlot = (slot: SlotTime) => {
+    setOrderSlot(slot);
+    if (slot === '9:00 AM - 12:00 PM') setDeliveryTime('10:00 AM');
+    else if (slot === '12:00 PM - 3:00 PM') setDeliveryTime('01:00 PM');
+    else if (slot === '3:00 PM - 6:00 PM') setDeliveryTime('04:00 PM');
+    else if (slot === '6:00 PM - 9:00 PM') setDeliveryTime('07:00 PM');
+  };
 
   // Edit Mode Specific State
   const [isLoadingOrder, setIsLoadingOrder] = useState<boolean>(Boolean(editId));
@@ -424,6 +452,8 @@ export default function CreateOrderClient() {
         setExistingPayments(data.payments || []);
 
         if (data.slot) setOrderSlot(data.slot as SlotTime);
+        if (data.deliveryTime) setDeliveryTime(data.deliveryTime);
+        else if (data.orderTime) setDeliveryTime(data.orderTime);
         if (data.manufacturingDate) setMfgDate(data.manufacturingDate);
         else if (data.orderDate) setMfgDate(data.orderDate);
 
@@ -980,7 +1010,12 @@ export default function CreateOrderClient() {
   const handleCreateOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) {
-      toast.warning('Customer Required', 'Please search and select a customer or wholesaler.');
+      toast.warning('Customer Required', 'Customer selection is mandatory. Please search and select or add a customer to proceed.');
+      const custEl = document.getElementById('customer-search-input');
+      if (custEl) {
+        custEl.focus();
+        custEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
     if (orderItems.length === 0) {
@@ -1087,6 +1122,8 @@ export default function CreateOrderClient() {
           customerType: selectedCustomer.type,
           customerAddress: selectedCustomer.address || '',
           slot: orderSlot,
+          orderTime: deliveryTime || existingOrderTime || timeStr,
+          deliveryTime: deliveryTime || existingOrderTime || timeStr,
           orderDate: mfgDate || targetOrderDate,
           manufacturingDate: mfgDate,
           expectedDeliveryDate: expDeliveryDate,
@@ -1141,7 +1178,8 @@ export default function CreateOrderClient() {
         customerType: selectedCustomer.type,
         customerAddress: selectedCustomer.address || '',
         slot: orderSlot,
-        orderTime: timeStr,
+        orderTime: deliveryTime || timeStr,
+        deliveryTime: deliveryTime || timeStr,
         orderDate: targetOrderDate,
         manufacturingDate: mfgDate,
         expectedDeliveryDate: expDeliveryDate,
@@ -1273,12 +1311,12 @@ export default function CreateOrderClient() {
 
       {/* ── MAIN CONTENT WORKSPACE ─────────────────────────────────────────── */}
       <div className="w-full px-3 sm:px-6 pt-4">
-        <form onSubmit={handleCreateOrderSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
+        <form noValidate onSubmit={handleCreateOrderSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
           
           {/* LEFT 8/9 COLUMNS: ORDER DETAILS, CUSTOMER, CUSTOMISATION & PRODUCT CATALOG */}
           <div className="lg:col-span-8 xl:col-span-8 2xl:col-span-9 space-y-4">
             
-            {/* 1. Time Slot & Schedule Dates Card */}
+            {/* 1. Time Slot, Schedule Dates & Customer Information Card */}
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
@@ -1286,10 +1324,10 @@ export default function CreateOrderClient() {
                     <Clock size={15} />
                   </div>
                   <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
-                    1. Delivery Slot &amp; Dates
+                    1. Delivery Schedule &amp; Customer Information
                   </h3>
                 </div>
-                <span className="text-[11px] font-semibold text-slate-400">Step 1 of 4</span>
+                <span className="text-[11px] font-semibold text-slate-400">Step 1 of 3</span>
               </div>
 
               {/* Slot Selector Pills */}
@@ -1304,7 +1342,7 @@ export default function CreateOrderClient() {
                       <button
                         key={slot}
                         type="button"
-                        onClick={() => setOrderSlot(slot)}
+                        onClick={() => handleSelectSlot(slot)}
                         className={`h-9 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer select-none ${
                           isSelected
                             ? 'bg-[#02626D] text-white shadow-xs ring-2 ring-[#02626D]/30'
@@ -1319,9 +1357,10 @@ export default function CreateOrderClient() {
                 </div>
               </div>
 
-              {/* Mfg Date & Exp Delivery Date Pickers */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div>
+              {/* Dates, Delivery Time (1-hr interval) & Customer Information Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 pt-1 items-start">
+                {/* Mfg Date */}
+                <div className="md:col-span-3">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Manufacturing Date <span className="text-rose-500">*</span>
                   </label>
@@ -1335,7 +1374,8 @@ export default function CreateOrderClient() {
                   <span className="text-[10px] text-slate-400 mt-0.5 block">Factory closed on Tuesdays</span>
                 </div>
 
-                <div>
+                {/* Exp Delivery Date */}
+                <div className="md:col-span-3">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Expected Delivery Date <span className="text-rose-500">*</span>
                   </label>
@@ -1348,399 +1388,426 @@ export default function CreateOrderClient() {
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">Store closed on Tuesdays</span>
                 </div>
-              </div>
-            </div>
 
-            {/* 2. Customer Selection Card */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3.5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <UserCheck size={15} />
-                  </div>
-                  <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
-                    2. Customer Information
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsAddCustomerModalOpen(true)}
-                  className="text-xs font-bold text-[#02626D] hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <Plus size={13} />
-                  <span>New Customer</span>
-                </button>
-              </div>
-
-              {/* Selected Customer View or Search Box */}
-              {selectedCustomer ? (
-                <div className="p-3.5 rounded-xl bg-teal-50/60 border border-teal-200/90 flex items-center justify-between gap-3 shadow-2xs">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-[#02626D] text-white font-black text-sm flex items-center justify-center flex-shrink-0 shadow-2xs">
-                      {selectedCustomer.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-extrabold text-sm text-slate-900 truncate">{selectedCustomer.name}</span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#02626D] text-white uppercase">
-                          {selectedCustomer.type}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600 font-medium">{selectedCustomer.mobile || 'No mobile'}</p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedCustomer(null);
-                      setCustomerSearchTerm('');
-                    }}
-                    className="text-xs font-bold text-slate-500 hover:text-red-600 px-2.5 py-1 rounded-lg border border-slate-300 hover:border-red-200 bg-white transition-colors cursor-pointer"
+                {/* Specific Delivery Time (1-hr difference) */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Delivery Time <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={deliveryTime}
+                    onChange={(e) => setDeliveryTime(e.target.value)}
+                    className="w-full h-8.5 px-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] shadow-2xs"
                   >
-                    Change
-                  </button>
+                    {DELIVERY_TIME_OPTIONS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">1-hr time slot</span>
                 </div>
-              ) : (
-                <div className="relative" ref={customerSearchRef}>
-                  <div className="relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    <input
-                      type="text"
-                      placeholder="Search customer by name, mobile, or code..."
-                      value={customerSearchTerm}
-                      onChange={(e) => {
-                        setCustomerSearchTerm(e.target.value);
-                        setIsCustomerDropdownOpen(true);
-                      }}
-                      onFocus={() => setIsCustomerDropdownOpen(true)}
-                      className="w-full pl-9 pr-3 h-9 text-xs border border-slate-300 rounded-xl bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] font-medium"
-                    />
+
+                {/* Customer Information (Placed right beside delivery dates/time) */}
+                <div className="md:col-span-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      <span>Customer</span>
+                      <span className="text-rose-500 font-bold">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddCustomerModalOpen(true)}
+                      className="text-[11px] font-bold text-[#02626D] hover:underline flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <Plus size={12} />
+                      <span>New</span>
+                    </button>
                   </div>
 
-                  {/* Customer Dropdown Results */}
-                  {isCustomerDropdownOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-1.5 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-20 divide-y divide-slate-100 no-scrollbar">
-                      {filteredCustomers.length === 0 ? (
-                        <div className="p-4 text-center text-xs text-slate-400">
-                          No matching customer found.{' '}
-                          <button
-                            type="button"
-                            onClick={() => setIsAddCustomerModalOpen(true)}
-                            className="text-[#02626D] font-bold underline ml-1"
-                          >
-                            Add New Customer
-                          </button>
+                  {/* Selected Customer View or Search Box */}
+                  {selectedCustomer ? (
+                    <div className="p-2 rounded-xl bg-teal-50/70 border border-teal-200/90 flex items-center justify-between gap-2 shadow-2xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-[#02626D] text-white font-black text-xs flex items-center justify-center flex-shrink-0">
+                          {selectedCustomer.name.charAt(0).toUpperCase()}
                         </div>
-                      ) : (
-                        filteredCustomers.map((cust) => (
-                          <div
-                            key={cust.id}
-                            onClick={() => {
-                              setSelectedCustomer(cust);
-                              setIsCustomerDropdownOpen(false);
-                            }}
-                            className="p-2.5 hover:bg-slate-50 flex items-center justify-between cursor-pointer transition-colors"
-                          >
-                            <div>
-                              <p className="text-xs font-bold text-slate-900">{cust.name}</p>
-                              <p className="text-[10.5px] text-slate-400">{cust.mobile} • {cust.code}</p>
-                            </div>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                              {cust.type}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1">
+                            <span className="font-extrabold text-xs text-slate-900 truncate max-w-[110px]">{selectedCustomer.name}</span>
+                            <span className="text-[8.5px] font-bold px-1 py-0.2 rounded bg-[#02626D] text-white uppercase">
+                              {selectedCustomer.type}
                             </span>
                           </div>
-                        ))
+                          <p className="text-[10.5px] text-slate-600 truncate">{selectedCustomer.mobile || 'No mobile'}</p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomer(null);
+                          setCustomerSearchTerm('');
+                        }}
+                        className="text-[10.5px] font-bold text-slate-500 hover:text-red-600 px-2 py-0.5 rounded-lg border border-slate-300 hover:border-red-200 bg-white transition-colors cursor-pointer flex-shrink-0"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative" ref={customerSearchRef}>
+                      <div className="relative">
+                        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <input
+                          id="customer-search-input"
+                          type="text"
+                          placeholder="Search customer..."
+                          value={customerSearchTerm}
+                          onChange={(e) => {
+                            setCustomerSearchTerm(e.target.value);
+                            setIsCustomerDropdownOpen(true);
+                          }}
+                          onFocus={() => setIsCustomerDropdownOpen(true)}
+                          className="w-full pl-8 pr-3 h-8.5 text-xs border border-slate-300 rounded-xl bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] font-medium shadow-2xs"
+                        />
+                      </div>
+
+                      {/* Customer Dropdown Results */}
+                      {isCustomerDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1.5 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-30 divide-y divide-slate-100 no-scrollbar">
+                          {filteredCustomers.length === 0 ? (
+                            <div className="p-3 text-center text-xs text-slate-400">
+                              No customer found.{' '}
+                              <button
+                                type="button"
+                                onClick={() => setIsAddCustomerModalOpen(true)}
+                                className="text-[#02626D] font-bold underline ml-1"
+                              >
+                                Add New
+                              </button>
+                            </div>
+                          ) : (
+                            filteredCustomers.map((cust) => (
+                              <div
+                                key={cust.id}
+                                onClick={() => {
+                                  setSelectedCustomer(cust);
+                                  setIsCustomerDropdownOpen(false);
+                                }}
+                                className="p-2.5 hover:bg-slate-50 flex items-center justify-between cursor-pointer transition-colors"
+                              >
+                                <div>
+                                  <p className="text-xs font-bold text-slate-900">{cust.name}</p>
+                                  <p className="text-[10px] text-slate-400">{cust.mobile} • {cust.code}</p>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                                  {cust.type}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
                 </div>
-              )}
+              </div>
             </div>
 
-            {/* 3. Packaging & Customisation Section */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
-                    <PackageCheck size={15} />
-                  </div>
-                  <div>
-                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
-                      3. Packaging &amp; Customisation
-                    </h3>
-                    <p className="text-[10.5px] text-slate-400">
-                      {isCustomisation ? 'Custom sweet boxes, shrink wrap, and branding stickers' : 'Standard packaging boxes with global utility rates'}
-                    </p>
-                  </div>
-                </div>
+            {/* 2 & 3: PACKAGING & TRANSPORT SECTIONS SIDE-BY-SIDE IN 2 COLUMNS */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+              
+              {/* 2. Packaging & Customisation Section */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center flex-shrink-0">
+                        <PackageCheck size={15} />
+                      </div>
+                      <div>
+                        <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
+                          2. Packaging &amp; Customisation
+                        </h3>
+                        <p className="text-[10.5px] text-slate-400">
+                          {isCustomisation ? 'Custom sweet boxes & branding' : 'Standard packaging with global rates'}
+                        </p>
+                      </div>
+                    </div>
 
-                {/* Toggle Switch */}
-                <label className="flex items-center gap-3 cursor-pointer select-none group">
-                  <span className={`text-xs font-bold transition-colors ${
-                    isCustomisation ? 'text-[#02626D]' : 'text-slate-500 group-hover:text-slate-700'
-                  }`}>
-                    {isCustomisation ? 'Customised Order' : 'Standard Order'}
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={isCustomisation}
-                    onClick={() => setIsCustomisation(!isCustomisation)}
-                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:ring-offset-1 ${
-                      isCustomisation ? 'bg-[#02626D]' : 'bg-slate-300'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
-                        isCustomisation ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </label>
-              </div>
+                    {/* Toggle Switch */}
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none group flex-shrink-0">
+                      <span className={`text-xs font-bold transition-colors ${
+                        isCustomisation ? 'text-[#02626D]' : 'text-slate-500 group-hover:text-slate-700'
+                      }`}>
+                        {isCustomisation ? 'Customised' : 'Standard'}
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={isCustomisation}
+                        onClick={() => setIsCustomisation(!isCustomisation)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:ring-offset-1 ${
+                          isCustomisation ? 'bg-[#02626D]' : 'bg-slate-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                            isCustomisation ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </label>
+                  </div>
 
-              {/* Standard Packaging UI (When isCustomisation is OFF) */}
-              {!isCustomisation && (
-                <div className="space-y-3 pt-1 animate-in fade-in duration-150">
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-800">Standard Box Packaging Rate</span>
-                        <span className="text-[10.5px] font-extrabold px-2 py-0.5 rounded-md bg-[#02626D]/10 text-[#02626D] border border-teal-200">
-                          ₹{globalSettings.globalPackingBoxPrice} / box
+                  {/* Standard Packaging UI (When isCustomisation is OFF) */}
+                  {!isCustomisation && (
+                    <div className="space-y-3 pt-3 animate-in fade-in duration-150">
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-800">Box Rate</span>
+                            <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-[#02626D]/10 text-[#02626D] border border-teal-200">
+                              ₹{globalSettings.globalPackingBoxPrice} / box
+                            </span>
+                          </div>
+                          <p className="text-[10.5px] text-slate-500">
+                            Default global utility sweet box rate.
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Boxes:</label>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            placeholder="0"
+                            value={noOfBoxes}
+                            onChange={(e) => setNoOfBoxes(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
+                            className="w-20 h-8 px-2.5 border border-slate-300 rounded-xl text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D] text-center"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-teal-50/50 border border-teal-200/60 text-xs">
+                        <span className="font-semibold text-teal-900">
+                          Packing Charges ({numericNoOfBoxes} × ₹{globalSettings.globalPackingBoxPrice}):
+                        </span>
+                        <span className="font-extrabold text-[#02626D]">
+                          ₹ {pCharges.toFixed(2)}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-500">
-                        Default standard sweet box rate configured in Global Utilities settings.
-                      </p>
-                    </div>
 
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <label className="text-xs font-bold text-slate-700 whitespace-nowrap">No. of Boxes:</label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="0"
-                        value={noOfBoxes}
-                        onChange={(e) => setNoOfBoxes(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
-                        className="w-24 h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D] text-center"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-teal-50/50 border border-teal-200/60 text-xs">
-                    <span className="font-semibold text-teal-900">
-                      Packing Charges ({numericNoOfBoxes} boxes × ₹{globalSettings.globalPackingBoxPrice}):
-                    </span>
-                    <span className="font-extrabold text-[#02626D]">
-                      ₹ {pCharges.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Additional Charges (₹, Optional)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={additionalCharges}
-                      onChange={(e) => setAdditionalCharges(e.target.value)}
-                      className="w-full sm:w-64 h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Customised Order UI (When isCustomisation is ON) */}
-              {isCustomisation && (
-                <div className="space-y-3.5 pt-1 animate-in fade-in duration-150">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* No of Boxes */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        No. of Boxes
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="Enter box count..."
-                        value={noOfBoxes}
-                        onChange={(e) => setNoOfBoxes(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
-                        className="w-full h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D]"
-                      />
-                    </div>
-
-                    {/* Box Type */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Box Model
-                      </label>
-                      <select
-                        value={boxType}
-                        onChange={(e) => setBoxType(e.target.value)}
-                        className="w-full h-8.5 px-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
-                      >
-                        {activeBoxes.map((b) => (
-                          <option key={b.id} value={b.name}>
-                            {b.name} (₹{b.price}/box)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Shrink & Sticker */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Shrink Wrap</label>
-                      <select
-                        value={shrinkType}
-                        onChange={(e) => setShrinkType(e.target.value)}
-                        className="w-full h-8.5 px-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
-                      >
-                        <option value="None">None (₹0)</option>
-                        {activeShrinks.map((s) => (
-                          <option key={s.id} value={s.name}>
-                            {s.name} (+₹{s.price}/box)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Branding Sticker</label>
-                      <select
-                        value={stickerType}
-                        onChange={(e) => setStickerType(e.target.value)}
-                        className="w-full h-8.5 px-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
-                      >
-                        <option value="None">None (₹0)</option>
-                        {activeStickers.map((st) => (
-                          <option key={st.id} value={st.name}>
-                            {st.name} (+₹{st.price}/box)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Custom Box Image Upload */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Box Reference Image (Optional)
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                        {boxImageUrl ? (
-                          <Image src={boxImageUrl} alt="Box Preview" fill className="object-contain p-1" />
-                        ) : (
-                          <Upload size={16} className="text-slate-400" />
-                        )}
-                      </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleBoxImageUpload}
-                        className="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-[#02626D] hover:file:bg-teal-100 cursor-pointer"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 4. Transport & Delivery Details Section */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                    <Truck size={15} />
-                  </div>
-                  <div>
-                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
-                      4. Transport &amp; Delivery
-                    </h3>
-                    <p className="text-[10.5px] text-slate-400">Specify transport freight charges and delivery destination address</p>
-                  </div>
-                </div>
-
-                {/* Toggle Switch */}
-                <label className="flex items-center gap-3 cursor-pointer select-none group">
-                  <span className={`text-xs font-bold transition-colors ${
-                    isTransportRequired ? 'text-emerald-700' : 'text-slate-500 group-hover:text-slate-700'
-                  }`}>
-                    {isTransportRequired ? 'Transport Required' : 'No Transport'}
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={isTransportRequired}
-                    onClick={() => setIsTransportRequired(!isTransportRequired)}
-                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-1 ${
-                      isTransportRequired ? 'bg-emerald-600' : 'bg-slate-300'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
-                        isTransportRequired ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </label>
-              </div>
-
-              {isTransportRequired && (
-                <div className="space-y-3.5 pt-1 animate-in fade-in duration-150">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="sm:col-span-1">
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Transport Charges (₹) <span className="text-rose-500">*</span>
-                      </label>
-                      <div className="relative">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Additional Charges (₹, Optional)
+                        </label>
                         <input
                           type="number"
+                          step="any"
                           min="0"
-                          step="0.01"
                           placeholder="0.00"
-                          value={transportCharges}
-                          onChange={(e) => setTransportCharges(e.target.value)}
-                          className="w-full h-8.5 pl-8 pr-3 border border-slate-300 rounded-xl text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D]"
+                          value={additionalCharges}
+                          onChange={(e) => setAdditionalCharges(e.target.value)}
+                          className="w-full h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
                         />
-                        <IndianRupee size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Customised Order UI (When isCustomisation is ON) */}
+                  {isCustomisation && (
+                    <div className="space-y-3 pt-3 animate-in fade-in duration-150">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            No. of Boxes
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            placeholder="Box count..."
+                            value={noOfBoxes}
+                            onChange={(e) => setNoOfBoxes(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
+                            className="w-full h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Box Model
+                          </label>
+                          <select
+                            value={boxType}
+                            onChange={(e) => setBoxType(e.target.value)}
+                            className="w-full h-8.5 px-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
+                          >
+                            {activeBoxes.map((b) => (
+                              <option key={b.id} value={b.name}>
+                                {b.name} (₹{b.price}/box)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Shrink Wrap</label>
+                          <select
+                            value={shrinkType}
+                            onChange={(e) => setShrinkType(e.target.value)}
+                            className="w-full h-8.5 px-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
+                          >
+                            <option value="None">None (₹0)</option>
+                            {activeShrinks.map((s) => (
+                              <option key={s.id} value={s.name}>
+                                {s.name} (+₹{s.price}/box)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Branding Sticker</label>
+                          <select
+                            value={stickerType}
+                            onChange={(e) => setStickerType(e.target.value)}
+                            className="w-full h-8.5 px-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
+                          >
+                            <option value="None">None (₹0)</option>
+                            {activeStickers.map((st) => (
+                              <option key={st.id} value={st.name}>
+                                {st.name} (+₹{st.price}/box)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Box Reference Image (Optional)
+                        </label>
+                        <div className="flex items-center gap-2.5">
+                          <div className="relative w-11 h-11 rounded-xl bg-slate-50 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                            {boxImageUrl ? (
+                              <Image src={boxImageUrl} alt="Box Preview" fill className="object-contain p-1" />
+                            ) : (
+                              <Upload size={15} className="text-slate-400" />
+                            )}
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleBoxImageUpload}
+                            className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-[#02626D] hover:file:bg-teal-100 cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 3. Transport & Delivery Details Section */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center flex-shrink-0">
+                        <Truck size={15} />
+                      </div>
+                      <div>
+                        <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
+                          3. Transport &amp; Delivery
+                        </h3>
+                        <p className="text-[10.5px] text-slate-400">Freight charges &amp; destination delivery address</p>
                       </div>
                     </div>
 
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                        <span>Delivery / Transport Address <span className="text-rose-500">*</span></span>
-                        {selectedCustomer?.address && deliveryAddress !== selectedCustomer.address && (
-                          <button
-                            type="button"
-                            onClick={() => setDeliveryAddress(selectedCustomer.address || '')}
-                            className="text-[10.5px] font-semibold text-[#02626D] hover:underline cursor-pointer"
-                          >
-                            Use Customer Address
-                          </button>
-                        )}
-                      </label>
-                      <textarea
-                        rows={2}
-                        placeholder="Enter destination delivery address for logistics/transport..."
-                        value={deliveryAddress}
-                        onChange={(e) => setDeliveryAddress(e.target.value)}
-                        className="w-full p-2.5 text-xs font-medium border border-slate-300 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
-                      />
-                    </div>
+                    {/* Toggle Switch */}
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none group flex-shrink-0">
+                      <span className={`text-xs font-bold transition-colors ${
+                        isTransportRequired ? 'text-emerald-700' : 'text-slate-500 group-hover:text-slate-700'
+                      }`}>
+                        {isTransportRequired ? 'Required' : 'No Transport'}
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={isTransportRequired}
+                        onClick={() => setIsTransportRequired(!isTransportRequired)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-1 ${
+                          isTransportRequired ? 'bg-emerald-600' : 'bg-slate-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                            isTransportRequired ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </label>
                   </div>
+
+                  {isTransportRequired ? (
+                    <div className="space-y-3 pt-3 animate-in fade-in duration-150">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Transport Charges (₹) <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            placeholder="0.00"
+                            value={transportCharges}
+                            onChange={(e) => setTransportCharges(e.target.value)}
+                            className="w-full h-8.5 pl-8 pr-3 border border-slate-300 rounded-xl text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D]"
+                          />
+                          <IndianRupee size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                          <span>Delivery / Transport Address <span className="text-rose-500">*</span></span>
+                          {selectedCustomer?.address && deliveryAddress !== selectedCustomer.address && (
+                            <button
+                              type="button"
+                              onClick={() => setDeliveryAddress(selectedCustomer.address || '')}
+                              className="text-[10.5px] font-semibold text-[#02626D] hover:underline cursor-pointer"
+                            >
+                              Use Customer Address
+                            </button>
+                          )}
+                        </label>
+                        <textarea
+                          rows={3}
+                          placeholder="Enter destination delivery address for logistics/transport..."
+                          value={deliveryAddress}
+                          onChange={(e) => setDeliveryAddress(e.target.value)}
+                          className="w-full p-2.5 text-xs font-medium border border-slate-300 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pt-6 pb-4 text-center text-slate-400 bg-slate-50/60 rounded-xl border border-dashed border-slate-200 mt-3">
+                      <Truck size={24} className="mx-auto text-slate-300 mb-1" />
+                      <p className="text-xs font-bold text-slate-600">Pickup Order (No Freight)</p>
+                      <p className="text-[10.5px] text-slate-400 mt-0.5">Toggle switch above if delivery transport is needed.</p>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+
             </div>
 
-            {/* 5. Products Selector Section with Spacious, Premium Product Tiles Grid */}
+            {/* 4. Products Selector Section with Spacious, Premium Product Tiles Grid */}
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4">
               
               {/* Header & Filter Controls */}
@@ -1749,7 +1816,7 @@ export default function CreateOrderClient() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
-                        5. Select Products Catalog
+                        4. Select Products Catalog
                       </h3>
                       <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#02626D]/10 text-[#02626D]">
                         {filteredProductTiles.length} products
@@ -1982,9 +2049,9 @@ export default function CreateOrderClient() {
                             </button>
                             <input
                               type="number"
-                              step={item.unit?.toUpperCase() === 'KG' ? '0.25' : '1'}
-                              min="0.1"
-                              value={item.quantity}
+                              step="any"
+                              min="0"
+                              value={item.quantity === 0 ? '' : item.quantity}
                               onChange={(e) => handleSummaryQuantityChange(item.itemId, parseFloat(e.target.value) || 0)}
                               className="w-12 h-6 text-center text-xs font-bold text-slate-900 bg-transparent border-x border-slate-200 focus:outline-none"
                             />
@@ -2089,6 +2156,7 @@ export default function CreateOrderClient() {
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">Discount (₹)</label>
                   <input
                     type="number"
+                    step="any"
                     min="0"
                     placeholder="0"
                     value={discountAmount}
@@ -2114,7 +2182,7 @@ export default function CreateOrderClient() {
                   </label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="any"
                     min="0"
                     placeholder="0.00"
                     value={receivedAmount}

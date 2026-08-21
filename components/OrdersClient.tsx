@@ -1306,7 +1306,7 @@ export default function OrdersClient() {
     return true;
   });
 
-  // Pagination states (45 items per page)
+  // Pagination states (24 items per page)
   const [currentPage, setCurrentPage] = useState(1);
   const [slotPages, setSlotPages] = useState<Record<string, number>>({});
 
@@ -1317,8 +1317,8 @@ export default function OrdersClient() {
   }, [selectedDate, orderStatusFilter, paymentStatusFilter, searchTerm]);
 
   const paginatedOrders = useMemo(() => {
-    const start = (currentPage - 1) * 45;
-    return filteredOrders.slice(start, start + 45);
+    const start = (currentPage - 1) * 24;
+    return filteredOrders.slice(start, start + 24);
   }, [filteredOrders, currentPage]);
 
   // Calculate Aggregated Item Breakdown for Selected Slot Analytics Modal
@@ -1707,7 +1707,7 @@ export default function OrdersClient() {
                   </div>
                 </div>
 
-                {/* Order Cards List inside Slot (45 Items Per Page) */}
+                {/* Order Cards List inside Slot (24 Items Per Page) */}
                 <div className="p-3 space-y-2.5 flex-1">
                   {slotOrders.length === 0 ? (
                     <div className="py-10 text-center text-slate-400 text-xs font-medium">
@@ -1716,7 +1716,7 @@ export default function OrdersClient() {
                   ) : (
                     (() => {
                       const currentSlotPage = slotPages[slotTime] || 1;
-                      const slotPageSize = 45;
+                      const slotPageSize = 24;
                       const paginatedSlotOrders = slotOrders.slice((currentSlotPage - 1) * slotPageSize, currentSlotPage * slotPageSize);
                       const totalSlotPages = Math.ceil(slotOrders.length / slotPageSize) || 1;
 
@@ -1803,25 +1803,25 @@ export default function OrdersClient() {
                           ))}
 
                           {totalSlotPages > 1 && (
-                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs gap-1">
                               <button
                                 type="button"
                                 disabled={currentSlotPage <= 1}
                                 onClick={() => setSlotPages((prev) => ({ ...prev, [slotTime]: Math.max(1, currentSlotPage - 1) }))}
-                                className="px-2 py-1 rounded border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-50 font-semibold cursor-pointer text-[11px]"
+                                className="px-2 py-1 rounded-lg border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-50 font-semibold cursor-pointer text-[11px] flex items-center gap-0.5 shadow-2xs"
                               >
-                                Prev
+                                <ChevronLeft size={12} /> Prev
                               </button>
                               <span className="text-[10px] font-bold text-slate-600">
-                                Page {currentSlotPage} of {totalSlotPages}
+                                Page {currentSlotPage} / {totalSlotPages} ({slotOrders.length})
                               </span>
                               <button
                                 type="button"
                                 disabled={currentSlotPage >= totalSlotPages}
                                 onClick={() => setSlotPages((prev) => ({ ...prev, [slotTime]: Math.min(totalSlotPages, currentSlotPage + 1) }))}
-                                className="px-2 py-1 rounded border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-50 font-semibold cursor-pointer text-[11px]"
+                                className="px-2 py-1 rounded-lg border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-50 font-semibold cursor-pointer text-[11px] flex items-center gap-0.5 shadow-2xs"
                               >
-                                Next
+                                Next <ChevronRight size={12} />
                               </button>
                             </div>
                           )}
@@ -1941,11 +1941,11 @@ export default function OrdersClient() {
             </table>
           </div>
 
-          {/* 45 Items Per Page Pagination */}
+          {/* 24 Items Per Page Pagination */}
           <Pagination
             currentPage={currentPage}
             totalItems={filteredOrders.length}
-            pageSize={45}
+            pageSize={24}
             onPageChange={setCurrentPage}
           />
         </div>

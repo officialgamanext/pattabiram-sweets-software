@@ -683,6 +683,18 @@ export default function CreateOrderClient() {
     return list;
   }, [itemsMaster, productGridSearch, productGridCategory, productGridOnlyFavorites]);
 
+  // Product Catalog Pagination (24 items per batch)
+  const [visibleProductCount, setVisibleProductCount] = useState(24);
+
+  // Reset pagination count when search or filters change
+  useEffect(() => {
+    setVisibleProductCount(24);
+  }, [productGridSearch, productGridCategory, productGridOnlyFavorites]);
+
+  const paginatedProductTiles = useMemo(() => {
+    return filteredProductTiles.slice(0, visibleProductCount);
+  }, [filteredProductTiles, visibleProductCount]);
+
   // Tile Handlers with useCallback for Instant 0ms response
   const handleToggleTileProduct = useCallback((prod: ItemMasterOption) => {
     setOrderItems((prev) => {
@@ -1816,26 +1828,67 @@ export default function CreateOrderClient() {
                     <p className="text-[11px] text-slate-400 mt-0.5">Try clearing your search or category filter</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
-                    {filteredProductTiles.map((prod) => {
-                      const addedItem = orderItems.find((it) => it.itemId === prod.id);
-                      const currentSlotLimit = orderSlot && prod.slotAllowedWeights?.[orderSlot as keyof typeof prod.slotAllowedWeights];
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                      {paginatedProductTiles.map((prod) => {
+                        const addedItem = orderItems.find((it) => it.itemId === prod.id);
+                        const currentSlotLimit = orderSlot && prod.slotAllowedWeights?.[orderSlot as keyof typeof prod.slotAllowedWeights];
 
-                      return (
-                        <ProductCatalogTile
-                          key={prod.id}
-                          prod={prod}
-                          addedItem={addedItem}
-                          currentSlotLimit={currentSlotLimit}
-                          isCustomisation={isCustomisation}
-                          numericNoOfBoxes={numericNoOfBoxes}
-                          packetCostPerBox={packetCostPerBox}
-                          onToggle={handleToggleTileProduct}
-                          onQuantityChange={handleTileQuantityChange}
-                          onFieldChange={handleTileFieldChange}
-                        />
-                      );
-                    })}
+                        return (
+                          <ProductCatalogTile
+                            key={prod.id}
+                            prod={prod}
+                            addedItem={addedItem}
+                            currentSlotLimit={currentSlotLimit}
+                            isCustomisation={isCustomisation}
+                            numericNoOfBoxes={numericNoOfBoxes}
+                            packetCostPerBox={packetCostPerBox}
+                            onToggle={handleToggleTileProduct}
+                            onQuantityChange={handleTileQuantityChange}
+                            onFieldChange={handleTileFieldChange}
+                          />
+                        );
+                      })}
+                    </div>
+
+                    {/* Show More / Pagination Controls (24 items per batch) */}
+                    {filteredProductTiles.length > 24 && (
+                      <div className="pt-3 pb-1 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <p className="text-xs text-slate-500 font-medium">
+                          Showing <strong className="text-slate-900">{Math.min(visibleProductCount, filteredProductTiles.length)}</strong> of <strong className="text-slate-900">{filteredProductTiles.length}</strong> products
+                        </p>
+
+                        <div className="flex items-center gap-2">
+                          {visibleProductCount < filteredProductTiles.length && (
+                            <button
+                              type="button"
+                              onClick={() => setVisibleProductCount((prev) => prev + 24)}
+                              className="px-3.5 py-1.5 rounded-xl bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                            >
+                              Show More (+24)
+                            </button>
+                          )}
+
+                          {visibleProductCount < filteredProductTiles.length ? (
+                            <button
+                              type="button"
+                              onClick={() => setVisibleProductCount(filteredProductTiles.length)}
+                              className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                            >
+                              Show All ({filteredProductTiles.length})
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setVisibleProductCount(24)}
+                              className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                            >
+                              Show Less (First 24)
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

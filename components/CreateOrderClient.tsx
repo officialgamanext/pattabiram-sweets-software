@@ -30,7 +30,7 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, onSnapshot, query } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp, onSnapshot, query } from 'firebase/firestore';
 import { toast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
 import { usePrinter } from '@/context/PrinterContext';
@@ -314,6 +314,9 @@ export default function CreateOrderClient() {
   const { user, employeeProfile } = useAuth();
   const { isConnected: isPrinterConnected, printerType, printReceipt } = usePrinter();
 
+  const editId = searchParams.get('editId') || searchParams.get('id') || '';
+  const isEditMode = Boolean(editId);
+
   const initialSlot = (searchParams.get('slot') as SlotTime) || '9:00 AM - 12:00 PM';
   const initialDate = searchParams.get('date') || '';
 
@@ -329,6 +332,13 @@ export default function CreateOrderClient() {
   const [orderSlot, setOrderSlot] = useState<SlotTime>(initialSlot);
   const [mfgDate, setMfgDate] = useState<string>(initialDate || getTodayDateStr());
   const [expDeliveryDate, setExpDeliveryDate] = useState<string>(initialDate || getTodayDateStr());
+
+  // Edit Mode Specific State
+  const [isLoadingOrder, setIsLoadingOrder] = useState<boolean>(Boolean(editId));
+  const [existingOrderCode, setExistingOrderCode] = useState<string>('');
+  const [existingOrderTime, setExistingOrderTime] = useState<string>('');
+  const [existingCreatedAt, setExistingCreatedAt] = useState<any>(null);
+  const [existingPayments, setExistingPayments] = useState<any[]>([]);
 
   // Customer State
   const [customersMaster, setCustomersMaster] = useState<CustomerOption[]>([]);
@@ -377,6 +387,113 @@ export default function CreateOrderClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const customerSearchRef = useRef<HTMLDivElement>(null);
+
+  // Load existing order when in edit mode
+  useEffect(() => {
+    if (!editId) return;
+    let isMounted = true;
+    setIsLoadingOrder(true);
+    const loadOrderForEditing = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'orders', editId));
+        if (!snap.exists()) {
+          toast.error('Order Not Found', 'The order you are trying to edit does not exist.');
+          if (isMounted) setIsLoadingOrder(false);
+          return;
+        }
+        const data = snap.data();
+        if (!isMounted) return;
+
+        setExistingOrderCode(data.code || '');
+        setExistingOrderTime(data.orderTime || '');
+        setExistingCreatedAt(data.createdAt || null);
+        setExistingPayments(data.payments || []);
+
+        if (data.slot) setOrderSlot(data.slot as SlotTime);
+        if (data.manufacturingDate) setMfgDate(data.manufacturingDate);
+        else if (data.orderDate) setMfgDate(data.orderDate);
+
+        if (data.expectedDeliveryDate) setExpDeliveryDate(data.expectedDeliveryDate);
+        else if (data.orderDate) setExpDeliveryDate(data.orderDate);
+
+        if (data.customerName) {
+          setSelectedCustomer({
+            id: data.customerId || '',
+            code: data.customerCode || 'CUST-000',
+            name: data.customerName,
+            mobile: data.customerMobile || '',
+            type: (data.customerType as 'Customer' | 'Wholesaler') || 'Customer',
+            address: data.customerAddress || '',
+            priceListName: data.priceListName || '',
+          });
+          setCustomerSearchTerm(`${data.customerName}${data.customerMobile ? ` (${data.customerMobile})` : ''}`);
+        }
+
+        setIsCustomisation(Boolean(data.isCustomisation));
+        if (data.customisationDetails) {
+          setNoOfBoxes(
+            data.customisationDetails.noOfBoxes !== undefined
+              ? data.customisationDetails.noOfBoxes
+              : (data.noOfBoxes !== undefined ? data.noOfBoxes : '')
+          );
+          if (data.customisationDetails.boxType) setBoxType(data.customisationDetails.boxType);
+          if (data.customisationDetails.boxImageUrl) setBoxImageUrl(data.customisationDetails.boxImageUrl);
+          if (data.customisationDetails.shrinkType) setShrinkType(data.customisationDetails.shrinkType);
+          else if (data.customisationDetails.hasShrink) setShrinkType('Standard Shrink Wrap');
+          if (data.customisationDetails.stickerType) setStickerType(data.customisationDetails.stickerType);
+          else if (data.customisationDetails.hasSticker) setStickerType('Custom Brand Sticker');
+        } else {
+          setNoOfBoxes(data.noOfBoxes !== undefined ? data.noOfBoxes : '');
+          if (data.boxType) setBoxType(data.boxType);
+          if (data.boxImageUrl) setBoxImageUrl(data.boxImageUrl);
+          setShrinkType('None');
+          setStickerType('None');
+        }
+
+        if (Array.isArray(data.items)) {
+          setOrderItems(
+            data.items.map((it: any, index: number) => {
+              const qty = typeof it.quantity === 'number' ? it.quantity : (parseFloat(it.quantity || it.qty) || 1);
+              const price = typeof it.unitPrice === 'number' ? it.unitPrice : (parseFloat(it.price || it.unitPrice || it.rate) || 0);
+              const total = typeof it.lineTotal === 'number' ? it.lineTotal : (parseFloat(it.totalPrice || it.lineTotal || it.amount || it.total) || (qty * price));
+              return {
+                lineId: it.lineId || `line-${index}-${Date.now()}`,
+                itemId: it.itemId || it.id || '',
+                itemCode: it.itemCode || it.code || '',
+                itemName: it.itemName || it.name || '',
+                category: it.category || 'General',
+                unit: it.unit || 'KG',
+                imageUrl: it.imageUrl || '',
+                quantity: qty,
+                unitPrice: price,
+                lineTotal: total,
+                hasPacket: Boolean(it.hasPacket),
+                packetCharge: it.hasPacket ? 5 : (it.packetCharge || 0),
+                manufacturingDescription: it.manufacturingDescription || it.mfgDesc || it.notes || '',
+                packingDescription: it.packingDescription || it.pckDesc || it.packingInstructions || '',
+              };
+            })
+          );
+        }
+
+        setDiscountAmount(data.discountAmount !== undefined ? String(data.discountAmount) : '');
+        setAdditionalCharges(data.additionalCharges !== undefined ? String(data.additionalCharges) : '');
+        setReceivedAmount(data.receivedAmount !== undefined ? String(data.receivedAmount) : '');
+        if (data.paymentMode) setPaymentMode(data.paymentMode);
+        if (data.paymentStatus) setPaymentStatus(data.paymentStatus);
+        if (data.orderStatus) setOrderStatus(data.orderStatus);
+      } catch (err: any) {
+        console.error('Failed to fetch order for editing:', err);
+        toast.error('Load Failed', err?.message || 'Could not fetch order data.');
+      } finally {
+        if (isMounted) setIsLoadingOrder(false);
+      }
+    };
+    loadOrderForEditing();
+    return () => {
+      isMounted = false;
+    };
+  }, [editId]);
 
   // Click outside customer dropdown
   useEffect(() => {
@@ -871,12 +988,64 @@ export default function CreateOrderClient() {
       const savedNoOfBoxes = numericNoOfBoxes;
       const targetOrderDate = mfgDate || getTodayDateStr();
 
+      if (editId) {
+        // Update existing order
+        await updateDoc(doc(db, 'orders', editId), sanitizeForFirestore({
+          customerName: selectedCustomer.name,
+          customerMobile: selectedCustomer.mobile,
+          customerId: selectedCustomer.id,
+          customerType: selectedCustomer.type,
+          customerAddress: selectedCustomer.address || '',
+          slot: orderSlot,
+          orderDate: mfgDate || targetOrderDate,
+          manufacturingDate: mfgDate,
+          expectedDeliveryDate: expDeliveryDate,
+          isCustomisation: isCustomisation,
+          customisationDetails: isCustomisation
+            ? {
+                noOfBoxes: savedNoOfBoxes,
+                boxType: selectedBoxObj?.name || boxType,
+                boxPrice: selectedBoxPrice,
+                boxImageUrl: finalBoxImageUrl,
+                shrinkType: shrinkType,
+                shrinkPrice: selectedShrinkPrice,
+                hasShrink: shrinkType !== 'None' && selectedShrinkPrice > 0,
+                stickerType: stickerType,
+                stickerPrice: selectedStickerPrice,
+                hasSticker: stickerType !== 'None' && selectedStickerPrice > 0,
+              }
+            : null,
+          items: validItems,
+          totalItems: validItems.length,
+          subTotal: subTotal,
+          noOfBoxes: savedNoOfBoxes,
+          boxChargesTotal: isCustomisation ? boxChargesTotal : 0,
+          stickerChargesTotal: isCustomisation ? stickerChargesTotal : 0,
+          shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
+          packetChargesTotal: packetChargesTotal,
+          packingCharges: !isCustomisation ? pCharges : 0,
+          additionalCharges: !isCustomisation ? addCharges : 0,
+          discountAmount: discountVal,
+          totalAmount: grandTotal,
+          receivedAmount: parseFloat(String(receivedAmount)) || 0,
+          paymentMode: paymentMode,
+          paymentStatus: paymentStatus,
+          orderStatus: orderStatus,
+          updatedAt: serverTimestamp(),
+        }));
+
+        toast.success('Order Updated', `Order ${existingOrderCode || ''} updated successfully.`);
+        router.push(`/orders/${editId}`);
+        return;
+      }
+
       await addDoc(collection(db, 'orders'), sanitizeForFirestore({
         code: orderCode,
         customerName: selectedCustomer.name,
         customerMobile: selectedCustomer.mobile,
         customerId: selectedCustomer.id,
         customerType: selectedCustomer.type,
+        customerAddress: selectedCustomer.address || '',
         slot: orderSlot,
         orderTime: timeStr,
         orderDate: targetOrderDate,
@@ -929,6 +1098,15 @@ export default function CreateOrderClient() {
     }
   };
 
+  if (isLoadingOrder) {
+    return (
+      <div className="w-full min-h-screen bg-[#f6f6f7] font-sans flex flex-col items-center justify-center gap-3">
+        <Loader2 size={36} className="animate-spin text-[#02626D]" />
+        <p className="text-xs font-bold text-slate-700">Loading order details for editing...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full min-h-screen bg-[#f6f6f7] font-sans text-slate-800 pb-16">
       
@@ -937,9 +1115,9 @@ export default function CreateOrderClient() {
         <div className="w-full flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <Link
-              href="/orders"
+              href={isEditMode ? `/orders/${editId}` : '/orders'}
               className="w-8.5 h-8.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer flex-shrink-0"
-              title="Back to Orders"
+              title={isEditMode ? 'Back to Order Details' : 'Back to Orders'}
             >
               <ArrowLeft size={18} />
             </Link>
@@ -947,21 +1125,28 @@ export default function CreateOrderClient() {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
-                  Create Order
+                  {isEditMode ? 'Edit Order' : 'Create Order'}
                 </h1>
+                {isEditMode && existingOrderCode && (
+                  <span className="text-xs font-mono font-bold text-[#02626D] bg-[#02626D]/10 px-2 py-0.5 rounded-lg border border-teal-200/80">
+                    {existingOrderCode}
+                  </span>
+                )}
                 <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#02626D]/10 text-[#02626D] border border-teal-200/80 hidden sm:inline-block">
                   {orderSlot}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 truncate hidden sm:block">
-                Select customer, choose products, set customisation &amp; checkout
+                {isEditMode
+                  ? 'Modify order items, customisation, schedule and update records'
+                  : 'Select customer, choose products, set customisation & checkout'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
             <Link
-              href="/orders"
+              href={isEditMode ? `/orders/${editId}` : '/orders'}
               className="h-8.5 px-3.5 rounded-xl border border-slate-300 hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors flex items-center justify-center cursor-pointer shadow-2xs"
             >
               Cancel
@@ -975,12 +1160,12 @@ export default function CreateOrderClient() {
               {isSubmitting ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
-                  <span>Creating...</span>
+                  <span>{isEditMode ? 'Updating...' : 'Creating...'}</span>
                 </>
               ) : (
                 <>
                   <Check size={14} />
-                  <span>Create Order</span>
+                  <span>{isEditMode ? 'Update Order' : 'Create Order'}</span>
                 </>
               )}
             </button>
@@ -1579,18 +1764,18 @@ export default function CreateOrderClient() {
                     {isSubmitting ? (
                       <>
                         <Loader2 size={15} className="animate-spin" />
-                        <span>Creating Order...</span>
+                        <span>{isEditMode ? 'Updating Order...' : 'Creating Order...'}</span>
                       </>
                     ) : (
                       <>
                         <Check size={15} />
-                        <span>Create Order</span>
+                        <span>{isEditMode ? 'Update Order' : 'Create Order'}</span>
                       </>
                     )}
                   </button>
 
                   <Link
-                    href="/orders"
+                    href={isEditMode ? `/orders/${editId}` : '/orders'}
                     className="w-full h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors flex items-center justify-center cursor-pointer"
                   >
                     Cancel

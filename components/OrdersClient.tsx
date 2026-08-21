@@ -871,44 +871,9 @@ export default function OrdersClient() {
     setIsAddOrderModalOpen(true);
   };
 
-  // Open Full Screen Edit Order Modal
+  // Open Edit Order Page
   const handleOpenEditOrderModal = (order: OrderRecord) => {
-    setEditingOrder(order);
-    setOrderSlot(order.slot || '9:00 AM - 12:00 PM');
-    setMfgDate(order.manufacturingDate || getTodayDateStr());
-    setExpDeliveryDate(order.expectedDeliveryDate || getTodayDateStr());
-    setIsCustomisation(Boolean(order.isCustomisation));
-    if (order.customisationDetails) {
-      setNoOfBoxes(order.customisationDetails.noOfBoxes !== undefined ? order.customisationDetails.noOfBoxes : '');
-      setBoxType(order.customisationDetails.boxType || activeBoxes[0]?.name || 'HandleBox');
-      setBoxImageUrl(order.customisationDetails.boxImageUrl || '');
-      setShrinkType(order.customisationDetails.shrinkType || (order.customisationDetails.hasShrink ? (activeShrinks[0]?.name || 'Standard Shrink Wrap') : 'None'));
-      setStickerType(order.customisationDetails.stickerType || (order.customisationDetails.hasSticker ? (activeStickers[0]?.name || 'Custom Brand Sticker') : 'None'));
-    } else {
-      setNoOfBoxes(order.noOfBoxes !== undefined ? order.noOfBoxes : '');
-      setBoxType(activeBoxes[0]?.name || 'HandleBox');
-      setBoxImageUrl('');
-      setShrinkType('None');
-      setStickerType('None');
-    }
-    setPackingCharges(order.packingCharges ? String(order.packingCharges) : '');
-    setAdditionalCharges(order.additionalCharges ? String(order.additionalCharges) : '');
-    setDiscountAmount(order.discountAmount ? String(order.discountAmount) : '');
-    setReceivedAmount(order.receivedAmount ? String(order.receivedAmount) : '');
-    setSelectedCustomer({
-      id: order.customerId || '',
-      code: 'CUST-000',
-      name: order.customerName,
-      mobile: order.customerMobile,
-      type: (order.customerType as 'Customer' | 'Wholesaler') || 'Customer',
-    });
-    setCustomerSearchTerm(order.customerName);
-    setOrderItems(order.items || []);
-    setReceivedAmount(String(order.receivedAmount || 0));
-    setPaymentMode(order.paymentMode || 'UPI');
-    setPaymentStatus(order.paymentStatus || 'Pending');
-    setOrderStatus(order.orderStatus || 'Order Created');
-    setIsAddOrderModalOpen(true);
+    router.push(`/orders/create?editId=${order.id}`);
   };
 
   // Inline Quick Add New Customer

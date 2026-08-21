@@ -528,6 +528,13 @@ export default function OrderDetailClient({ orderId }: Props) {
           >
             <Pencil size={14} /> Edit Status
           </button>
+          <Link
+            href={`/orders/create?editId=${order.id}`}
+            className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-white border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
+            title="Edit Order Details"
+          >
+            <Pencil size={14} /> Edit Order
+          </Link>
           <button
             onClick={() => setIsDeleteOpen(true)}
             className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-red-50 border border-red-200 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer"

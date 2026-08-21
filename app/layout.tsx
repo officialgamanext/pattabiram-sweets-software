@@ -44,13 +44,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={sora.variable}>
+    <html lang="en" className={sora.variable} suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" href="/app-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       </head>
-      <body className="min-h-screen bg-[#f6f6f7] font-sans antialiased text-[#1a1a1a]">
+      <body className="min-h-screen bg-[#f6f6f7] font-sans antialiased text-[#1a1a1a]" suppressHydrationWarning>
         <GlobalInputBehavior />
         <PWAProvider>
           <ToastProvider>

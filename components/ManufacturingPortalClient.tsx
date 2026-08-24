@@ -28,6 +28,7 @@ import type { OrderRecord, OrderItemLine } from './OrdersClient';
 import CustomSelect from '@/components/CustomSelect';
 import CustomDatePicker from '@/components/CustomDatePicker';
 import { useAuth } from '@/context/AuthContext';
+import { toast } from '@/context/ToastContext';
 
 export interface DynamicUnit {
   id: string;
@@ -62,6 +63,34 @@ export interface AggregatedItemSummary {
     mfgStatus: 'Pending' | 'Manufacturing Started' | 'Moved to Packing';
     manufacturingDescription?: string;
   }[];
+}
+
+export interface SlotWiseItemSummary {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  category: string;
+  unit: string;
+  imageUrl?: string;
+  manufacturingUnitName: string;
+  packingUnitName: string;
+  totalQuantity: number;
+  orders: {
+    orderId: string;
+    orderCode: string;
+    customerName: string;
+    slot: string;
+    quantity: number;
+    mfgStatus: 'Pending' | 'Manufacturing Started' | 'Moved to Packing';
+    manufacturingDescription?: string;
+  }[];
+}
+
+export interface SlotGroup {
+  slotName: string;
+  ordersCount: number;
+  totalQuantity: number;
+  items: SlotWiseItemSummary[];
 }
 
 function isOrderEligibleForManufacturing(order: OrderRecord): boolean {
@@ -120,7 +149,7 @@ export default function ManufacturingPortalClient() {
     return `${y}-${m}-${day}`;
   });
   const [isAlertDismissed, setIsAlertDismissed] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'item_wise' | 'order_wise'>('item_wise');
+  const [activeTab, setActiveTab] = useState<'item_wise' | 'slot_wise' | 'order_wise'>('item_wise');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   // Accessible manufacturing units for the logged-in employee
@@ -487,6 +516,127 @@ export default function ManufacturingPortalClient() {
     });
   }, [filteredOrders, selectedUnit, searchTerm, itemInfoMap, isAllUnitsAllowed, assignedMfgUnits]);
 
+  // ── Slot-Wise Grouped Manufacturing Queue ──
+  const slotWiseGroups = useMemo(() => {
+    const slotMap = new Map<string, Map<string, SlotWiseItemSummary>>();
+    const slotOrdersSet = new Map<string, Set<string>>();
+
+    filteredOrders.forEach((order) => {
+      const st = order.orderStatus as string;
+      if (st === 'Delivered' || st === 'Cancelled') return;
+
+      const slot = (order.slot || 'Regular / General Slot').trim();
+
+      (order.items || []).forEach((item) => {
+        const itemMfgStatus = item.mfgStatus || (
+          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Packing Completed' || order.orderStatus === 'Moved to Store'
+            ? 'Moved to Packing'
+            : order.orderStatus === 'Manufacturing Started'
+            ? 'Manufacturing Started'
+            : 'Pending'
+        );
+
+        if (itemMfgStatus === 'Moved to Packing') return;
+
+        const rawName = item.itemName || (item as any).name || 'Unknown Item';
+        const key = rawName.toLowerCase().trim();
+        const masterInfo = itemInfoMap.get(key);
+
+        const mfgUnitName = (item as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
+        const pckUnitName = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
+        const category = item.category || masterInfo?.category || 'General';
+
+        if (!isItemUnitAllowed(mfgUnitName)) return;
+        if (selectedUnit !== 'all' && mfgUnitName.toLowerCase() !== selectedUnit.toLowerCase()) return;
+
+        const orderCodeDisplay = order.code || (order as any).orderId || order.id || 'ORD';
+
+        if (
+          searchTerm &&
+          !rawName.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !(category || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !orderCodeDisplay.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !(order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !slot.toLowerCase().includes(searchTerm.toLowerCase())
+        ) {
+          return;
+        }
+
+        if (!slotMap.has(slot)) {
+          slotMap.set(slot, new Map());
+          slotOrdersSet.set(slot, new Set());
+        }
+
+        slotOrdersSet.get(slot)!.add(order.id);
+        const itemMap = slotMap.get(slot)!;
+        const existing = itemMap.get(key);
+
+        if (existing) {
+          existing.totalQuantity += item.quantity || 0;
+          existing.orders.push({
+            orderId: order.id,
+            orderCode: orderCodeDisplay,
+            customerName: order.customerName || 'Customer',
+            slot: slot,
+            quantity: item.quantity || 0,
+            mfgStatus: itemMfgStatus,
+            manufacturingDescription: item.manufacturingDescription,
+          });
+        } else {
+          itemMap.set(key, {
+            itemId: item.itemId || key,
+            itemCode: item.itemCode || (item as any).code || 'ITEM',
+            itemName: rawName,
+            category: category,
+            unit: item.unit || 'kg',
+            imageUrl: item.imageUrl,
+            manufacturingUnitName: mfgUnitName,
+            packingUnitName: pckUnitName,
+            totalQuantity: item.quantity || 0,
+            orders: [
+              {
+                orderId: order.id,
+                orderCode: orderCodeDisplay,
+                customerName: order.customerName || 'Customer',
+                slot: slot,
+                quantity: item.quantity || 0,
+                mfgStatus: itemMfgStatus,
+                manufacturingDescription: item.manufacturingDescription,
+              },
+            ],
+          });
+        }
+      });
+    });
+
+    const extraSlots = Array.from(slotMap.keys()).filter(
+      (s) => !['9:00 AM - 12:00 PM', '12:00 PM - 3:00 PM', '3:00 PM - 6:00 PM', '6:00 PM - 9:00 PM'].includes(s)
+    );
+    const allSlotNames = [
+      '9:00 AM - 12:00 PM',
+      '12:00 PM - 3:00 PM',
+      '3:00 PM - 6:00 PM',
+      '6:00 PM - 9:00 PM',
+      ...extraSlots,
+    ];
+
+    const groups: SlotGroup[] = allSlotNames.map((slotName) => {
+      const itemMap = slotMap.get(slotName);
+      const itemsList = itemMap
+        ? Array.from(itemMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity)
+        : [];
+      const totalQty = itemsList.reduce((sum, it) => sum + it.totalQuantity, 0);
+      return {
+        slotName,
+        ordersCount: slotOrdersSet.get(slotName)?.size || 0,
+        totalQuantity: totalQty,
+        items: itemsList,
+      };
+    });
+
+    return groups;
+  }, [filteredOrders, itemInfoMap, selectedUnit, searchTerm, isAllUnitsAllowed, assignedMfgUnits]);
+
   // Helper to remove any undefined fields before writing to Firestore
   const sanitizeForFirestore = (obj: any): any => {
     if (obj === undefined) return null;
@@ -502,6 +652,127 @@ export default function ManufacturingPortalClient() {
       }
     }
     return clean;
+  };
+
+  // ── Move Entire Slot to Packing ──
+  const handleMoveEntireSlotToPacking = async (slotGroup: SlotGroup) => {
+    try {
+      setUpdatingId(`slot_all_${slotGroup.slotName}`);
+      const batch = writeBatch(db);
+
+      const orderIdsInSlot = new Set<string>();
+      slotGroup.items.forEach((item) => {
+        item.orders.forEach((ord) => orderIdsInSlot.add(ord.orderId));
+      });
+
+      orderIdsInSlot.forEach((ordId) => {
+        const fullOrder = orders.find((o) => o.id === ordId);
+        if (!fullOrder || !fullOrder.items) return;
+
+        const updatedItems = fullOrder.items.map((it) => {
+          const rawName = (it.itemName || (it as any).name || '').toLowerCase().trim();
+          const masterInfo = itemInfoMap.get(rawName);
+          const mfgUnit = (it as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
+
+          const isItemInUnit =
+            isItemUnitAllowed(mfgUnit) &&
+            (selectedUnit === 'all' || mfgUnit.toLowerCase() === selectedUnit.toLowerCase());
+
+          if (isItemInUnit) {
+            return sanitizeForFirestore({
+              ...it,
+              mfgStatus: 'Moved to Packing',
+              pckStatus: it.pckStatus || 'Pending',
+            });
+          }
+          return sanitizeForFirestore(it);
+        });
+
+        const allItemsMovedToPacking = updatedItems.every(
+          (it: any) => it.mfgStatus === 'Moved to Packing'
+        );
+
+        let newOrderStatus = fullOrder.orderStatus || 'Order Created';
+        if (allItemsMovedToPacking) {
+          newOrderStatus = 'Moved to Packing';
+        }
+
+        const orderRef = doc(db, 'orders', ordId);
+        batch.update(orderRef, sanitizeForFirestore({
+          items: updatedItems,
+          orderStatus: newOrderStatus,
+          updatedAt: serverTimestamp(),
+        }));
+      });
+
+      await batch.commit();
+      toast.success(
+        'Moved to Packing',
+        `All items in Slot "${slotGroup.slotName}" successfully moved to Packing Portal!`
+      );
+    } catch (err: any) {
+      console.error('Failed to move entire slot to packing:', err);
+      toast.error('Update Failed', err?.message || 'Could not move slot items.');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  // ── Move Individual Item in a Slot to Packing ──
+  const handleMoveSlotItemToPacking = async (slotName: string, itemSummary: SlotWiseItemSummary) => {
+    try {
+      setUpdatingId(`slot_${slotName}_${itemSummary.itemId}`);
+      const batch = writeBatch(db);
+
+      const targetOrderIds = Array.from(new Set(itemSummary.orders.map((o) => o.orderId)));
+
+      targetOrderIds.forEach((ordId) => {
+        const fullOrder = orders.find((o) => o.id === ordId);
+        if (!fullOrder || !fullOrder.items) return;
+
+        const updatedItems = fullOrder.items.map((it) => {
+          const name = (it.itemName || (it as any).name || '').toLowerCase().trim();
+          const targetName = (itemSummary.itemName || '').toLowerCase().trim();
+          const isTarget = name && targetName && name === targetName;
+
+          if (isTarget) {
+            return sanitizeForFirestore({
+              ...it,
+              mfgStatus: 'Moved to Packing',
+              pckStatus: it.pckStatus || 'Pending',
+            });
+          }
+          return sanitizeForFirestore(it);
+        });
+
+        const allItemsMovedToPacking = updatedItems.every(
+          (it: any) => it.mfgStatus === 'Moved to Packing'
+        );
+
+        let newOrderStatus = fullOrder.orderStatus || 'Order Created';
+        if (allItemsMovedToPacking) {
+          newOrderStatus = 'Moved to Packing';
+        }
+
+        const orderRef = doc(db, 'orders', ordId);
+        batch.update(orderRef, sanitizeForFirestore({
+          items: updatedItems,
+          orderStatus: newOrderStatus,
+          updatedAt: serverTimestamp(),
+        }));
+      });
+
+      await batch.commit();
+      toast.success(
+        'Moved to Packing',
+        `${itemSummary.itemName} in Slot "${slotName}" moved to Packing Portal!`
+      );
+    } catch (err: any) {
+      console.error('Failed to move item in slot to packing:', err);
+      toast.error('Update Failed', err?.message);
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   // Update item-level mfgStatus for an entire batch or single item
@@ -757,26 +1028,41 @@ export default function ManufacturingPortalClient() {
         <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
           
           {/* TAB SWITCHER */}
-          <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+          <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200 overflow-x-auto">
             <button
               onClick={() => setActiveTab('item_wise')}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
                 activeTab === 'item_wise'
                   ? 'bg-white text-teal-700 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Boxes size={15} /> Item-Wise (Summed Cooking Qty)
+              <Boxes size={15} /> Item-Wise (Summed Qty)
+            </button>
+            <button
+              onClick={() => setActiveTab('slot_wise')}
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'slot_wise'
+                  ? 'bg-white text-teal-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Clock size={15} /> Slot-Wise View
+              {slotWiseGroups.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-teal-100 text-teal-800 text-[10px] font-extrabold">
+                  {slotWiseGroups.length} Slots
+                </span>
+              )}
             </button>
             <button
               onClick={() => setActiveTab('order_wise')}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
                 activeTab === 'order_wise'
                   ? 'bg-white text-teal-700 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <ListOrdered size={15} /> Order-Wise Manufacturing List
+              <ListOrdered size={15} /> Order-Wise List
             </button>
           </div>
 
@@ -785,7 +1071,13 @@ export default function ManufacturingPortalClient() {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder={activeTab === 'item_wise' ? 'Search item name...' : 'Search order code or customer...'}
+              placeholder={
+                activeTab === 'item_wise'
+                  ? 'Search item name...'
+                  : activeTab === 'slot_wise'
+                  ? 'Search item or slot...'
+                  : 'Search order code or customer...'
+              }
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-8 pr-4 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 bg-white"
@@ -862,32 +1154,18 @@ export default function ManufacturingPortalClient() {
                         </div>
                       </div>
 
-                      {/* Right: ITEM-LEVEL BATCH ACTION BUTTONS */}
+                      {/* Right: ONLY MOVE TO PACKING BUTTON */}
                       <div className="flex items-center gap-2">
                         <button
                           disabled={isUpdating}
-                          onClick={() => handleBatchUpdateItemMfgStatus(item, 'Manufacturing Started')}
-                          className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                          {isUpdating ? (
-                            <Loader2 size={14} className="animate-spin" />
-                          ) : (
-                            <>
-                              <Play size={14} /> Start Batch Cooking
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          disabled={isUpdating}
                           onClick={() => handleBatchUpdateItemMfgStatus(item, 'Moved to Packing')}
-                          className="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                         >
                           {isUpdating ? (
                             <Loader2 size={14} className="animate-spin" />
                           ) : (
                             <>
-                              <Package size={14} /> Finish & Move to Packing
+                              <Package size={14} /> Move to Packing
                             </>
                           )}
                         </button>
@@ -930,9 +1208,166 @@ export default function ManufacturingPortalClient() {
               })}
             </div>
           )
+        ) : activeTab === 'slot_wise' ? (
+          /* ============================================================ */
+          /* TAB 2: SLOT-WISE 4-COLUMNS VIEW                              */
+          /* ============================================================ */
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start p-4 sm:p-5">
+            {slotWiseGroups.map((slotGroup) => {
+              const isSlotUpdating = updatingId === `slot_all_${slotGroup.slotName}`;
+              const hasItems = slotGroup.items.length > 0;
+
+              return (
+                <div
+                  key={slotGroup.slotName}
+                  className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col"
+                >
+                  {/* Slot Column Header */}
+                  <div className="p-3.5 border-b border-slate-100 bg-[#f7f7f8] flex items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <Clock size={14} className="text-teal-700" />
+                        <h3 className="font-bold text-xs sm:text-sm text-slate-800 tracking-tight">
+                          {slotGroup.slotName}
+                        </h3>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                        {slotGroup.items.length} {slotGroup.items.length === 1 ? 'Product' : 'Products'} • {slotGroup.ordersCount} Orders
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={!hasItems || isSlotUpdating}
+                        onClick={() => handleMoveEntireSlotToPacking(slotGroup)}
+                        className="px-2.5 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={`Move all ${slotGroup.items.length} items in ${slotGroup.slotName} to Packing`}
+                      >
+                        {isSlotUpdating ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Package size={12} />
+                        )}
+                        <span>Move All</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Slot Column Body */}
+                  <div className="p-3 space-y-3 flex-1">
+                    {!hasItems ? (
+                      <div className="py-16 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-1.5">
+                        <ChefHat size={26} className="text-slate-300" />
+                        <p className="font-semibold text-slate-500">No Cooking Items</p>
+                        <p className="text-[11px] text-slate-400">All items moved or no orders in this slot.</p>
+                      </div>
+                    ) : (
+                      slotGroup.items.map((item) => {
+                        const isItemUpdating = updatingId === `slot_${slotGroup.slotName}_${item.itemId}`;
+
+                        return (
+                          <div
+                            key={item.itemId}
+                            className="bg-white border border-slate-200/90 hover:border-teal-500/50 rounded-xl p-3 shadow-2xs hover:shadow-xs transition-all space-y-2.5"
+                          >
+                            {/* Item Header */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-start gap-2">
+                                <div className="w-9 h-9 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center font-bold text-xs border border-teal-100 shrink-0">
+                                  {item.imageUrl ? (
+                                    <img
+                                      src={item.imageUrl}
+                                      alt={item.itemName}
+                                      className="w-full h-full object-cover rounded-lg"
+                                    />
+                                  ) : (
+                                    <ChefHat size={16} />
+                                  )}
+                                </div>
+                                <div>
+                                  <h4 className="text-xs font-bold text-slate-900 line-clamp-2 leading-tight">
+                                    {item.itemName}
+                                  </h4>
+                                  <div className="flex items-center gap-1 mt-1 flex-wrap">
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-teal-50 text-teal-800 border border-teal-200">
+                                      {item.manufacturingUnitName}
+                                    </span>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 uppercase">
+                                      {item.category}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Quantity & Move Button */}
+                            <div className="bg-teal-50/80 p-2 rounded-lg border border-teal-100 flex items-center justify-between">
+                              <div>
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-teal-700 block">
+                                  Cooking Qty
+                                </span>
+                                <span className="text-sm font-black text-teal-900 font-mono">
+                                  {item.totalQuantity} {item.unit}
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                disabled={isItemUpdating || isSlotUpdating}
+                                onClick={() => handleMoveSlotItemToPacking(slotGroup.slotName, item)}
+                                className="px-2.5 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              >
+                                {isItemUpdating ? (
+                                  <Loader2 size={11} className="animate-spin" />
+                                ) : (
+                                  <Package size={11} />
+                                )}
+                                <span>Move to Packing</span>
+                              </button>
+                            </div>
+
+                            {/* Orders Breakdown */}
+                            <div className="space-y-1 pt-1 border-t border-slate-100">
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                Orders ({item.orders.length}):
+                              </p>
+                              <div className="space-y-1">
+                                {item.orders.map((ord, ordIdx) => (
+                                  <div
+                                    key={ordIdx}
+                                    className="bg-slate-50 p-1.5 rounded-lg border border-slate-200/80 text-[11px] space-y-0.5"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-mono font-bold text-slate-800 text-[11px]">
+                                        {ord.orderCode}
+                                      </span>
+                                      <span className="font-mono font-bold text-teal-700 bg-white px-1.5 py-0.2 rounded border border-teal-100 text-[10px]">
+                                        {ord.quantity} {item.unit}
+                                      </span>
+                                    </div>
+                                    <p className="text-slate-500 text-[10px] truncate">{ord.customerName}</p>
+                                    {ord.manufacturingDescription && (
+                                      <p className="text-teal-800 bg-teal-50 px-1 py-0.5 rounded border border-teal-100 text-[10px]">
+                                        <strong>Note:</strong> {ord.manufacturingDescription}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         ) : (
           /* ============================================================ */
-          /* TAB 2: ORDER-WISE LIST VIEW                                  */
+          /* TAB 3: ORDER-WISE LIST VIEW                                  */
           /* ============================================================ */
           filteredOrderWiseList.length === 0 ? (
             <div className="py-16 text-center text-slate-400">
@@ -960,7 +1395,7 @@ export default function ManufacturingPortalClient() {
                       </span>
                     </div>
 
-                    {/* Items List for this order with item-specific action buttons */}
+                    {/* Items List for this order with ONLY Move to Packing button */}
                     <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-200/80">
                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Order Items to Produce</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
@@ -1021,23 +1456,15 @@ export default function ManufacturingPortalClient() {
                                 )}
                               </div>
 
-                              {/* Single Item Action */}
+                              {/* Single Item Action: ONLY Move to Packing */}
                               {!isMovedToPacking ? (
-                                <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5">
-                                  <button
-                                    disabled={isUpdatingSingle}
-                                    onClick={() => handleSingleItemMfgStatusUpdate(order.id, item.itemName, 'Manufacturing Started')}
-                                    className="flex-1 py-1 rounded bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
-                                  >
-                                    {isUpdatingSingle ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />} Start
-                                  </button>
-
+                                <div className="pt-2 border-t border-slate-100">
                                   <button
                                     disabled={isUpdatingSingle}
                                     onClick={() => handleSingleItemMfgStatusUpdate(order.id, item.itemName, 'Moved to Packing')}
-                                    className="flex-1 py-1 rounded bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                                    className="w-full py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                                   >
-                                    {isUpdatingSingle ? <Loader2 size={11} className="animate-spin" /> : <Package size={11} />} Complete
+                                    {isUpdatingSingle ? <Loader2 size={11} className="animate-spin" /> : <Package size={11} />} Move to Packing
                                   </button>
                                 </div>
                               ) : (

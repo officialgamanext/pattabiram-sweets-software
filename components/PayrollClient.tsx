@@ -23,7 +23,11 @@ import {
   Check,
   ChevronDown,
   Navigation,
-  User
+  User,
+  HandCoins,
+  Wallet,
+  Receipt,
+  Save,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { toast } from '@/context/ToastContext';
@@ -40,7 +44,7 @@ import {
   where,
   orderBy
 } from 'firebase/firestore';
-import { EmployeeRecord } from './EmployeesClient';
+import { EmployeeRecord, EmployeeAdvanceRecord } from './EmployeesClient';
 
 export interface AttendanceRecord {
   id: string;
@@ -105,6 +109,11 @@ export default function PayrollClient() {
     new Date().toISOString().slice(0, 7) // YYYY-MM
   );
 
+  // Advance Management & Custom deductions per employee
+  const [allAdvances, setAllAdvances] = useState<EmployeeAdvanceRecord[]>([]);
+  const [customAdvanceDeductions, setCustomAdvanceDeductions] = useState<Record<string, number>>({});
+  const [isProcessingPayout, setIsProcessingPayout] = useState(false);
+
   // Mark Attendance Modal state & verification steps
   const [targetEmp, setTargetEmp] = useState<EmployeeRecord | null>(null);
   const [verificationStep, setVerificationStep] = useState<'idle' | 'location' | 'face' | 'success' | 'out_of_range'>('idle');
@@ -130,9 +139,22 @@ export default function PayrollClient() {
   // Payslip modal state
   const [selectedPayslipEmp, setSelectedPayslipEmp] = useState<EmployeeRecord | null>(null);
 
-  // Load Employees and Attendance from Firestore + Local storage
+  // Load Employees, Attendance and Advances from Firestore + Local storage
   useEffect(() => {
     setLoading(true);
+
+    // Sync Advances
+    const unsubAdvances = onSnapshot(
+      collection(db, 'employee_advances'),
+      (snapshot) => {
+        const list: EmployeeAdvanceRecord[] = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<EmployeeAdvanceRecord, 'id'>)
+        }));
+        setAllAdvances(list);
+      },
+      (err) => console.warn('Error fetching advances for payroll:', err)
+    );
 
     // Sync Employees
     const localEmps = localStorage.getItem('pattabiram_employees');
@@ -629,6 +651,35 @@ export default function PayrollClient() {
     setTargetEmp(null);
   };
 
+  // Advance info helper
+  const getEmployeeAdvanceInfo = (empId: string) => {
+    const empAdvs = allAdvances.filter(
+      (a) => a.employeeId === empId && a.status === 'Active'
+    );
+    const activeBalance = empAdvs.reduce(
+      (sum, a) => sum + (a.remainingBalance ?? (a.amount - (a.totalRepaid || 0))),
+      0
+    );
+
+    // Calculate scheduled installment for this selected month across all active advances
+    const scheduledInstallment = empAdvs.reduce((sum, a) => {
+      const match = (a.installments || []).find(
+        (inst) => inst.monthDue === selectedMonth && inst.status === 'Pending'
+      );
+      if (match) return sum + match.amount;
+      const firstPending = (a.installments || []).find((inst) => inst.status === 'Pending');
+      if (firstPending) return sum + firstPending.amount;
+      return sum + (a.monthlyInstallmentAmount || 0);
+    }, 0);
+
+    return {
+      activeAdvances: empAdvs,
+      activeBalance,
+      suggestedMonthlyDeduction: Math.min(activeBalance, scheduledInstallment),
+      advanceCount: empAdvs.length,
+    };
+  };
+
   // Calculate Salary data for an employee for selectedMonth
   const getSalaryCalculations = (emp: EmployeeRecord) => {
     const totalDaysInMonth = 30;
@@ -650,6 +701,17 @@ export default function PayrollClient() {
     const payableDays = presentDays + Math.min(leaveDays, acceptedLeaves);
     const totalEarnedSalary = Math.round(payableDays * perDayRate);
 
+    // Advance Calculations
+    const advInfo = getEmployeeAdvanceInfo(emp.id);
+    const customDeduction = customAdvanceDeductions[`${emp.id}_${selectedMonth}`];
+    const advanceDeduction =
+      customDeduction !== undefined
+        ? Math.min(advInfo.activeBalance, Math.max(0, customDeduction))
+        : advInfo.suggestedMonthlyDeduction;
+
+    const netPayableSalary = Math.max(0, totalEarnedSalary - advanceDeduction);
+    const remainingAdvanceAfter = Math.max(0, advInfo.activeBalance - advanceDeduction);
+
     return {
       totalDaysInMonth,
       presentDays,
@@ -658,8 +720,107 @@ export default function PayrollClient() {
       unpaidLeaves,
       payableDays,
       perDayRate,
-      totalEarnedSalary
+      totalEarnedSalary,
+      activeAdvanceBalance: advInfo.activeBalance,
+      advanceDeduction,
+      netPayableSalary,
+      remainingAdvanceAfter,
+      advanceCount: advInfo.advanceCount,
     };
+  };
+
+  // Handle Recording / Processing Salary and Recovering Advance Installments
+  const handleProcessSalaryPayout = async (emp: EmployeeRecord) => {
+    const calc = getSalaryCalculations(emp);
+
+    try {
+      setIsProcessingPayout(true);
+
+      // If there is an advance deduction, apply it to employee_advances
+      if (calc.advanceDeduction > 0) {
+        let remainingDeductionToApply = calc.advanceDeduction;
+        const empAdvs = allAdvances.filter(
+          (a) => a.employeeId === emp.id && a.status === 'Active'
+        );
+
+        for (const adv of empAdvs) {
+          if (remainingDeductionToApply <= 0) break;
+
+          let updatedInstallments = [...(adv.installments || [])];
+          let advRepaid = adv.totalRepaid || 0;
+          let advBalance = adv.remainingBalance ?? (adv.amount - advRepaid);
+
+          // Find pending installment matching this month or earliest pending
+          const instIdx = updatedInstallments.findIndex(
+            (i) => (i.monthDue === selectedMonth || !i.monthDue) && i.status === 'Pending'
+          );
+          const targetIdx = instIdx !== -1 ? instIdx : updatedInstallments.findIndex((i) => i.status === 'Pending');
+
+          const deductionForThisAdv = Math.min(remainingDeductionToApply, advBalance);
+
+          if (targetIdx !== -1) {
+            updatedInstallments[targetIdx] = {
+              ...updatedInstallments[targetIdx],
+              status: 'Deducted',
+              deductedInPayrollMonth: selectedMonth,
+              deductedAt: new Date().toISOString(),
+            };
+          } else {
+            updatedInstallments.push({
+              installmentNumber: updatedInstallments.length + 1,
+              amount: deductionForThisAdv,
+              monthDue: selectedMonth,
+              status: 'Deducted',
+              deductedInPayrollMonth: selectedMonth,
+              deductedAt: new Date().toISOString(),
+            });
+          }
+
+          advRepaid += deductionForThisAdv;
+          advBalance = Math.max(0, adv.amount - advRepaid);
+          const newStatus = advBalance <= 0 ? 'Completed' : 'Active';
+          remainingDeductionToApply -= deductionForThisAdv;
+
+          await updateDoc(doc(db, 'employee_advances', adv.id), {
+            installments: updatedInstallments,
+            totalRepaid: advRepaid,
+            remainingBalance: advBalance,
+            status: newStatus,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      // Record payroll document
+      await addDoc(collection(db, 'payroll_records'), {
+        employeeId: emp.id,
+        employeeName: emp.name,
+        month: selectedMonth,
+        baseSalary: emp.salary,
+        paymentMode: emp.paymentMode,
+        presentDays: calc.presentDays,
+        unpaidLeaves: calc.unpaidLeaves,
+        payableDays: calc.payableDays,
+        grossEarnedSalary: calc.totalEarnedSalary,
+        advanceDeduction: calc.advanceDeduction,
+        netPaidSalary: calc.netPayableSalary,
+        remainingAdvanceBalance: calc.remainingAdvanceAfter,
+        paidAt: serverTimestamp(),
+      });
+
+      toast.success(
+        'Salary Payout Processed',
+        `Recorded payout of ₹${calc.netPayableSalary.toLocaleString('en-IN')}${
+          calc.advanceDeduction > 0 ? ` (₹${calc.advanceDeduction.toLocaleString('en-IN')} advance deducted)` : ''
+        } for ${emp.name}.`
+      );
+      setSelectedPayslipEmp(null);
+    } catch (err: any) {
+      console.error('Error processing salary payout:', err);
+      toast.error('Payout Failed', err?.message || 'Failed to process payroll');
+    } finally {
+      setIsProcessingPayout(false);
+    }
   };
 
   return (
@@ -867,49 +1028,57 @@ export default function PayrollClient() {
 
           {/* Payroll Salary Calculation Table */}
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Monthly Salary Breakdown ({selectedMonth})
-              </h2>
-              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-                Auto-calculated from attendance logs
+            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">
+                  Monthly Salary & Advance Recovery Breakdown ({selectedMonth})
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Gross earned salary is calculated from attendance logs. Advance deduction can be adjusted per employee.
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 self-start sm:self-auto">
+                Real-time Advance Sync Active
               </span>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[700px]">
+              <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
                   <tr className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-slate-100">
-                    <th className="py-3.5 px-5">Employee</th>
-                    <th className="py-3.5 px-4">Payment Mode</th>
-                    <th className="py-3.5 px-4">Base Rate</th>
-                    <th className="py-3.5 px-4">Per Day Rate</th>
-                    <th className="py-3.5 px-4">Present / Leaves</th>
-                    <th className="py-3.5 px-4">Accepted / Unpaid</th>
-                    <th className="py-3.5 px-4 text-right">Net Earned Salary</th>
-                    <th className="py-3.5 px-5 text-right">Payslip</th>
+                    <th className="py-3.5 px-4">Employee</th>
+                    <th className="py-3.5 px-3">Mode</th>
+                    <th className="py-3.5 px-3">Base Rate</th>
+                    <th className="py-3.5 px-3">Present/Leaves</th>
+                    <th className="py-3.5 px-3 text-right">Earned Salary</th>
+                    <th className="py-3.5 px-3 text-center">Active Advance</th>
+                    <th className="py-3.5 px-3 text-center">Cut from Advance (₹)</th>
+                    <th className="py-3.5 px-4 text-right">Net Payable</th>
+                    <th className="py-3.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {employees.map((emp) => {
                     const calc = getSalaryCalculations(emp);
+                    const hasActiveAdv = calc.activeAdvanceBalance > 0;
+
                     return (
                       <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="py-3.5 px-5">
-                          <div className="flex items-center gap-3">
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2.5">
                             <img
                               src={emp.photoUrl}
                               alt={emp.name}
-                              className="w-9 h-9 rounded-xl object-cover border border-slate-200"
+                              className="w-8 h-8 rounded-xl object-cover border border-slate-200"
                             />
                             <div>
-                              <p className="font-semibold text-slate-900">{emp.name}</p>
+                              <p className="font-bold text-slate-900">{emp.name}</p>
                               <p className="text-[10px] text-slate-400 font-mono">{emp.empId}</p>
                             </div>
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-3">
                           <span
                             className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md border ${
                               emp.paymentMode === 'monthly'
@@ -921,45 +1090,92 @@ export default function PayrollClient() {
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-4 font-semibold text-slate-800">
+                        <td className="py-3.5 px-3 font-semibold text-slate-800">
                           ₹{emp.salary.toLocaleString('en-IN')}{' '}
                           <span className="text-[10px] font-normal text-slate-400">
-                            ({emp.paymentMode === 'monthly' ? '/mo' : '/day'})
+                            /{emp.paymentMode === 'monthly' ? 'mo' : 'day'}
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-4 font-mono font-semibold text-indigo-600">
-                          ₹{calc.perDayRate.toLocaleString('en-IN')} / day
-                        </td>
-
-                        <td className="py-3.5 px-4 font-semibold">
-                          <span className="text-emerald-600">{calc.presentDays} Days Present</span>
-                        </td>
-
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-3">
                           <div className="text-[11px]">
-                            <span className="text-slate-600">Leaves Limit: {calc.acceptedLeaves}</span>
-                            {calc.unpaidLeaves > 0 ? (
-                              <span className="block text-rose-600 font-semibold">
-                                {calc.unpaidLeaves} Unpaid Days Deducted
+                            <span className="text-emerald-700 font-semibold">{calc.presentDays} Present</span>
+                            {calc.unpaidLeaves > 0 && (
+                              <span className="block text-rose-600 font-medium">
+                                -{calc.unpaidLeaves} Unpaid
                               </span>
-                            ) : (
-                              <span className="block text-emerald-600 font-medium">0 Deductions</span>
                             )}
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-4 text-right font-semibold text-sm text-slate-900">
+                        <td className="py-3.5 px-3 text-right font-semibold text-slate-900">
                           ₹{calc.totalEarnedSalary.toLocaleString('en-IN')}
                         </td>
 
-                        <td className="py-3.5 px-5 text-right">
-                          <button
-                            onClick={() => setSelectedPayslipEmp(emp)}
-                            className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold border border-indigo-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <FileText size={13} /> View Slip
-                          </button>
+                        {/* Active Advance Balance */}
+                        <td className="py-3.5 px-3 text-center">
+                          {hasActiveAdv ? (
+                            <span className="inline-flex items-center gap-1 font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[11px]">
+                              <HandCoins size={11} className="text-amber-700" />
+                              ₹{calc.activeAdvanceBalance.toLocaleString('en-IN')}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-medium">₹0</span>
+                          )}
+                        </td>
+
+                        {/* Cut Amount from Advance (Editable) */}
+                        <td className="py-3.5 px-3 text-center">
+                          {hasActiveAdv ? (
+                            <div className="inline-flex items-center gap-1">
+                              <span className="text-rose-600 font-bold text-xs">-₹</span>
+                              <input
+                                type="number"
+                                min={0}
+                                max={calc.activeAdvanceBalance}
+                                value={
+                                  customAdvanceDeductions[`${emp.id}_${selectedMonth}`] !== undefined
+                                    ? customAdvanceDeductions[`${emp.id}_${selectedMonth}`]
+                                    : calc.advanceDeduction
+                                }
+                                onChange={(e) => {
+                                  const val = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
+                                  setCustomAdvanceDeductions((prev) => ({
+                                    ...prev,
+                                    [`${emp.id}_${selectedMonth}`]: Math.max(0, Math.min(calc.activeAdvanceBalance, val)),
+                                  }));
+                                }}
+                                className="w-20 px-2 py-1 text-center font-bold text-rose-700 bg-rose-50/70 border border-rose-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-400 text-xs"
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">-</span>
+                          )}
+                        </td>
+
+                        {/* Net Payable Salary */}
+                        <td className="py-3.5 px-4 text-right font-black text-sm text-emerald-700">
+                          ₹{calc.netPayableSalary.toLocaleString('en-IN')}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setSelectedPayslipEmp(emp)}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                              title="View & Process Payslip"
+                            >
+                              <FileText size={12} /> Slip
+                            </button>
+                            <button
+                              onClick={() => handleProcessSalaryPayout(emp)}
+                              disabled={isProcessingPayout}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs disabled:opacity-50"
+                              title="Record Payout & Recover Advance"
+                            >
+                              <Check size={12} /> Pay
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

@@ -30,7 +30,16 @@ import {
   ShieldCheck,
   Factory,
   Package,
-  Boxes
+  Boxes,
+  HandCoins,
+  Wallet,
+  Receipt,
+  CreditCard,
+  ChevronDown,
+  ChevronUp,
+  History,
+  Sparkles,
+  PlusCircle,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import {
@@ -46,6 +55,7 @@ import {
 } from 'firebase/firestore';
 import { toast } from '@/context/ToastContext';
 import CustomSelect from '@/components/CustomSelect';
+import CustomDatePicker from '@/components/CustomDatePicker';
 import Pagination from '@/components/Pagination';
 import { uploadToImageKit } from '@/lib/imageCompressor';
 import {
@@ -55,6 +65,37 @@ import {
 } from '@/lib/menuConstants';
 
 export type { MenuAccessPermission };
+
+export interface AdvanceInstallment {
+  id?: string;
+  installmentNumber?: number;
+  amount: number;
+  monthDue?: string; // 'YYYY-MM'
+  paymentDate?: string; // 'YYYY-MM-DD'
+  paymentMode?: 'Salary Deduction' | 'Cash' | 'UPI' | 'Bank Transfer';
+  note?: string;
+  status: 'Pending' | 'Deducted' | 'Paid';
+  deductedInPayrollMonth?: string;
+  deductedAt?: any;
+  type?: 'salary_deduction' | 'manual_installment';
+}
+
+export interface EmployeeAdvanceRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  amount: number;
+  date: string; // 'YYYY-MM-DD'
+  reason?: string;
+  numberOfInstallments?: number;
+  monthlyInstallmentAmount?: number;
+  installments: AdvanceInstallment[];
+  totalRepaid: number;
+  remainingBalance: number;
+  status: 'Active' | 'Completed' | 'Cancelled';
+  createdAt?: any;
+  updatedAt?: any;
+}
 
 export interface EmployeeRecord {
   id: string;
@@ -115,6 +156,35 @@ export default function EmployeesClient() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
+  // Advance Management state
+  const [allAdvances, setAllAdvances] = useState<EmployeeAdvanceRecord[]>([]);
+  const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
+  const [selectedAdvanceEmp, setSelectedAdvanceEmp] = useState<EmployeeRecord | null>(null);
+  const [advAmount, setAdvAmount] = useState('');
+  const [advDate, setAdvDate] = useState(() => {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  });
+  const [advReason, setAdvReason] = useState('');
+  const [isSavingAdv, setIsSavingAdv] = useState(false);
+
+  // Manual Installment state
+  const [selectedAdvForInstallmentId, setSelectedAdvForInstallmentId] = useState<string | null>(null);
+  const [manualInstAmount, setManualInstAmount] = useState<string>('');
+  const [manualInstDate, setManualInstDate] = useState<string>(() => {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  });
+  const [manualInstMode, setManualInstMode] = useState<string>('Cash');
+  const [manualInstNote, setManualInstNote] = useState<string>('');
+  const [isSavingManualInst, setIsSavingManualInst] = useState(false);
+
   // Firestore Sync & Realtime Updates
   useEffect(() => {
     setLoading(true);
@@ -160,10 +230,24 @@ export default function EmployeesClient() {
       (err) => console.warn('Error fetching pck units for assignment:', err)
     );
 
+    // Fetch employee advances
+    const unsubAdvances = onSnapshot(
+      collection(db, 'employee_advances'),
+      (snap) => {
+        const list: EmployeeAdvanceRecord[] = snap.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<EmployeeAdvanceRecord, 'id'>)
+        }));
+        setAllAdvances(list);
+      },
+      (err) => console.warn('Error fetching employee advances:', err)
+    );
+
     return () => {
       unsubscribe();
       unsubMfg();
       unsubPck();
+      unsubAdvances();
     };
   }, []);
 
@@ -500,6 +584,169 @@ export default function EmployeesClient() {
     }
   };
 
+  // Open Advance Management Modal
+  const handleOpenAdvanceModal = (emp: EmployeeRecord) => {
+    setSelectedAdvanceEmp(emp);
+    setAdvAmount('');
+    setAdvReason('');
+    setSelectedAdvForInstallmentId(null);
+    setManualInstAmount('');
+    setManualInstNote('');
+    setManualInstMode('Cash');
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    setAdvDate(`${y}-${m}-${d}`);
+    setManualInstDate(`${y}-${m}-${d}`);
+    setIsAdvanceModalOpen(true);
+  };
+
+  // Create New Advance
+  const handleCreateAdvance = async () => {
+    if (!selectedAdvanceEmp) return;
+    const amountNum = parseFloat(advAmount);
+
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast.warning('Invalid Amount', 'Please enter a valid positive advance amount.');
+      return;
+    }
+
+    try {
+      setIsSavingAdv(true);
+
+      const docRef = await addDoc(collection(db, 'employee_advances'), {
+        employeeId: selectedAdvanceEmp.id,
+        employeeName: selectedAdvanceEmp.name,
+        amount: amountNum,
+        date: advDate,
+        reason: advReason.trim() || 'General Advance',
+        totalRepaid: 0,
+        remainingBalance: amountNum,
+        installments: [],
+        status: 'Active',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      setSelectedAdvForInstallmentId(docRef.id);
+
+      toast.success(
+        'Advance Issued',
+        `Successfully issued advance of ₹${amountNum.toLocaleString('en-IN')} for ${selectedAdvanceEmp.name}.`
+      );
+      setAdvAmount('');
+      setAdvReason('');
+    } catch (err: any) {
+      console.error('Error creating advance:', err);
+      toast.error('Failed to create advance', err?.message);
+    } finally {
+      setIsSavingAdv(false);
+    }
+  };
+
+  // Record Manual Installment Repayment
+  const handleAddManualInstallment = async (targetAdvanceId?: string) => {
+    if (!selectedAdvanceEmp) return;
+    const amountNum = parseFloat(manualInstAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast.warning('Invalid Amount', 'Please enter a valid installment amount.');
+      return;
+    }
+
+    const empAdvs = allAdvances
+      .filter((a) => a.employeeId === selectedAdvanceEmp.id && a.status !== 'Cancelled')
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    const advId = targetAdvanceId || selectedAdvForInstallmentId;
+    const targetAdv =
+      empAdvs.find((a) => a.id === advId) ||
+      empAdvs.find((a) => a.status === 'Active') ||
+      empAdvs[0];
+
+    if (!targetAdv) {
+      toast.warning('No Advance Available', 'Please select an advance record to add installment.');
+      return;
+    }
+
+    const currentBalance = targetAdv.remainingBalance ?? (targetAdv.amount - (targetAdv.totalRepaid || 0));
+    if (amountNum > currentBalance) {
+      toast.warning('Amount Exceeds Balance', `Remaining balance on this advance is ₹${currentBalance.toLocaleString('en-IN')}. Cannot enter higher amount.`);
+      return;
+    }
+
+    try {
+      setIsSavingManualInst(true);
+      const newRepaid = (targetAdv.totalRepaid || 0) + amountNum;
+      const newRemaining = Math.max(0, targetAdv.amount - newRepaid);
+      const newStatus = newRemaining <= 0 ? 'Completed' : 'Active';
+
+      const newEntry: AdvanceInstallment = {
+        id: `inst_${Date.now()}`,
+        installmentNumber: (targetAdv.installments?.length || 0) + 1,
+        amount: amountNum,
+        monthDue: (manualInstDate || new Date().toISOString().slice(0, 10)).slice(0, 7),
+        paymentDate: manualInstDate || new Date().toISOString().slice(0, 10),
+        paymentMode: manualInstMode as any,
+        note: manualInstNote.trim() || `Manual ${manualInstMode} Installment`,
+        status: 'Paid',
+        type: 'manual_installment',
+        deductedInPayrollMonth: `Manual (${manualInstMode})`,
+        deductedAt: new Date().toISOString(),
+      };
+
+      // Put latest installment at the top of the array
+      const updatedInstallments = [newEntry, ...(targetAdv.installments || [])];
+
+      await updateDoc(doc(db, 'employee_advances', targetAdv.id), {
+        totalRepaid: newRepaid,
+        remainingBalance: newRemaining,
+        status: newStatus,
+        installments: updatedInstallments,
+        updatedAt: serverTimestamp(),
+      });
+
+      toast.success(
+        'Installment Recorded',
+        `Recorded ₹${amountNum.toLocaleString('en-IN')} manual installment via ${manualInstMode} for ${selectedAdvanceEmp.name}.`
+      );
+      setManualInstAmount('');
+      setManualInstNote('');
+    } catch (err: any) {
+      console.error('Error adding manual installment:', err);
+      toast.error('Failed to record installment', err?.message);
+    } finally {
+      setIsSavingManualInst(false);
+    }
+  };
+
+  // Delete / Revert an Installment entry
+  const handleDeleteInstallment = async (adv: EmployeeAdvanceRecord, instIdx: number) => {
+    if (!confirm('Are you sure you want to delete this installment record? The advance remaining balance will be restored.')) return;
+
+    try {
+      const targetInst = adv.installments[instIdx];
+      const instAmount = targetInst.amount || 0;
+      const updatedInstallments = adv.installments.filter((_, idx) => idx !== instIdx);
+      const newRepaid = Math.max(0, (adv.totalRepaid || 0) - instAmount);
+      const newRemaining = adv.amount - newRepaid;
+      const newStatus = newRemaining > 0 ? 'Active' : 'Completed';
+
+      await updateDoc(doc(db, 'employee_advances', adv.id), {
+        totalRepaid: newRepaid,
+        remainingBalance: newRemaining,
+        status: newStatus,
+        installments: updatedInstallments,
+        updatedAt: serverTimestamp(),
+      });
+
+      toast.success('Installment Removed', 'Installment entry removed and balance restored.');
+    } catch (err: any) {
+      console.error('Error deleting installment:', err);
+      toast.error('Failed to delete installment', err?.message);
+    }
+  };
+
   // Filter logic
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
@@ -731,31 +978,59 @@ export default function EmployeesClient() {
                       </span>
                     </span>
                   </div>
+
+                  {/* Active Advance Balance Info if any */}
+                  {(() => {
+                    const empAdvs = allAdvances.filter((a) => a.employeeId === emp.id && a.status === 'Active');
+                    const pendingAdvance = empAdvs.reduce((sum, a) => sum + (a.remainingBalance ?? (a.amount - (a.totalRepaid || 0))), 0);
+                    if (pendingAdvance <= 0) return null;
+                    return (
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] bg-amber-50/60 px-2.5 py-1 rounded-lg border border-amber-200">
+                        <span className="font-semibold text-amber-900 flex items-center gap-1">
+                          <HandCoins size={12} className="text-amber-700" /> Active Advance:
+                        </span>
+                        <span className="font-bold text-amber-900 font-mono">
+                          ₹{pendingAdvance.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Card Actions */}
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                  <Link
-                    href={`/employee-portal?id=${emp.id}`}
-                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 hover:underline"
-                  >
-                    <Eye size={14} /> View Portal
-                  </Link>
-
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
+                    <Link
+                      href={`/employee-portal?id=${emp.id}`}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 hover:underline"
+                    >
+                      <Eye size={13} /> View Portal
+                    </Link>
+
+                    <button
+                      onClick={() => handleOpenAdvanceModal(emp)}
+                      className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                      title="Manage Advance Loans & Installments"
+                    >
+                      <HandCoins size={13} className="text-amber-700" />
+                      <span>Manage Advance</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => handleOpenModal(emp)}
                       className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 transition-colors cursor-pointer"
                       title="Edit Employee"
                     >
-                      <Edit2 size={14} />
+                      <Edit2 size={13} />
                     </button>
                     <button
                       onClick={() => handleDelete(emp.id)}
                       className="p-1.5 rounded-lg bg-white border border-slate-200 text-rose-500 hover:bg-rose-50 hover:border-rose-200 transition-colors cursor-pointer"
                       title="Delete Employee"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
@@ -1286,6 +1561,492 @@ export default function EmployeesClient() {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Advance Full-Screen Modal */}
+      {isAdvanceModalOpen && selectedAdvanceEmp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full h-[95vh] max-w-[98vw] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-6 py-3.5 border-b border-slate-100 bg-amber-50/70 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-600 text-white flex items-center justify-center shadow-xs">
+                  <HandCoins size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    Manage Advances &amp; Installments: {selectedAdvanceEmp.name}
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                      {selectedAdvanceEmp.empId}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Add employee advances on the left, and record/view monthly installments and salary deductions on the right.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsAdvanceModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Top Metrics Strip */}
+            {(() => {
+              const empAdvs = allAdvances
+                .filter((a) => a.employeeId === selectedAdvanceEmp.id && a.status !== 'Cancelled')
+                .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+              const totalTaken = empAdvs.reduce((sum, a) => sum + (a.amount || 0), 0);
+              const totalRepaid = empAdvs.reduce((sum, a) => sum + (a.totalRepaid || 0), 0);
+              const remainingBalance = empAdvs.reduce((sum, a) => sum + (a.remainingBalance ?? (a.amount - (a.totalRepaid || 0))), 0);
+
+              const activeAdv =
+                empAdvs.find((a) => a.id === selectedAdvForInstallmentId) ||
+                empAdvs.find((a) => a.status === 'Active') ||
+                empAdvs[0];
+
+              return (
+                <>
+                  <div className="px-6 py-3 bg-slate-50 border-b border-slate-200/80 flex-shrink-0">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Advances Given</p>
+                          <h4 className="text-lg font-black text-slate-900">₹{totalTaken.toLocaleString('en-IN')}</h4>
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
+                          {empAdvs.length} Advances
+                        </span>
+                      </div>
+
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Total Recovered / Repaid</p>
+                          <h4 className="text-lg font-black text-emerald-700">₹{totalRepaid.toLocaleString('en-IN')}</h4>
+                        </div>
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-lg">
+                          {totalTaken > 0 ? Math.round((totalRepaid / totalTaken) * 100) : 0}% Recovered
+                        </span>
+                      </div>
+
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold text-amber-900 uppercase tracking-wider">Active Pending Balance</p>
+                          <h4 className="text-lg font-black text-amber-700">₹{remainingBalance.toLocaleString('en-IN')}</h4>
+                        </div>
+                        <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-1 rounded-lg">
+                          Outstanding
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Main 2-Column Full Screen Layout */}
+                  <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
+                    {/* LEFT COLUMN: ADVANCES */}
+                    <div className="lg:col-span-6 flex flex-col overflow-y-auto p-5 space-y-4 border-r border-slate-200 bg-slate-50/40">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <div className="flex items-center gap-2">
+                          <Wallet size={16} className="text-amber-600" />
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                            1. Employee Advances
+                          </h4>
+                        </div>
+                        <span className="text-[11px] text-slate-500 font-semibold">
+                          {empAdvs.length} Recorded
+                        </span>
+                      </div>
+
+                      {/* Issue New Advance Form */}
+                      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs space-y-3">
+                        <div className="flex items-center gap-1.5">
+                          <PlusCircle size={15} className="text-amber-600" />
+                          <h5 className="text-xs font-bold text-slate-900">Issue New Advance</h5>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                              Advance Amount (₹) <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="number"
+                              placeholder="e.g. 5000"
+                              value={advAmount}
+                              onChange={(e) => setAdvAmount(e.target.value)}
+                              className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                              Issue Date <span className="text-rose-500">*</span>
+                            </label>
+                            <CustomDatePicker
+                              value={advDate}
+                              onChange={setAdvDate}
+                              allowAll={false}
+                              size="sm"
+                            />
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                              Reason / Purpose
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Festival Advance, Medical, Personal"
+                              value={advReason}
+                              onChange={(e) => setAdvReason(e.target.value)}
+                              className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[11px] text-slate-500">
+                            {parseFloat(advAmount) > 0 ? (
+                              <strong className="text-amber-700">₹{parseFloat(advAmount).toLocaleString('en-IN')}</strong>
+                            ) : (
+                              'Enter amount to issue'
+                            )}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={isSavingAdv || !advAmount || parseFloat(advAmount) <= 0}
+                            onClick={handleCreateAdvance}
+                            className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            {isSavingAdv ? <RefreshCw size={13} className="animate-spin" /> : <PlusCircle size={13} />}
+                            <span>Issue Advance</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Advances List (Latest First) */}
+                      <div className="space-y-3 pt-1">
+                        <h5 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          Advances List (Latest First)
+                        </h5>
+
+                        {empAdvs.length === 0 ? (
+                          <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-400 text-xs">
+                            No advances issued yet for this employee.
+                          </div>
+                        ) : (
+                          empAdvs.map((adv) => {
+                            const isSelected = activeAdv?.id === adv.id;
+                            const percent = adv.amount > 0 ? Math.min(100, Math.round(((adv.totalRepaid || 0) / adv.amount) * 100)) : 0;
+                            const remaining = adv.remainingBalance ?? (adv.amount - (adv.totalRepaid || 0));
+
+                            return (
+                              <div
+                                key={adv.id}
+                                onClick={() => setSelectedAdvForInstallmentId(adv.id)}
+                                className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-amber-50/50 border-amber-400 ring-2 ring-amber-400/30 shadow-xs'
+                                    : 'bg-white border-slate-200 hover:border-amber-200 shadow-2xs'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-center gap-2.5">
+                                    <div
+                                      className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${
+                                        adv.status === 'Completed'
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : 'bg-amber-100 text-amber-800'
+                                      }`}
+                                    >
+                                      ₹
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <h6 className="font-bold text-sm text-slate-900">
+                                          ₹{adv.amount.toLocaleString('en-IN')}
+                                        </h6>
+                                        <span
+                                          className={`text-[9px] font-bold px-2 py-0.2 rounded-full uppercase ${
+                                            adv.status === 'Completed'
+                                              ? 'bg-emerald-100 text-emerald-800'
+                                              : 'bg-amber-100 text-amber-800'
+                                          }`}
+                                        >
+                                          {adv.status}
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-slate-500 mt-0.5">
+                                        Issued on <span className="font-semibold text-slate-700">{adv.date}</span> • {adv.reason || 'General Advance'}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right">
+                                    <span className="text-xs font-bold text-slate-800 block">
+                                      Remaining: ₹{remaining.toLocaleString('en-IN')}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">
+                                      Repaid ₹{(adv.totalRepaid || 0).toLocaleString('en-IN')} ({percent}%)
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Progress Bar */}
+                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-3">
+                                  <div
+                                    className="bg-emerald-500 h-full rounded-full transition-all"
+                                    style={{ width: `${percent}%` }}
+                                  />
+                                </div>
+
+                                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
+                                  <span>{(adv.installments || []).length} Installments / Deductions</span>
+                                  <span className={`font-bold ${isSelected ? 'text-amber-700' : 'text-slate-400'}`}>
+                                    {isSelected ? '✓ Selected for Installments' : 'Click to select'}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+
+                    {/* RIGHT COLUMN: INSTALLMENTS & REPAYMENTS */}
+                    <div className="lg:col-span-6 flex flex-col overflow-y-auto p-5 space-y-4 bg-white">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <div className="flex items-center gap-2">
+                          <CreditCard size={16} className="text-emerald-600" />
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                            2. Installments &amp; Salary Deductions
+                          </h4>
+                        </div>
+                        {activeAdv && (
+                          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            Paying towards: ₹{activeAdv.amount.toLocaleString('en-IN')} Advance
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Add Manual Installment Form */}
+                      {activeAdv && (
+                        <div className="bg-emerald-50/40 border border-emerald-200/80 rounded-2xl p-4 shadow-2xs space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <PlusCircle size={15} className="text-emerald-700" />
+                              <h5 className="text-xs font-bold text-slate-900">Add Manual Installment Repayment</h5>
+                            </div>
+                            <span className="text-[11px] font-bold text-emerald-800">
+                              Pending Balance: ₹{(activeAdv.remainingBalance ?? (activeAdv.amount - (activeAdv.totalRepaid || 0))).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                Installment Amount (₹) <span className="text-rose-500">*</span>
+                              </label>
+                              <input
+                                type="number"
+                                placeholder="e.g. 1000"
+                                value={manualInstAmount}
+                                onChange={(e) => setManualInstAmount(e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                Repayment Date <span className="text-rose-500">*</span>
+                              </label>
+                              <CustomDatePicker
+                                value={manualInstDate}
+                                onChange={setManualInstDate}
+                                allowAll={false}
+                                size="sm"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                Payment Mode
+                              </label>
+                              <CustomSelect
+                                options={[
+                                  { value: 'Cash', label: 'Cash (Hand-to-Hand)' },
+                                  { value: 'UPI', label: 'UPI / GPay / PhonePe' },
+                                  { value: 'Bank Transfer', label: 'Bank Transfer / NEFT' },
+                                ]}
+                                value={manualInstMode}
+                                onChange={setManualInstMode}
+                                size="sm"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-3">
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                Note / Remarks
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Returned direct cash in office, festival bonus deduction"
+                                value={manualInstNote}
+                                onChange={(e) => setManualInstNote(e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Quick Amount Buttons */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-semibold text-slate-500">Quick Fill:</span>
+                            {[500, 1000, 2000, 5000].map((amt) => (
+                              <button
+                                key={amt}
+                                type="button"
+                                onClick={() => setManualInstAmount(amt.toString())}
+                                className="px-2 py-0.5 text-[10px] font-bold rounded-lg bg-white border border-emerald-200 hover:bg-emerald-100 text-emerald-800 transition-colors cursor-pointer"
+                              >
+                                +₹{amt.toLocaleString('en-IN')}
+                              </button>
+                            ))}
+                            {activeAdv && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setManualInstAmount(
+                                    (activeAdv.remainingBalance ?? (activeAdv.amount - (activeAdv.totalRepaid || 0))).toString()
+                                  )
+                                }
+                                className="px-2 py-0.5 text-[10px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
+                              >
+                                Full Remaining
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-end pt-1">
+                            <button
+                              type="button"
+                              disabled={isSavingManualInst || !manualInstAmount || parseFloat(manualInstAmount) <= 0}
+                              onClick={() => handleAddManualInstallment(activeAdv.id)}
+                              className="px-4 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                            >
+                              {isSavingManualInst ? <RefreshCw size={13} className="animate-spin" /> : <PlusCircle size={13} />}
+                              <span>Record Installment Repayment</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Installments & Deductions History List (Latest on top) */}
+                      <div className="space-y-3 pt-1">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            Installments &amp; Deductions History (Latest at Top)
+                          </h5>
+                          {activeAdv && (
+                            <span className="text-[10px] text-slate-400">
+                              {(activeAdv.installments || []).length} entries for this advance
+                            </span>
+                          )}
+                        </div>
+
+                        {(!activeAdv || !activeAdv.installments || activeAdv.installments.length === 0) ? (
+                          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center text-slate-400 text-xs">
+                            <HandCoins size={32} className="mx-auto text-slate-300 mb-2" />
+                            <p className="font-semibold">No Installments or Deductions Recorded Yet</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              Add manual installments above or deduct amounts during salary calculation in the Payroll page.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5">
+                            {(activeAdv.installments || []).map((inst, idx) => (
+                              <div
+                                key={inst.id || idx}
+                                className="p-3.5 rounded-2xl border border-slate-200/90 bg-white hover:border-emerald-200 shadow-2xs flex items-center justify-between gap-3 transition-all"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
+                                      inst.type === 'manual_installment'
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : 'bg-indigo-100 text-indigo-800'
+                                    }`}
+                                  >
+                                    {inst.type === 'manual_installment' ? <Wallet size={16} /> : <Receipt size={16} />}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <h6 className="font-bold text-sm text-emerald-800">
+                                        ₹{inst.amount.toLocaleString('en-IN')}
+                                      </h6>
+                                      <span
+                                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                                          inst.type === 'manual_installment'
+                                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                            : 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                                        }`}
+                                      >
+                                        {inst.type === 'manual_installment'
+                                          ? `Manual (${inst.paymentMode || 'Cash'})`
+                                          : `Salary Deduction (${inst.deductedInPayrollMonth || inst.monthDue})`}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 mt-0.5">
+                                      Paid Date: <strong className="text-slate-700">{inst.paymentDate || inst.deductedInPayrollMonth || '-'}</strong>
+                                      {inst.note ? ` • ${inst.note}` : ''}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                                    ✓ Repaid
+                                  </span>
+
+                                  {inst.type === 'manual_installment' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteInstallment(activeAdv, idx)}
+                                      className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                                      title="Delete Installment Record"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* Modal Footer */}
+            <div className="px-6 py-2.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between flex-shrink-0">
+              <span className="text-xs text-slate-500 font-medium">
+                💡 Employee advances can be repaid via manual installments here or automatically deducted from monthly salary in Payroll.
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsAdvanceModalOpen(false)}
+                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                Done / Close
+              </button>
+            </div>
           </div>
         </div>
       )}

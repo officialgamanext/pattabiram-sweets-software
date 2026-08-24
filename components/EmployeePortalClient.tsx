@@ -21,18 +21,24 @@ import {
   FileText,
   DollarSign,
   ChevronDown,
+  ChevronUp,
   RefreshCw,
   Camera,
   X,
   Printer,
   Building,
   Check,
-  Lock
+  Lock,
+  HandCoins,
+  Wallet,
+  Receipt,
+  History,
+  Sparkles,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { toast } from '@/context/ToastContext';
 import { collection, onSnapshot, addDoc, serverTimestamp, query } from 'firebase/firestore';
-import { EmployeeRecord } from './EmployeesClient';
+import { EmployeeRecord, EmployeeAdvanceRecord } from './EmployeesClient';
 import { AttendanceRecord } from './PayrollClient';
 import { useAuth } from '@/context/AuthContext';
 import CustomSelect from '@/components/CustomSelect';
@@ -115,12 +121,16 @@ export default function EmployeePortalClient() {
   }, [isSuperAdmin, queryEmpId, matchedLoggedEmp, employees, selectedEmpId]);
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<'attendance' | 'salary' | 'profile'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'salary' | 'advance' | 'profile'>('attendance');
 
   // Month selector state for Salary tab
   const [selectedMonth, setSelectedMonth] = useState<string>(
     new Date().toISOString().slice(0, 7)
   );
+
+  // Advances state
+  const [allAdvances, setAllAdvances] = useState<EmployeeAdvanceRecord[]>([]);
+  const [expandedAdvId, setExpandedAdvId] = useState<string | null>(null);
 
   // Attendance Marking Modal States
   const [verificationStep, setVerificationStep] = useState<'idle' | 'location' | 'face' | 'success' | 'out_of_range'>('idle');
@@ -142,9 +152,22 @@ export default function EmployeePortalClient() {
   const prevFrameDataRef = useRef<Uint8ClampedArray | null>(null);
   const targetEmpRef = useRef<EmployeeRecord | null>(null);
 
-  // Load Employees and Attendance data
+  // Load Employees, Attendance and Advances data
   useEffect(() => {
     setLoading(true);
+
+    // Sync Advances
+    const unsubAdvances = onSnapshot(
+      collection(db, 'employee_advances'),
+      (snapshot) => {
+        const list: EmployeeAdvanceRecord[] = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<EmployeeAdvanceRecord, 'id'>)
+        }));
+        setAllAdvances(list);
+      },
+      (err) => console.warn('Error fetching advances in portal:', err)
+    );
 
     const localEmps = localStorage.getItem('pattabiram_employees');
     if (localEmps) {
@@ -168,8 +191,6 @@ export default function EmployeePortalClient() {
         }
       });
     } catch {}
-
-
 
     const localAtt = localStorage.getItem('pattabiram_attendance');
     if (localAtt) {
@@ -801,6 +822,18 @@ export default function EmployeePortalClient() {
         </button>
 
         <button
+          onClick={() => setActiveTab('advance')}
+          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeTab === 'advance'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
+              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+          }`}
+        >
+          <HandCoins size={16} />
+          Advance & Loans
+        </button>
+
+        <button
           onClick={() => setActiveTab('profile')}
           className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
             activeTab === 'profile'
@@ -1196,6 +1229,179 @@ export default function EmployeePortalClient() {
 
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB 4: ADVANCE DETAILS (VIEW-ONLY) */}
+      {activeTab === 'advance' && (
+        <div className="space-y-6">
+          {/* Summary Cards */}
+          {(() => {
+            const empAdvs = allAdvances.filter((a) => a.employeeId === selectedEmp.id && a.status !== 'Cancelled');
+            const totalTaken = empAdvs.reduce((sum, a) => sum + (a.amount || 0), 0);
+            const totalRepaid = empAdvs.reduce((sum, a) => sum + (a.totalRepaid || 0), 0);
+            const remainingBalance = empAdvs.reduce((sum, a) => sum + (a.remainingBalance ?? (a.amount - (a.totalRepaid || 0))), 0);
+
+            return (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs">
+                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Advance Availed</p>
+                    <h4 className="text-2xl font-black text-slate-900 mt-1">₹{totalTaken.toLocaleString('en-IN')}</h4>
+                    <p className="text-xs text-slate-400 mt-1">{empAdvs.length} total advances recorded</p>
+                  </div>
+
+                  <div className="bg-emerald-50/70 p-5 rounded-2xl border border-emerald-200/90 shadow-xs">
+                    <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Total Repaid via Salary</p>
+                    <h4 className="text-2xl font-black text-emerald-700 mt-1">₹{totalRepaid.toLocaleString('en-IN')}</h4>
+                    <p className="text-xs text-emerald-600 mt-1">Deducted across monthly payrolls</p>
+                  </div>
+
+                  <div className="bg-amber-50/70 p-5 rounded-2xl border border-amber-200/90 shadow-xs">
+                    <p className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">Outstanding Balance</p>
+                    <h4 className="text-2xl font-black text-amber-700 mt-1">₹{remainingBalance.toLocaleString('en-IN')}</h4>
+                    <p className="text-xs text-amber-800 font-semibold mt-1">Scheduled for upcoming payroll deductions</p>
+                  </div>
+                </div>
+
+                {/* Advances List */}
+                <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+                  <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">Advance Loans &amp; Installments Schedule</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        View all advance disbursements, installment recovery status, and remaining balances.
+                      </p>
+                    </div>
+                    <span className="text-[11px] font-bold text-slate-600 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-2xs">
+                      View-Only Access
+                    </span>
+                  </div>
+
+                  <div className="p-5 space-y-4">
+                    {empAdvs.length === 0 ? (
+                      <div className="py-16 text-center text-slate-400">
+                        <HandCoins size={36} className="mx-auto text-slate-300 mb-2" />
+                        <p className="text-sm font-bold text-slate-600">No Advance Records Found</p>
+                        <p className="text-xs text-slate-400 mt-1">You currently have no active or historical advance loans.</p>
+                      </div>
+                    ) : (
+                      empAdvs.map((adv) => {
+                        const isExpanded = expandedAdvId === adv.id;
+                        const percent = adv.amount > 0 ? Math.min(100, Math.round(((adv.totalRepaid || 0) / adv.amount) * 100)) : 0;
+
+                        return (
+                          <div
+                            key={adv.id}
+                            className="bg-white border border-slate-200/90 hover:border-indigo-200 rounded-2xl p-5 shadow-2xs space-y-4 transition-all"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-center gap-3.5">
+                                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold shadow-2xs border border-amber-100">
+                                  <Wallet size={18} />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-bold text-base text-slate-900">
+                                      ₹{adv.amount.toLocaleString('en-IN')}
+                                    </h4>
+                                    <span
+                                      className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wide ${
+                                        adv.status === 'Completed'
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : adv.status === 'Cancelled'
+                                          ? 'bg-slate-100 text-slate-500'
+                                          : 'bg-amber-100 text-amber-800'
+                                      }`}
+                                    >
+                                      {adv.status}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                    Disbursed on {adv.date} • {adv.reason || 'General Advance'}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-4">
+                                <div className="text-right">
+                                  <span className="text-xs font-bold text-slate-800 block">
+                                    Remaining: ₹{(adv.remainingBalance ?? (adv.amount - (adv.totalRepaid || 0))).toLocaleString('en-IN')}
+                                  </span>
+                                  <span className="text-[11px] text-slate-400">
+                                    Repaid ₹{(adv.totalRepaid || 0).toLocaleString('en-IN')} ({percent}%)
+                                  </span>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedAdvId(isExpanded ? null : adv.id)}
+                                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <span>Deductions</span>
+                                  {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Progress bar */}
+                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                              <div
+                                className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                                style={{ width: `${percent}%` }}
+                              />
+                            </div>
+
+                            {/* Deductions Breakdown Table */}
+                            {isExpanded && (
+                              <div className="pt-2 border-t border-slate-100 overflow-x-auto">
+                                {(!adv.installments || adv.installments.length === 0) ? (
+                                  <p className="text-xs text-slate-400 italic py-2 text-center">
+                                    No salary deductions recorded yet.
+                                  </p>
+                                ) : (
+                                  <table className="w-full text-left text-xs border-collapse min-w-[500px]">
+                                    <thead>
+                                      <tr className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
+                                        <th className="py-2.5 px-3">#</th>
+                                        <th className="py-2.5 px-3">Payroll Month</th>
+                                        <th className="py-2.5 px-3">Deducted Amount (₹)</th>
+                                        <th className="py-2.5 px-3">Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {(adv.installments || []).map((inst, idx) => (
+                                        <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                          <td className="py-2.5 px-3 font-bold text-slate-700">
+                                            #{idx + 1}
+                                          </td>
+                                          <td className="py-2.5 px-3 text-slate-600 font-mono">
+                                            {inst.deductedInPayrollMonth || inst.monthDue || '-'}
+                                          </td>
+                                          <td className="py-2.5 px-3 font-bold text-emerald-700">
+                                            ₹{inst.amount.toLocaleString('en-IN')}
+                                          </td>
+                                          <td className="py-2.5 px-3">
+                                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                              ✓ Deducted in Salary
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 

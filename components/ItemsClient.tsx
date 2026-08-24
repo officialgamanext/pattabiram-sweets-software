@@ -65,6 +65,9 @@ export interface ItemRecord {
     '6:00 PM - 9:00 PM'?: number | string;
   };
   status: 'Active' | 'Inactive';
+  posPrice?: number;
+  posAvailable?: boolean;
+  posTaxPercent?: number;
   createdAt?: any;
 }
 

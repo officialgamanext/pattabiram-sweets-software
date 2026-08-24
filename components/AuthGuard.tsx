@@ -10,6 +10,7 @@ import { Loader2, ShieldAlert, Lock, ArrowLeft, ShieldX } from 'lucide-react';
 const ROUTE_MENU_KEY_MAP: Record<string, string> = {
   '/': 'dashboard',
   '/pos': 'pos',
+  '/pos-prices': 'pos_prices',
   '/orders': 'orders',
   '/walk-in-sales': 'walk_in_sales',
   '/items': 'items',

@@ -38,6 +38,7 @@ import {
   ChevronRight,
   Sparkles,
   WalletCards,
+  Coins,
 } from 'lucide-react';
 
 export default function Header() {
@@ -112,6 +113,7 @@ export default function Header() {
     const menuKeyMap: Record<string, string> = {
       '/': 'dashboard',
       '/pos': 'pos',
+      '/pos-prices': 'pos_prices',
       '/orders': 'orders',
       '/walk-in-sales': 'walk_in_sales',
       '/items': 'items',
@@ -142,6 +144,7 @@ export default function Header() {
   const mainNavItems = [
     { label: 'Home', href: '/', icon: <Home size={17} /> },
     { label: 'Billing & POS', href: '/pos', icon: <Receipt size={17} /> },
+    { label: 'POS Prices', href: '/pos-prices', icon: <Coins size={17} /> },
     { label: 'Orders', href: '/orders', icon: <ShoppingBag size={17} /> },
     { label: 'Credit & Due', href: '/credit', icon: <WalletCards size={17} /> },
     { label: 'Walk-In Sales', href: '/walk-in-sales', icon: <Printer size={17} /> },
@@ -180,6 +183,15 @@ export default function Header() {
       category: 'Sales & Billing',
       badgeColor: 'bg-amber-500/15 text-amber-600 border-amber-200',
       tag: 'Fast Checkout',
+    },
+    {
+      label: 'Billing & POS Prices',
+      description: 'Configure and sync selling prices for POS counter items',
+      href: '/pos-prices',
+      icon: <Coins size={22} />,
+      category: 'Sales & Billing',
+      badgeColor: 'bg-emerald-500/15 text-emerald-700 border-emerald-200',
+      tag: 'POS Rates',
     },
     {
       label: 'Order Management',

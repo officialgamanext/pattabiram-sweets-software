@@ -30,6 +30,7 @@ import {
   SlidersHorizontal,
   ChevronDown,
   Check,
+  Coins,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { usePrinter } from '@/context/PrinterContext';
@@ -173,11 +174,23 @@ export default function PosClient() {
     const unsubscribe = onSnapshot(
       collection(db, 'items'),
       (snapshot) => {
-        const docs: ItemRecord[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as ItemRecord[];
-        setItems(docs.filter((i) => i.status !== 'Inactive'));
+        const docs: ItemRecord[] = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          const masterPrice = parseFloat(data.price || 0) || 0;
+          const posPrice =
+            data.posPrice !== undefined && data.posPrice !== null && !isNaN(parseFloat(data.posPrice))
+              ? parseFloat(data.posPrice)
+              : masterPrice;
+
+          return {
+            id: doc.id,
+            ...data,
+            price: posPrice, // Active POS counter price!
+            posPrice: posPrice,
+            posAvailable: data.posAvailable !== false,
+          } as ItemRecord;
+        });
+        setItems(docs.filter((i) => i.status !== 'Inactive' && i.posAvailable !== false));
         setLoadingItems(false);
       },
       (error) => {
@@ -700,6 +713,16 @@ export default function PosClient() {
 
         {/* Hardware Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Configure POS Prices Link */}
+          <Link
+            href="/pos-prices"
+            className="h-8 px-3 text-xs font-semibold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/90 shadow-2xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+            title="Configure Billing & POS Product Prices"
+          >
+            <Coins size={14} className="text-emerald-700" />
+            <span>POS Prices</span>
+          </Link>
+
           {/* Saved Bills Drawer Trigger Button */}
           <button
             onClick={() => setShowSavedBillsDrawer(true)}

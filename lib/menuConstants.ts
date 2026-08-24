@@ -14,6 +14,7 @@ export interface MenuItemDefinition {
 export const APP_MENUS: MenuItemDefinition[] = [
   { key: 'dashboard', name: 'Dashboard', path: '/' },
   { key: 'pos', name: 'Billing & POS', path: '/pos' },
+  { key: 'pos_prices', name: 'Billing & POS Prices', path: '/pos-prices' },
   { key: 'orders', name: 'Orders & Billing', path: '/orders' },
   { key: 'wholesaler_orders', name: 'Wholesaler Orders', path: '/wholesaler-orders' },
   { key: 'walk_in_sales', name: 'Walk-In Sales', path: '/walk-in-sales' },

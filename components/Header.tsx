@@ -37,6 +37,7 @@ import {
   LayoutGrid,
   ChevronRight,
   Sparkles,
+  WalletCards,
 } from 'lucide-react';
 
 export default function Header() {
@@ -102,6 +103,7 @@ export default function Header() {
       '/customers': 'customers',
       '/employees': 'employees',
       '/payroll': 'payroll',
+      '/credit': 'credit',
       '/utilities': 'utilities',
       '/manufacturing-portal': 'manufacturing_portal',
       '/packing-portal': 'packing_portal',
@@ -119,6 +121,7 @@ export default function Header() {
     { label: 'Home', href: '/', icon: <Home size={17} /> },
     { label: 'Billing & POS', href: '/pos', icon: <Receipt size={17} /> },
     { label: 'Orders', href: '/orders', icon: <ShoppingBag size={17} /> },
+    { label: 'Credit & Due', href: '/credit', icon: <WalletCards size={17} /> },
     { label: 'Walk-In Sales', href: '/walk-in-sales', icon: <Printer size={17} /> },
     { label: 'Products', href: '/items', icon: <Tag size={17} /> },
     { label: 'Stores', href: '/store', icon: <Store size={17} /> },
@@ -180,6 +183,15 @@ export default function Header() {
       icon: <Users size={22} />,
       category: 'Sales & Billing',
       badgeColor: 'bg-blue-500/15 text-blue-600 border-blue-200',
+    },
+    {
+      label: 'Credit & Due Orders',
+      description: 'Track outstanding balances, partial payments & customer dues',
+      href: '/credit',
+      icon: <WalletCards size={22} />,
+      category: 'Sales & Billing',
+      badgeColor: 'bg-rose-500/15 text-rose-700 border-rose-200',
+      tag: 'Balances',
     },
 
     // 2. Catalog & Stock

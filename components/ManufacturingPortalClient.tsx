@@ -234,6 +234,20 @@ export default function ManufacturingPortalClient() {
     return opts;
   }, [accessibleMfgUnits, isAllUnitsAllowed]);
 
+  // Ensure selectedUnit is set to a valid accessible unit for employees
+  useEffect(() => {
+    if (!isAllUnitsAllowed && accessibleMfgUnits.length > 0) {
+      const isCurrentValid = accessibleMfgUnits.some(
+        (u) => u.name.toLowerCase() === selectedUnit.toLowerCase()
+      );
+      if (!isCurrentValid && selectedUnit !== 'all') {
+        setSelectedUnit(accessibleMfgUnits[0].name);
+      } else if (selectedUnit === 'all' && accessibleMfgUnits.length === 1) {
+        setSelectedUnit(accessibleMfgUnits[0].name);
+      }
+    }
+  }, [accessibleMfgUnits, isAllUnitsAllowed, selectedUnit]);
+
   // The date currently being viewed in the Manufacturing Portal
   const activeViewingDateStr = useMemo(() => {
     if (selectedMfgDate && selectedMfgDate !== 'all' && /^\d{4}-\d{2}-\d{2}$/.test(selectedMfgDate)) {

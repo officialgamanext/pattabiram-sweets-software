@@ -182,6 +182,20 @@ export default function PackingPortalClient() {
     return opts;
   }, [accessiblePckUnits, isAllUnitsAllowed]);
 
+  // Ensure selectedUnit is set to a valid accessible unit for employees
+  useEffect(() => {
+    if (!isAllUnitsAllowed && accessiblePckUnits.length > 0) {
+      const isCurrentValid = accessiblePckUnits.some(
+        (u) => u.name.toLowerCase() === selectedUnit.toLowerCase()
+      );
+      if (!isCurrentValid && selectedUnit !== 'all') {
+        setSelectedUnit(accessiblePckUnits[0].name);
+      } else if (selectedUnit === 'all' && accessiblePckUnits.length === 1) {
+        setSelectedUnit(accessiblePckUnits[0].name);
+      }
+    }
+  }, [accessiblePckUnits, isAllUnitsAllowed, selectedUnit]);
+
   // Helper to check if a specific packing unit is authorized for the logged-in employee
   const isItemUnitAllowed = (unitName: string) => {
     if (isAllUnitsAllowed) return true;

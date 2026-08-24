@@ -113,8 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               department: matched.department || 'Staff',
               photoUrl: matched.photoUrl,
               isSuperAdmin: false,
-              assignedMfgUnits: Array.isArray(matched.assignedMfgUnits) ? matched.assignedMfgUnits : ['All'],
-              assignedPckUnits: Array.isArray(matched.assignedPckUnits) ? matched.assignedPckUnits : ['All'],
+              assignedMfgUnits: Array.isArray(matched.assignedMfgUnits) ? matched.assignedMfgUnits : [],
+              assignedPckUnits: Array.isArray(matched.assignedPckUnits) ? matched.assignedPckUnits : [],
               permissions: mergedPermissions,
             };
 

@@ -424,6 +424,10 @@ export default function CreateOrderClient() {
   const [additionalCharges, setAdditionalCharges] = useState<string | number>('');
   const [receivedAmount, setReceivedAmount] = useState<string | number>('');
   const [paymentMode, setPaymentMode] = useState<string>('UPI');
+  const [isSplitPayment, setIsSplitPayment] = useState<boolean>(false);
+  const [splitPayments, setSplitPayments] = useState<
+    { id: string; mode: string; amount: string | number; note?: string }[]
+  >([{ id: 'split-1', mode: 'UPI', amount: '', note: '' }]);
   const [paymentStatus, setPaymentStatus] = useState<string>('Pending');
   const [orderStatus, setOrderStatus] = useState<string>('Order Created');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -534,8 +538,48 @@ export default function CreateOrderClient() {
 
         setDiscountAmount(data.discountAmount !== undefined ? String(data.discountAmount) : '');
         setAdditionalCharges(data.additionalCharges !== undefined ? String(data.additionalCharges) : '');
-        setReceivedAmount(data.receivedAmount !== undefined ? String(data.receivedAmount) : '');
-        if (data.paymentMode) setPaymentMode(data.paymentMode);
+        
+        if (data.payments && Array.isArray(data.payments) && data.payments.length > 0) {
+          setExistingPayments(data.payments);
+          if (data.payments.length > 1) {
+            setIsSplitPayment(true);
+            setSplitPayments(
+              data.payments.map((p: any, idx: number) => ({
+                id: p.id || `split-${idx + 1}`,
+                mode: p.mode || 'UPI',
+                amount: p.amount !== undefined ? String(p.amount) : '',
+                note: p.note || '',
+              }))
+            );
+            const totalRecv = data.payments.reduce((s: number, p: any) => s + (parseFloat(String(p.amount)) || 0), 0);
+            setReceivedAmount(String(totalRecv));
+          } else {
+            setIsSplitPayment(false);
+            setReceivedAmount(data.payments[0].amount !== undefined ? String(data.payments[0].amount) : '');
+            setPaymentMode(data.payments[0].mode || data.paymentMode || 'UPI');
+            setSplitPayments([
+              {
+                id: data.payments[0].id || 'split-1',
+                mode: data.payments[0].mode || data.paymentMode || 'UPI',
+                amount: data.payments[0].amount !== undefined ? String(data.payments[0].amount) : '',
+                note: data.payments[0].note || '',
+              },
+            ]);
+          }
+        } else {
+          setReceivedAmount(data.receivedAmount !== undefined ? String(data.receivedAmount) : '');
+          if (data.paymentMode) setPaymentMode(data.paymentMode);
+          if (data.receivedAmount) {
+            setSplitPayments([
+              {
+                id: 'split-1',
+                mode: data.paymentMode || 'UPI',
+                amount: String(data.receivedAmount),
+                note: '',
+              },
+            ]);
+          }
+        }
         if (data.paymentStatus) setPaymentStatus(data.paymentStatus);
         if (data.orderStatus) setOrderStatus(data.orderStatus);
       } catch (err: any) {
@@ -928,9 +972,18 @@ export default function CreateOrderClient() {
     ? Math.max(0, subTotal + boxChargesTotal + stickerChargesTotal + shrinkChargesTotal + packetChargesTotal + transportChargesVal - discountVal)
     : Math.max(0, subTotal + pCharges + addCharges + transportChargesVal - discountVal);
 
+  // Compute total received from splits
+  const splitTotalReceived = useMemo(() => {
+    return splitPayments.reduce((sum, item) => sum + (parseFloat(String(item.amount)) || 0), 0);
+  }, [splitPayments]);
+
+  const effectiveReceivedAmount = isSplitPayment
+    ? splitTotalReceived
+    : (parseFloat(String(receivedAmount)) || 0);
+
   // Auto Payment Status calculation
   useEffect(() => {
-    const recv = parseFloat(String(receivedAmount)) || 0;
+    const recv = effectiveReceivedAmount;
     if (recv <= 0) {
       setPaymentStatus('Pending');
     } else if (recv >= grandTotal && grandTotal > 0) {
@@ -938,7 +991,7 @@ export default function CreateOrderClient() {
     } else {
       setPaymentStatus('Partial');
     }
-  }, [receivedAmount, grandTotal]);
+  }, [effectiveReceivedAmount, grandTotal]);
 
   // Quick Customer Save
   const handleSaveQuickCustomer = async (e: React.FormEvent) => {
@@ -1051,8 +1104,8 @@ export default function CreateOrderClient() {
       }
     }
 
-    const recv = parseFloat(String(receivedAmount)) || 0;
-    if (recv > grandTotal) {
+    const recv = effectiveReceivedAmount;
+    if (recv > grandTotal && grandTotal > 0) {
       toast.error('Invalid Payment Amount', `Received amount (₹${recv}) cannot exceed the order total of ₹${grandTotal.toFixed(2)}.`);
       return;
     }
@@ -1113,6 +1166,34 @@ export default function CreateOrderClient() {
       const savedNoOfBoxes = numericNoOfBoxes;
       const targetOrderDate = mfgDate || getTodayDateStr();
 
+      const validSplits = splitPayments
+        .filter((s) => (parseFloat(String(s.amount)) || 0) > 0)
+        .map((s, idx) => ({
+          id: s.id || `pay-${Date.now()}-${idx}`,
+          mode: s.mode || 'UPI',
+          amount: parseFloat(String(s.amount)) || 0,
+          note: s.note || (isSplitPayment ? 'Split payment' : 'Advance payment'),
+          paidAt: new Date().toISOString(),
+        }));
+
+      const finalPayments = isSplitPayment
+        ? validSplits
+        : (recv > 0
+            ? [
+                {
+                  id: `pay-${Date.now()}`,
+                  mode: paymentMode,
+                  amount: recv,
+                  note: 'Initial payment',
+                  paidAt: new Date().toISOString(),
+                },
+              ]
+            : []);
+
+      const finalPaymentMode = isSplitPayment && finalPayments.length > 1
+        ? `Split (${finalPayments.map((p) => p.mode).join(', ')})`
+        : (finalPayments[0]?.mode || paymentMode || 'UPI');
+
       if (editId) {
         // Update existing order
         await updateDoc(doc(db, 'orders', editId), sanitizeForFirestore({
@@ -1158,9 +1239,10 @@ export default function CreateOrderClient() {
           additionalCharges: !isCustomisation ? addCharges : 0,
           discountAmount: discountVal,
           totalAmount: grandTotal,
-          receivedAmount: parseFloat(String(receivedAmount)) || 0,
-          paymentMode: paymentMode,
+          receivedAmount: recv,
+          paymentMode: finalPaymentMode,
           paymentStatus: paymentStatus,
+          payments: finalPayments.length > 0 ? finalPayments : existingPayments,
           orderStatus: orderStatus,
           updatedAt: serverTimestamp(),
         }));
@@ -1214,9 +1296,10 @@ export default function CreateOrderClient() {
         additionalCharges: !isCustomisation ? addCharges : 0,
         discountAmount: discountVal,
         totalAmount: grandTotal,
-        receivedAmount: parseFloat(String(receivedAmount)) || 0,
-        paymentMode: paymentMode,
+        receivedAmount: recv,
+        paymentMode: finalPaymentMode,
         paymentStatus: paymentStatus,
+        payments: finalPayments,
         orderStatus: orderStatus,
         createdBy: creatorName,
         createdById: creatorId,
@@ -2174,48 +2257,292 @@ export default function CreateOrderClient() {
                 </div>
               </div>
 
-              {/* Received Amount & Payment Mode */}
-              <div className="pt-2 border-t border-slate-100 space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Received Amount (₹)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    placeholder="0.00"
-                    value={receivedAmount}
-                    onChange={(e) => setReceivedAmount(e.target.value)}
-                    className="w-full h-8.5 px-3 text-xs font-black text-slate-900 border border-slate-300 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
-                  />
-                </div>
-
-                {/* Payment Mode Pills */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Payment Mode</label>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {['UPI', 'Cash', 'Card', 'Credit'].map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setPaymentMode(mode)}
-                        className={`h-7.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          paymentMode === mode
-                            ? 'bg-[#02626D] text-white shadow-2xs'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        {mode}
-                      </button>
-                    ))}
+              {/* Payment Section (Single or Split) */}
+              <div className="pt-3 border-t border-slate-100 space-y-3">
+                {/* Payment Method Type Switcher */}
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700">Payment Collection</label>
+                  <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[11px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSplitPayment(false);
+                        if (splitPayments.length > 0 && splitPayments[0].amount) {
+                          setReceivedAmount(String(splitTotalReceived || splitPayments[0].amount));
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                        !isSplitPayment
+                          ? 'bg-[#02626D] text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Single Mode
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSplitPayment(true);
+                        if (splitPayments.length === 0 || (splitPayments.length === 1 && !splitPayments[0].amount && receivedAmount)) {
+                          setSplitPayments([
+                            {
+                              id: 'split-1',
+                              mode: paymentMode,
+                              amount: receivedAmount || '',
+                              note: '',
+                            },
+                          ]);
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${
+                        isSplitPayment
+                          ? 'bg-[#02626D] text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <span>Split Payment</span>
+                      <span className="text-[9px] bg-amber-400 text-amber-950 px-1 py-0.2 rounded font-extrabold">NEW</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* Live Payment Status Indicator */}
-                <div className="p-2 rounded-xl text-center font-bold text-xs border flex items-center justify-center gap-1.5 bg-amber-50 text-amber-900 border-amber-200">
-                  <span>Payment Status:</span>
-                  <span className="uppercase">{paymentStatus}</span>
+                {!isSplitPayment ? (
+                  /* Single Payment Mode */
+                  <div className="space-y-3 bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/80">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-bold text-slate-700">Received Amount (₹)</label>
+                        <div className="flex items-center gap-1 text-[10px]">
+                          <button
+                            type="button"
+                            onClick={() => setReceivedAmount(grandTotal > 0 ? String(grandTotal) : '')}
+                            className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold hover:bg-emerald-200 cursor-pointer"
+                          >
+                            100% Full
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setReceivedAmount(grandTotal > 0 ? String(Math.round(grandTotal / 2)) : '')}
+                            className="px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 font-bold hover:bg-sky-200 cursor-pointer"
+                          >
+                            50% Half
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setReceivedAmount('')}
+                            className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder="0.00"
+                        value={receivedAmount}
+                        onChange={(e) => setReceivedAmount(e.target.value)}
+                        className="w-full h-8.5 px-3 text-xs font-black text-slate-900 border border-slate-300 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
+                      />
+                    </div>
+
+                    {/* Payment Mode Pills */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Payment Method</label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {['UPI', 'Cash', 'Card', 'Credit', 'Bank Transfer', 'Cheque'].map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setPaymentMode(mode)}
+                            className={`h-7 rounded-lg text-[11px] font-bold transition-all cursor-pointer truncate px-1 ${
+                              paymentMode === mode
+                                ? 'bg-[#02626D] text-white shadow-2xs'
+                                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {mode}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Split Payment Mode */
+                  <div className="space-y-2.5 bg-[#f0f9fa] p-2.5 rounded-xl border border-[#b2e3e8]">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-[#02626D]">
+                      <span>Split Payment Splits</span>
+                      <span>Total: ₹ {splitTotalReceived.toFixed(2)}</span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {splitPayments.map((split, index) => {
+                        const currentSplitsTotalExceptThis = splitPayments.reduce(
+                          (sum, s, i) => (i === index ? sum : sum + (parseFloat(String(s.amount)) || 0)),
+                          0
+                        );
+                        const remainingToFill = Math.max(0, grandTotal - currentSplitsTotalExceptThis);
+
+                        return (
+                          <div
+                            key={split.id || index}
+                            className="bg-white p-2 rounded-lg border border-slate-200 shadow-2xs space-y-1.5"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              {/* Method Select */}
+                              <select
+                                value={split.mode}
+                                onChange={(e) => {
+                                  const newMode = e.target.value;
+                                  setSplitPayments((prev) =>
+                                    prev.map((s, i) => (i === index ? { ...s, mode: newMode } : s))
+                                  );
+                                }}
+                                className="h-7.5 px-2 text-[11px] font-bold text-slate-800 border border-slate-300 rounded-lg bg-slate-50 focus:outline-none focus:border-[#02626D]"
+                              >
+                                <option value="UPI">UPI</option>
+                                <option value="Cash">Cash</option>
+                                <option value="Card">Card</option>
+                                <option value="Bank Transfer">Bank Transfer</option>
+                                <option value="Cheque">Cheque</option>
+                                <option value="Credit">Credit</option>
+                              </select>
+
+                              {/* Amount Input */}
+                              <div className="relative flex-1">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0"
+                                  placeholder="0.00"
+                                  value={split.amount}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSplitPayments((prev) =>
+                                      prev.map((s, i) => (i === index ? { ...s, amount: val } : s))
+                                    );
+                                  }}
+                                  className="w-full h-7.5 pl-2 pr-2 text-xs font-black text-slate-900 border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-[#02626D]"
+                                />
+                              </div>
+
+                              {/* Quick Fill Balance */}
+                              {remainingToFill > 0 && (
+                                <button
+                                  type="button"
+                                  title={`Fill remaining ₹${remainingToFill.toFixed(2)}`}
+                                  onClick={() => {
+                                    setSplitPayments((prev) =>
+                                      prev.map((s, i) =>
+                                        i === index ? { ...s, amount: String(remainingToFill) } : s
+                                      )
+                                    );
+                                  }}
+                                  className="h-7.5 px-1.5 text-[10px] font-bold bg-teal-50 text-[#02626D] hover:bg-teal-100 border border-teal-200 rounded-lg cursor-pointer shrink-0"
+                                >
+                                  Fill Bal
+                                </button>
+                              )}
+
+                              {/* Remove Button */}
+                              {splitPayments.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSplitPayments((prev) => prev.filter((_, i) => i !== index));
+                                  }}
+                                  className="h-7.5 w-7 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer shrink-0"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Note Input */}
+                            <input
+                              type="text"
+                              placeholder="Note / Ref # / Transaction ID (optional)"
+                              value={split.note || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setSplitPayments((prev) =>
+                                  prev.map((s, i) => (i === index ? { ...s, note: val } : s))
+                                );
+                              }}
+                              className="w-full h-6 px-2 text-[10px] text-slate-600 border border-slate-200 rounded-md bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#02626D]"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Add Split Row Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const remaining = Math.max(0, grandTotal - splitTotalReceived);
+                        setSplitPayments((prev) => [
+                          ...prev,
+                          {
+                            id: `split-${Date.now()}`,
+                            mode: prev.some((p) => p.mode === 'UPI') ? 'Cash' : 'UPI',
+                            amount: remaining > 0 ? String(remaining) : '',
+                            note: '',
+                          },
+                        ]);
+                      }}
+                      className="w-full h-7 rounded-lg border border-dashed border-[#02626D]/40 hover:border-[#02626D] bg-white text-[#02626D] text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-all hover:bg-teal-50"
+                    >
+                      <Plus size={12} />
+                      <span>Add Another Payment Method</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Live Payment Status & Due Summary */}
+                <div
+                  className={`p-2.5 rounded-xl border flex flex-col gap-1 transition-all ${
+                    paymentStatus === 'Completed'
+                      ? 'bg-emerald-50 text-emerald-950 border-emerald-200'
+                      : paymentStatus === 'Partial'
+                      ? 'bg-amber-50 text-amber-950 border-amber-200'
+                      : 'bg-slate-100 text-slate-800 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          paymentStatus === 'Completed'
+                            ? 'bg-emerald-500'
+                            : paymentStatus === 'Partial'
+                            ? 'bg-amber-500 animate-pulse'
+                            : 'bg-slate-400'
+                        }`}
+                      />
+                      <span>Payment Status:</span>
+                    </span>
+                    <span className="uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded text-[10px] bg-white/80 border border-current/20">
+                      {paymentStatus}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-current/10 font-semibold">
+                    <span>
+                      Received: <strong className="font-extrabold">₹ {effectiveReceivedAmount.toFixed(2)}</strong>
+                    </span>
+                    <span>
+                      Remaining Due:{' '}
+                      <strong
+                        className={`font-extrabold ${
+                          grandTotal - effectiveReceivedAmount > 0 ? 'text-rose-600' : 'text-emerald-700'
+                        }`}
+                      >
+                        ₹ {Math.max(0, grandTotal - effectiveReceivedAmount).toFixed(2)}
+                      </strong>
+                    </span>
+                  </div>
                 </div>
 
                 {/* Order Status Select */}

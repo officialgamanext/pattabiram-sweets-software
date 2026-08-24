@@ -66,7 +66,7 @@ export interface SavedBill {
   customerName: string;
   customerPhone: string;
   items: PosCartItem[];
-  paymentMode: 'Cash' | 'UPI' | 'Card';
+  paymentMode: 'Cash' | 'UPI' | 'Card' | 'Split' | string;
   subtotal: number;
   tax: number;
   discount: number;
@@ -140,7 +140,9 @@ export default function PosClient() {
 
   // Cart State
   const [cart, setCart] = useState<PosCartItem[]>([]);
-  const [selectedPayment, setSelectedPayment] = useState<'Cash' | 'UPI' | 'Card'>('UPI');
+  const [selectedPayment, setSelectedPayment] = useState<'Cash' | 'UPI' | 'Card' | 'Split'>('UPI');
+  const [posSplitCash, setPosSplitCash] = useState<string>('');
+  const [posSplitUPI, setPosSplitUPI] = useState<string>('');
   const [discountAmount, setDiscountAmount] = useState<number>(0);
 
   // Customer Selection State
@@ -539,7 +541,8 @@ export default function PosClient() {
   // Continue Saved Bill
   const handleContinueSavedBill = async (bill: SavedBill) => {
     setCart(bill.items);
-    setSelectedPayment(bill.paymentMode);
+    const validModes = ['Cash', 'UPI', 'Card', 'Split'] as const;
+    setSelectedPayment(validModes.includes(bill.paymentMode as any) ? (bill.paymentMode as any) : 'UPI');
     setDiscountAmount(bill.discount);
     setActiveBillNo(bill.billNo);
     if (bill.customerName !== 'Walk-in Customer') {
@@ -565,13 +568,17 @@ export default function PosClient() {
       return;
     }
 
+    const finalPaymentMode = selectedPayment === 'Split'
+      ? `Split (Cash: ₹${parseFloat(posSplitCash) || 0}, UPI: ₹${parseFloat(posSplitUPI) || 0})`
+      : selectedPayment;
+
     const settledBill: SavedBill = {
       id: `bill-${Date.now()}`,
       billNo: activeBillNo,
       customerName: selectedCustomer ? selectedCustomer.name : customCustomerName || 'Walk-in Customer',
       customerPhone: selectedCustomer ? selectedCustomer.phone : customCustomerPhone || '-',
       items: cart,
-      paymentMode: selectedPayment,
+      paymentMode: finalPaymentMode,
       subtotal: cartSubtotal,
       tax: cartTax,
       discount: discountAmount,
@@ -594,10 +601,12 @@ export default function PosClient() {
           amount: i.totalAmount,
         })),
         totalAmount: settledBill.total,
+        receivedAmount: settledBill.total,
         subtotal: settledBill.subtotal,
         tax: settledBill.tax,
         discount: settledBill.discount,
         paymentMode: settledBill.paymentMode,
+        paymentStatus: 'Completed',
         orderType: 'Walk-in POS',
         status: 'Delivered',
         createdAt: serverTimestamp(),
@@ -1039,38 +1048,97 @@ export default function PosClient() {
             {/* Payment Method Selector */}
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 mb-1">Select Payment Method:</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-1.5">
                 <button
+                  type="button"
                   onClick={() => setSelectedPayment('UPI')}
-                  className={`h-8 text-xs font-semibold rounded-lg border flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                  className={`h-8 text-xs font-semibold rounded-lg border flex items-center justify-center gap-1 transition-colors cursor-pointer ${
                     selectedPayment === 'UPI'
                       ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
                       : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <QrCode size={13} /> UPI / QR
+                  <QrCode size={12} /> UPI
                 </button>
                 <button
+                  type="button"
                   onClick={() => setSelectedPayment('Cash')}
-                  className={`h-8 text-xs font-semibold rounded-lg border flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                  className={`h-8 text-xs font-semibold rounded-lg border flex items-center justify-center gap-1 transition-colors cursor-pointer ${
                     selectedPayment === 'Cash'
                       ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
                       : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <Banknote size={13} /> Cash
+                  <Banknote size={12} /> Cash
                 </button>
                 <button
+                  type="button"
                   onClick={() => setSelectedPayment('Card')}
-                  className={`h-8 text-xs font-semibold rounded-lg border flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                  className={`h-8 text-xs font-semibold rounded-lg border flex items-center justify-center gap-1 transition-colors cursor-pointer ${
                     selectedPayment === 'Card'
                       ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                       : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <CreditCard size={13} /> Card
+                  <CreditCard size={12} /> Card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPayment('Split');
+                    if (!posSplitCash && !posSplitUPI) {
+                      setPosSplitCash(String(Math.round(cartGrandTotal / 2)));
+                      setPosSplitUPI(String(cartGrandTotal - Math.round(cartGrandTotal / 2)));
+                    }
+                  }}
+                  className={`h-8 text-xs font-semibold rounded-lg border flex items-center justify-center gap-1 transition-colors cursor-pointer ${
+                    selectedPayment === 'Split'
+                      ? 'bg-[#02626D] text-white border-[#02626D] shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  Split
                 </button>
               </div>
+
+              {selectedPayment === 'Split' && (
+                <div className="mt-2 p-2 bg-slate-50 border border-teal-200 rounded-lg space-y-1.5 animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <label className="text-[10px] font-bold text-slate-500">Cash Amount (₹)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="0.00"
+                        value={posSplitCash}
+                        onChange={(e) => {
+                          const cash = parseFloat(e.target.value) || 0;
+                          setPosSplitCash(e.target.value);
+                          setPosSplitUPI(String(Math.max(0, cartGrandTotal - cash)));
+                        }}
+                        className="w-full h-7 px-2 text-xs font-bold border border-slate-300 rounded bg-white"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[10px] font-bold text-slate-500">UPI Amount (₹)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="0.00"
+                        value={posSplitUPI}
+                        onChange={(e) => setPosSplitUPI(e.target.value)}
+                        className="w-full h-7 px-2 text-xs font-bold border border-slate-300 rounded bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 flex justify-between font-semibold">
+                    <span>Split Sum: ₹{((parseFloat(posSplitCash) || 0) + (parseFloat(posSplitUPI) || 0)).toFixed(2)}</span>
+                    <span className={((parseFloat(posSplitCash) || 0) + (parseFloat(posSplitUPI) || 0)) === cartGrandTotal ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>
+                      {((parseFloat(posSplitCash) || 0) + (parseFloat(posSplitUPI) || 0)) === cartGrandTotal ? 'Exact Total' : `Diff: ₹${(cartGrandTotal - ((parseFloat(posSplitCash) || 0) + (parseFloat(posSplitUPI) || 0))).toFixed(2)}`}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Save Bill & Settle Bill Action Buttons */}

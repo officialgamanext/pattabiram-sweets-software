@@ -52,7 +52,7 @@ import CustomSelect from '@/components/CustomSelect';
 export interface PaymentEntry {
   id: string;
   amount: number;
-  mode: 'Cash' | 'Card' | 'UPI';
+  mode: string;
   note: string;
   paidAt: string; // ISO date string or formatted date
 }
@@ -230,14 +230,14 @@ export default function OrderDetailClient({ orderId }: Props) {
   // ── Manage Payment modal & forms
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [payAmount, setPayAmount] = useState('');
-  const [payMode, setPayMode] = useState<'Cash' | 'Card' | 'UPI'>('Cash');
+  const [payMode, setPayMode] = useState<string>('Cash');
   const [payNote, setPayNote] = useState('');
   const [isSavingPayment, setIsSavingPayment] = useState(false);
 
   // ── Edit Payment Entry state
   const [editingPayment, setEditingPayment] = useState<PaymentEntry | null>(null);
   const [editPayAmount, setEditPayAmount] = useState('');
-  const [editPayMode, setEditPayMode] = useState<'Cash' | 'Card' | 'UPI'>('Cash');
+  const [editPayMode, setEditPayMode] = useState<string>('Cash');
   const [editPayNote, setEditPayNote] = useState('');
 
   // ── Delete Payment Confirm state
@@ -339,10 +339,15 @@ export default function OrderDetailClient({ orderId }: Props) {
     if (!order) return;
     const totalReceived = updatedList.reduce((s, p) => s + p.amount, 0);
     const newPaymentStatus = computePaymentStatus(totalReceived, order.totalAmount || 0);
+    const uniqueModes = Array.from(new Set(updatedList.map((p) => p.mode).filter(Boolean)));
+    const compositeMode = uniqueModes.length > 1
+      ? `Split (${uniqueModes.join(', ')})`
+      : (uniqueModes[0] || order.paymentMode || 'UPI');
 
     await updateDoc(doc(db, 'orders', order.id), {
       payments: updatedList,
       receivedAmount: totalReceived,
+      paymentMode: compositeMode,
       paymentStatus: newPaymentStatus,
       updatedAt: serverTimestamp(),
     });
@@ -1175,17 +1180,17 @@ export default function OrderDetailClient({ orderId }: Props) {
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1.5">Payment Mode</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(['Cash', 'UPI', 'Card'] as const).map(mode => (
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {['Cash', 'UPI', 'Card', 'Bank Transfer', 'Cheque', 'Credit'].map(mode => (
                         <button
                           key={mode}
                           type="button"
-                          onClick={() => setEditPayMode(mode)}
+                          onClick={() => setEditPayMode(mode as any)}
                           className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${editPayMode === mode
                             ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                             : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
                         >
-                          {getModeIcon(mode)} {mode}
+                          {getModeIcon(mode as any)} {mode}
                         </button>
                       ))}
                     </div>
@@ -1267,17 +1272,17 @@ export default function OrderDetailClient({ orderId }: Props) {
 
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1.5">Payment Mode</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {(['Cash', 'UPI', 'Card'] as const).map(mode => (
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {['Cash', 'UPI', 'Card', 'Bank Transfer', 'Cheque', 'Credit'].map(mode => (
                           <button
                             key={mode}
                             type="button"
-                            onClick={() => setPayMode(mode)}
-                            className={`py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${payMode === mode
+                            onClick={() => setPayMode(mode as any)}
+                            className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${payMode === mode
                               ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                               : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
                           >
-                            {getModeIcon(mode)} {mode}
+                            {getModeIcon(mode as any)} {mode}
                           </button>
                         ))}
                       </div>

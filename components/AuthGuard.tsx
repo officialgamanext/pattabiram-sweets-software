@@ -23,6 +23,7 @@ const ROUTE_MENU_KEY_MAP: Record<string, string> = {
   '/customers': 'customers',
   '/employees': 'employees',
   '/payroll': 'payroll',
+  '/credit': 'credit',
   '/manufacturing-portal': 'manufacturing_portal',
   '/packing-portal': 'packing_portal',
   '/employee-portal': 'employee_portal',

@@ -87,6 +87,28 @@ export default function Header() {
   const isNavAllowed = (href: string) => {
     if (!employeeProfile) return true;
     if (employeeProfile.isSuperAdmin) return true;
+
+    // If employee is assigned a Manufacturing unit, always allow Mfg Portal & Manufacturing
+    if (
+      (href === '/manufacturing-portal' || href === '/manufacturing') &&
+      employeeProfile.assignedMfgUnits &&
+      employeeProfile.assignedMfgUnits.length > 0
+    ) {
+      return true;
+    }
+    // If employee is assigned a Packing unit, always allow Packing Portal & Packing
+    if (
+      (href === '/packing-portal' || href === '/packing') &&
+      employeeProfile.assignedPckUnits &&
+      employeeProfile.assignedPckUnits.length > 0
+    ) {
+      return true;
+    }
+    // Always allow Employee Portal for logged in employee
+    if (href === '/employee-portal') {
+      return true;
+    }
+
     const menuKeyMap: Record<string, string> = {
       '/': 'dashboard',
       '/pos': 'pos',
@@ -628,21 +650,27 @@ export default function Header() {
       {/* ── DESKTOP LEFT SIDEBAR NAVIGATION ──────────────────────────────────── */}
       <aside className="hidden lg:flex flex-col fixed top-14 left-0 bottom-0 w-60 bg-[#ebebeb] border-r border-[#dcdcdc] z-40 overflow-y-auto p-3 text-slate-800">
         <div className="space-y-4">
-          <div className="space-y-0.5">{mainNavItems.map(renderNavLink)}</div>
+          {mainNavItems.length > 0 && (
+            <div className="space-y-0.5">{mainNavItems.map(renderNavLink)}</div>
+          )}
 
-          <div>
-            <p className="px-3 mb-1 text-[11px] font-bold text-[#6d6d6d] uppercase tracking-wider">
-              Management
-            </p>
-            <div className="space-y-0.5">{managementNavItems.map(renderNavLink)}</div>
-          </div>
+          {managementNavItems.length > 0 && (
+            <div>
+              <p className="px-3 mb-1 text-[11px] font-bold text-[#6d6d6d] uppercase tracking-wider">
+                Management
+              </p>
+              <div className="space-y-0.5">{managementNavItems.map(renderNavLink)}</div>
+            </div>
+          )}
 
-          <div>
-            <p className="px-3 mb-1 text-[11px] font-bold text-[#6d6d6d] uppercase tracking-wider">
-              Portals &amp; Services
-            </p>
-            <div className="space-y-0.5">{portalNavItems.map(renderNavLink)}</div>
-          </div>
+          {portalNavItems.length > 0 && (
+            <div>
+              <p className="px-3 mb-1 text-[11px] font-bold text-[#6d6d6d] uppercase tracking-wider">
+                Portals &amp; Services
+              </p>
+              <div className="space-y-0.5">{portalNavItems.map(renderNavLink)}</div>
+            </div>
+          )}
         </div>
 
         <div className="mt-auto pt-4 border-t border-[#dcdcdc] space-y-0.5">

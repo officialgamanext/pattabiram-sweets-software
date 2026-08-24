@@ -94,8 +94,23 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   // Check if current employee has view permission for this route
   const currentMenuKey = ROUTE_MENU_KEY_MAP[pathname];
   const isSuperAdmin = employeeProfile?.isSuperAdmin || (user?.email && !employeeProfile);
+  const isMfgUnitAllowed = Boolean(
+    (pathname.startsWith('/manufacturing-portal') || pathname === '/manufacturing') &&
+      employeeProfile?.assignedMfgUnits &&
+      employeeProfile.assignedMfgUnits.length > 0
+  );
+  const isPckUnitAllowed = Boolean(
+    (pathname.startsWith('/packing-portal') || pathname === '/packing') &&
+      employeeProfile?.assignedPckUnits &&
+      employeeProfile.assignedPckUnits.length > 0
+  );
+  const isEmployeePortalAllowed = Boolean(pathname.startsWith('/employee-portal') && employeeProfile);
+
   const hasViewPermission =
     isSuperAdmin ||
+    isMfgUnitAllowed ||
+    isPckUnitAllowed ||
+    isEmployeePortalAllowed ||
     !currentMenuKey ||
     Boolean(employeeProfile?.permissions?.[currentMenuKey]?.view);
 

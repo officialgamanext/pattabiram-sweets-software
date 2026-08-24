@@ -218,6 +218,15 @@ export default function EmployeesClient() {
         setFormAssignedMfgUnits([]);
       } else {
         setFormAssignedMfgUnits(['All']);
+        setFormPermissions((prev) => ({
+          ...prev,
+          manufacturing_portal: {
+            menuKey: 'manufacturing_portal',
+            menuName: 'Manufacturing Portal',
+            view: true,
+            edit: prev.manufacturing_portal?.edit ?? false,
+          },
+        }));
       }
       return;
     }
@@ -228,6 +237,15 @@ export default function EmployeesClient() {
         return withoutAll.filter((u) => u !== unitName);
       } else {
         const next = [...withoutAll, unitName];
+        setFormPermissions((p) => ({
+          ...p,
+          manufacturing_portal: {
+            menuKey: 'manufacturing_portal',
+            menuName: 'Manufacturing Portal',
+            view: true,
+            edit: p.manufacturing_portal?.edit ?? false,
+          },
+        }));
         if (mfgUnitsList.length > 0 && next.length === mfgUnitsList.length) {
           return ['All'];
         }
@@ -242,6 +260,15 @@ export default function EmployeesClient() {
         setFormAssignedPckUnits([]);
       } else {
         setFormAssignedPckUnits(['All']);
+        setFormPermissions((prev) => ({
+          ...prev,
+          packing_portal: {
+            menuKey: 'packing_portal',
+            menuName: 'Packing Portal',
+            view: true,
+            edit: prev.packing_portal?.edit ?? false,
+          },
+        }));
       }
       return;
     }
@@ -252,6 +279,15 @@ export default function EmployeesClient() {
         return withoutAll.filter((u) => u !== unitName);
       } else {
         const next = [...withoutAll, unitName];
+        setFormPermissions((p) => ({
+          ...p,
+          packing_portal: {
+            menuKey: 'packing_portal',
+            menuName: 'Packing Portal',
+            view: true,
+            edit: p.packing_portal?.edit ?? false,
+          },
+        }));
         if (pckUnitsList.length > 0 && next.length === pckUnitsList.length) {
           return ['All'];
         }

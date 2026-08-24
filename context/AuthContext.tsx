@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, doc } from 'firebase/firestore';
 import { getMergedEmployeePermissions, MenuAccessPermission } from '@/lib/menuConstants';
 
 export interface EmployeeAuthProfile {
@@ -45,10 +45,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const stored = localStorage.getItem('employee_auth_session');
     if (stored) {
       try {
-        setEmployeeProfile(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') {
+          const mfgUnits = Array.isArray(parsed.assignedMfgUnits) ? parsed.assignedMfgUnits : [];
+          const pckUnits = Array.isArray(parsed.assignedPckUnits) ? parsed.assignedPckUnits : [];
+          const permissions = parsed.permissions || {};
+
+          if (mfgUnits.length > 0) {
+            permissions.manufacturing_portal = {
+              menuKey: 'manufacturing_portal',
+              menuName: 'Manufacturing Portal',
+              view: true,
+              edit: true,
+            };
+          }
+          if (pckUnits.length > 0) {
+            permissions.packing_portal = {
+              menuKey: 'packing_portal',
+              menuName: 'Packing Portal',
+              view: true,
+              edit: true,
+            };
+          }
+
+          parsed.permissions = permissions;
+          setEmployeeProfile(parsed);
+        }
       } catch {}
     }
   }, []);
+
+  // Real-time Firestore listener for live permission & unit assignment updates
+  useEffect(() => {
+    if (!employeeProfile?.id || employeeProfile.isSuperAdmin) return;
+
+    const unsub = onSnapshot(
+      doc(db, 'employees', employeeProfile.id),
+      (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        const mergedPermissions = getMergedEmployeePermissions(data.permissions);
+        const mfgUnits = Array.isArray(data.assignedMfgUnits) ? data.assignedMfgUnits : [];
+        const pckUnits = Array.isArray(data.assignedPckUnits) ? data.assignedPckUnits : [];
+
+        // Auto-grant portal view if employee has assigned units
+        if (mfgUnits.length > 0 && mergedPermissions.manufacturing_portal) {
+          mergedPermissions.manufacturing_portal.view = true;
+        }
+        if (pckUnits.length > 0 && mergedPermissions.packing_portal) {
+          mergedPermissions.packing_portal.view = true;
+        }
+
+        const updatedProfile: EmployeeAuthProfile = {
+          id: snap.id,
+          empId: data.empId || employeeProfile.empId || 'EMP-100',
+          name: data.name || employeeProfile.name,
+          mobile: data.mobile || employeeProfile.mobile,
+          department: data.department || employeeProfile.department || 'Staff',
+          photoUrl: data.photoUrl || employeeProfile.photoUrl,
+          isSuperAdmin: false,
+          assignedMfgUnits: mfgUnits,
+          assignedPckUnits: pckUnits,
+          permissions: mergedPermissions,
+        };
+
+        setEmployeeProfile(updatedProfile);
+        localStorage.setItem('employee_auth_session', JSON.stringify(updatedProfile));
+      },
+      (err) => {
+        console.error('Real-time employee profile sync error:', err);
+      }
+    );
+
+    return () => unsub();
+  }, [employeeProfile?.id, employeeProfile?.isSuperAdmin]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -105,6 +175,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           if (matched) {
             const mergedPermissions = getMergedEmployeePermissions(matched.permissions);
+            const mfgUnits = Array.isArray(matched.assignedMfgUnits) ? matched.assignedMfgUnits : [];
+            const pckUnits = Array.isArray(matched.assignedPckUnits) ? matched.assignedPckUnits : [];
+
+            // Auto-grant portal view if employee has assigned units
+            if (mfgUnits.length > 0 && mergedPermissions.manufacturing_portal) {
+              mergedPermissions.manufacturing_portal.view = true;
+            }
+            if (pckUnits.length > 0 && mergedPermissions.packing_portal) {
+              mergedPermissions.packing_portal.view = true;
+            }
+
             const profile: EmployeeAuthProfile = {
               id: matched.id,
               empId: matched.empId || 'EMP-100',
@@ -113,8 +194,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               department: matched.department || 'Staff',
               photoUrl: matched.photoUrl,
               isSuperAdmin: false,
-              assignedMfgUnits: Array.isArray(matched.assignedMfgUnits) ? matched.assignedMfgUnits : [],
-              assignedPckUnits: Array.isArray(matched.assignedPckUnits) ? matched.assignedPckUnits : [],
+              assignedMfgUnits: mfgUnits,
+              assignedPckUnits: pckUnits,
               permissions: mergedPermissions,
             };
 

@@ -31,6 +31,7 @@ import {
   Truck,
   MapPin,
   Minus,
+  Layers,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp, onSnapshot, query } from 'firebase/firestore';
@@ -52,6 +53,17 @@ export const ALL_SLOTS: SlotTime[] = [
   '3:00 PM - 6:00 PM',
   '6:00 PM - 9:00 PM',
 ];
+
+export interface SlotCategory {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  assignedItemIds: string[];
+  assignedItemNames: string[];
+  slotLimits: Record<string, number>;
+  status: 'active' | 'inactive';
+}
 
 export const DELIVERY_TIME_OPTIONS = [
   '07:00 AM',
@@ -403,6 +415,10 @@ export default function CreateOrderClient() {
   const [productGridCategory, setProductGridCategory] = useState('All');
   const [productGridOnlyFavorites, setProductGridOnlyFavorites] = useState(false);
 
+  // Slot Categories & Live Capacity Tracking
+  const [slotCategories, setSlotCategories] = useState<SlotCategory[]>([]);
+  const [allOrdersForCapacity, setAllOrdersForCapacity] = useState<any[]>([]);
+
   // Payment & Order Meta
   const [discountAmount, setDiscountAmount] = useState<string | number>('');
   const [additionalCharges, setAdditionalCharges] = useState<string | number>('');
@@ -679,6 +695,112 @@ export default function CreateOrderClient() {
     });
     return () => unsubGlobal();
   }, []);
+
+  // 5. Subscribe to Slot Categories & Orders for Live Slot Capacity
+  useEffect(() => {
+    const unsubSlotCats = onSnapshot(collection(db, 'slot_categories'), (snap) => {
+      const list: SlotCategory[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: data.name || 'Unnamed Category',
+          description: data.description || '',
+          color: data.color || '#02626D',
+          assignedItemIds: Array.isArray(data.assignedItemIds) ? data.assignedItemIds : [],
+          assignedItemNames: Array.isArray(data.assignedItemNames) ? data.assignedItemNames : [],
+          slotLimits: data.slotLimits || {},
+          status: data.status || 'active',
+        };
+      });
+      setSlotCategories(list.filter((c) => c.status === 'active'));
+    });
+
+    const unsubOrders = onSnapshot(collection(db, 'orders'), (snap) => {
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        slot: d.data().slot || '',
+        orderDate: d.data().orderDate || d.data().manufacturingDate || '',
+        expectedDeliveryDate: d.data().expectedDeliveryDate || '',
+        manufacturingDate: d.data().manufacturingDate || '',
+        orderStatus: d.data().orderStatus || d.data().status || '',
+        items: Array.isArray(d.data().items) ? d.data().items : [],
+      }));
+      setAllOrdersForCapacity(list);
+    });
+
+    return () => {
+      unsubSlotCats();
+      unsubOrders();
+    };
+  }, []);
+
+  // Target date for slot capacity
+  const effectiveTargetDate = expDeliveryDate || mfgDate;
+
+  // Real-time Slot Category Capacity Calculations
+  const slotCategoryCapacities = useMemo(() => {
+    if (!orderSlot || slotCategories.length === 0) return [];
+
+    // Filter active orders on this date & slot, excluding current edit order
+    const relevantOrders = allOrdersForCapacity.filter((o) => {
+      if (editId && o.id === editId) return false;
+      if (o.orderStatus === 'Cancelled' || o.orderStatus === 'Rejected') return false;
+      if (o.slot !== orderSlot) return false;
+
+      const oDate = o.expectedDeliveryDate || o.manufacturingDate || o.orderDate;
+      return oDate === effectiveTargetDate;
+    });
+
+    return slotCategories.map((cat) => {
+      const maxLimit = cat.slotLimits?.[orderSlot] || 0;
+      const assignedIds = new Set(cat.assignedItemIds || []);
+      const assignedNames = new Set((cat.assignedItemNames || []).map((n) => n.toLowerCase()));
+
+      // 1. Calculate booked qty across all other orders
+      let bookedQty = 0;
+      relevantOrders.forEach((o) => {
+        (o.items || []).forEach((it: any) => {
+          const itId = it.itemId || it.id || '';
+          const itName = (it.itemName || it.name || '').toLowerCase();
+          if (assignedIds.has(itId) || assignedNames.has(itName)) {
+            const q = parseFloat(String(it.quantity || it.qty || 0)) || 0;
+            bookedQty += q;
+          }
+        });
+      });
+
+      // 2. Calculate current order qty in progress
+      let currentOrderQty = 0;
+      orderItems.forEach((it) => {
+        const itId = it.itemId || '';
+        const itName = (it.itemName || '').toLowerCase();
+        if (assignedIds.has(itId) || assignedNames.has(itName)) {
+          currentOrderQty += it.quantity || 0;
+        }
+      });
+
+      const totalProjected = bookedQty + currentOrderQty;
+      const remainingBeforeCurrent = maxLimit > 0 ? Math.max(0, maxLimit - bookedQty) : Infinity;
+      const remainingAfterCurrent = maxLimit > 0 ? maxLimit - totalProjected : Infinity;
+      const isExceeded = maxLimit > 0 && totalProjected > maxLimit;
+      const percentUsed = maxLimit > 0 ? Math.min(100, Math.round((totalProjected / maxLimit) * 100)) : 0;
+
+      return {
+        id: cat.id,
+        name: cat.name,
+        color: cat.color || '#02626D',
+        maxLimit,
+        bookedQty: Math.round(bookedQty * 100) / 100,
+        currentOrderQty: Math.round(currentOrderQty * 100) / 100,
+        totalProjected: Math.round(totalProjected * 100) / 100,
+        remainingBeforeCurrent: remainingBeforeCurrent !== Infinity ? Math.round(remainingBeforeCurrent * 100) / 100 : Infinity,
+        remainingAfterCurrent: remainingAfterCurrent !== Infinity ? Math.round(remainingAfterCurrent * 100) / 100 : Infinity,
+        isExceeded,
+        percentUsed,
+        hasLimit: maxLimit > 0,
+      };
+    });
+  }, [slotCategories, allOrdersForCapacity, orderSlot, effectiveTargetDate, orderItems, editId]);
 
   // Active Utilities
   const activeBoxes = useMemo(() => utilitiesMaster.filter((u) => u.type === 'box' && u.status === 'Active'), [utilitiesMaster]);
@@ -1035,6 +1157,17 @@ export default function CreateOrderClient() {
     if (missingQtyItem) {
       toast.warning('Quantity Required', `Please enter a valid quantity for "${missingQtyItem.itemName}".`);
       return;
+    }
+
+    // Slot Category Capacity Enforcement
+    for (const cap of slotCategoryCapacities) {
+      if (cap.hasLimit && cap.isExceeded) {
+        toast.error(
+          'Slot Category Limit Exceeded',
+          `Cannot proceed: "${cap.name}" maximum allowed limit for ${orderSlot} is ${cap.maxLimit} KG. Booked in other orders: ${cap.bookedQty} KG. Available: ${cap.remainingBeforeCurrent} KG, but this order is requesting ${cap.currentOrderQty} KG (${Math.round((cap.totalProjected - cap.maxLimit) * 100) / 100} KG excess). Please reduce quantity.`
+        );
+        return;
+      }
     }
 
     const recv = effectiveReceivedAmount;
@@ -1826,6 +1959,93 @@ export default function CreateOrderClient() {
             {/* 4. Products Selector Section with Spacious, Premium Product Tiles Grid */}
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4">
               
+              {/* Live Slot Category Capacity Tracker */}
+              {slotCategoryCapacities.length > 0 && (
+                <div className="p-3.5 bg-gradient-to-r from-slate-50 to-indigo-50/40 rounded-2xl border border-indigo-100/80 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                      <Layers size={14} className="text-indigo-600" />
+                      <span>Slot Category Capacity Limits ({orderSlot} • {effectiveTargetDate || 'Selected Date'})</span>
+                    </div>
+                    <Link
+                      href="/slot-categories"
+                      target="_blank"
+                      className="text-[10.5px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                    >
+                      <span>Manage Categories</span>
+                    </Link>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    {slotCategoryCapacities.map((cap) => (
+                      <div
+                        key={cap.id}
+                        className={`p-2.5 bg-white rounded-xl border transition-all ${
+                          cap.isExceeded
+                            ? 'border-rose-400 bg-rose-50/40 shadow-xs ring-1 ring-rose-300'
+                            : 'border-slate-200 shadow-2xs'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 text-[11px]">
+                          <span
+                            className="font-bold truncate max-w-[120px]"
+                            style={{ color: cap.color }}
+                            title={cap.name}
+                          >
+                            {cap.name}
+                          </span>
+                          {cap.hasLimit ? (
+                            <span
+                              className={`text-[9.5px] font-black px-1.5 py-0.2 rounded-md ${
+                                cap.isExceeded
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : cap.remainingAfterCurrent <= cap.maxLimit * 0.2
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-emerald-100 text-emerald-800'
+                              }`}
+                            >
+                              {cap.remainingAfterCurrent < 0
+                                ? `${Math.abs(cap.remainingAfterCurrent)} KG Excess!`
+                                : `${cap.remainingAfterCurrent} KG Left`}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-medium">No Limit</span>
+                          )}
+                        </div>
+
+                        {cap.hasLimit && (
+                          <div className="space-y-1 mt-1.5">
+                            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-300 ${
+                                  cap.isExceeded
+                                    ? 'bg-rose-500'
+                                    : cap.percentUsed >= 80
+                                    ? 'bg-amber-500'
+                                    : 'bg-[#02626D]'
+                                }`}
+                                style={{ width: `${Math.min(100, cap.percentUsed)}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-[9.5px] text-slate-400 font-medium">
+                              <span>
+                                Booked: {cap.bookedQty} KG{' '}
+                                {cap.currentOrderQty > 0 && (
+                                  <strong className="text-indigo-600 font-bold">
+                                    (+{cap.currentOrderQty})
+                                  </strong>
+                                )}
+                              </span>
+                              <span>Max: {cap.maxLimit} KG</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Header & Filter Controls */}
               <div className="space-y-3 pb-3.5 border-b border-slate-200">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

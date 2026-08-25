@@ -33,6 +33,7 @@ export const APP_MENUS: MenuItemDefinition[] = [
   { key: 'payroll', name: 'Payroll & Attendance', path: '/payroll' },
   { key: 'employee_portal', name: 'Employee Portal', path: '/employee-portal' },
   { key: 'credit', name: 'Credit & Due Balances', path: '/credit' },
+  { key: 'slot_categories', name: 'Slot Categories', path: '/slot-categories' },
   { key: 'support', name: 'Support & Tickets', path: '/support' },
   { key: 'settings', name: 'Settings', path: '/settings' }
 ];

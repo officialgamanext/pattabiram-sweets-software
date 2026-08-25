@@ -25,6 +25,8 @@ const ROUTE_MENU_KEY_MAP: Record<string, string> = {
   '/employees': 'employees',
   '/payroll': 'payroll',
   '/credit': 'credit',
+  '/slot-categories': 'slot_categories',
+  '/utilities': 'utilities',
   '/manufacturing-portal': 'manufacturing_portal',
   '/packing-portal': 'packing_portal',
   '/employee-portal': 'employee_portal',

@@ -76,6 +76,8 @@ export type OrderStatus =
   | 'Received at Store'
   | 'Awaiting for Delivery'
   | 'Delivered'
+  | 'Cancelled'
+  | 'Rejected'
   | 'Confirmed'
   | 'Processing'
   | 'Pending';
@@ -186,6 +188,17 @@ export const SLOT_TIMES: SlotTime[] = [
   '6:00 PM - 9:00 PM',
 ];
 
+export interface SlotCategory {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  assignedItemIds: string[];
+  assignedItemNames: string[];
+  slotLimits: Record<string, number>;
+  status: 'active' | 'inactive';
+}
+
 export interface UtilityOption {
   id: string;
   type: 'box' | 'shrink' | 'sticker';
@@ -272,6 +285,7 @@ export default function OrdersClient() {
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
   const [itemsPerPage, setItemsPerPage] = useState('10');
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
+  const [slotCategories, setSlotCategories] = useState<SlotCategory[]>([]);
   const { user, employeeProfile } = useAuth();
   const { isConnected: isPrinterConnected, printerType, printReceipt } = usePrinter();
 
@@ -831,7 +845,28 @@ export default function OrdersClient() {
         });
       }
     });
-    return () => unsubGlobal();
+
+    const unsubSlotCats = onSnapshot(collection(db, 'slot_categories'), (snap) => {
+      const list: SlotCategory[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: data.name || 'Unnamed Category',
+          description: data.description || '',
+          color: data.color || '#02626D',
+          assignedItemIds: Array.isArray(data.assignedItemIds) ? data.assignedItemIds : [],
+          assignedItemNames: Array.isArray(data.assignedItemNames) ? data.assignedItemNames : [],
+          slotLimits: data.slotLimits || {},
+          status: data.status || 'active',
+        };
+      });
+      setSlotCategories(list.filter((c) => c.status === 'active'));
+    });
+
+    return () => {
+      unsubGlobal();
+      unsubSlotCats();
+    };
   }, []);
 
   // Compute active utilities lists (strictly manually created in Utilities setup)
@@ -1707,6 +1742,87 @@ export default function OrdersClient() {
                   </div>
                 </div>
 
+                {/* Slot Category Capacity Indicators */}
+                {slotCategories.length > 0 && (() => {
+                  const catStats = slotCategories.map((cat) => {
+                    const maxLimit = cat.slotLimits?.[slotTime] || 0;
+                    const assignedIds = new Set(cat.assignedItemIds || []);
+                    const assignedNames = new Set((cat.assignedItemNames || []).map((n) => n.toLowerCase()));
+
+                    let bookedQty = 0;
+                    slotOrders.forEach((order) => {
+                      if (order.orderStatus === 'Cancelled' || order.orderStatus === 'Rejected') return;
+                      (order.items || []).forEach((it) => {
+                        const itId = it.itemId || (it as any).id || '';
+                        const itName = (it.itemName || (it as any).name || '').toLowerCase();
+                        if (assignedIds.has(itId) || assignedNames.has(itName)) {
+                          bookedQty += parseFloat(String(it.quantity || 0)) || 0;
+                        }
+                      });
+                    });
+
+                    const remaining = maxLimit > 0 ? maxLimit - bookedQty : Infinity;
+                    const percent = maxLimit > 0 ? Math.min(100, Math.round((bookedQty / maxLimit) * 100)) : 0;
+                    const isExceeded = maxLimit > 0 && bookedQty > maxLimit;
+
+                    return {
+                      id: cat.id,
+                      name: cat.name,
+                      color: cat.color || '#02626D',
+                      maxLimit,
+                      bookedQty: Math.round(bookedQty * 10) / 10,
+                      remaining: remaining !== Infinity ? Math.round(remaining * 10) / 10 : Infinity,
+                      percent,
+                      isExceeded,
+                      hasLimit: maxLimit > 0,
+                    };
+                  });
+
+                  const categoriesWithLimits = catStats.filter((c) => c.hasLimit);
+                  if (categoriesWithLimits.length === 0) return null;
+
+                  return (
+                    <div className="px-3 py-2 bg-gradient-to-r from-slate-50 to-indigo-50/30 border-b border-slate-100 space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span className="flex items-center gap-1">
+                          <Layers size={11} className="text-indigo-600" />
+                          <span>Category Capacity</span>
+                        </span>
+                        <Link href="/slot-categories" className="text-indigo-600 hover:underline">
+                          Limits
+                        </Link>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {categoriesWithLimits.map((cat) => (
+                          <div key={cat.id} className="bg-white p-1.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1">
+                            <div className="flex items-center justify-between text-[10.5px]">
+                              <span className="font-bold truncate max-w-[120px]" style={{ color: cat.color }}>
+                                {cat.name}
+                              </span>
+                              <span className={`text-[9.5px] font-extrabold px-1.5 py-0.2 rounded ${cat.isExceeded ? 'bg-rose-100 text-rose-800' : cat.remaining <= (cat.maxLimit * 0.2) ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                                {cat.isExceeded ? `${Math.abs(cat.remaining)} KG Over` : `${cat.remaining} KG Left`}
+                              </span>
+                            </div>
+
+                            <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${cat.isExceeded ? 'bg-rose-500' : cat.percent >= 80 ? 'bg-amber-500' : 'bg-[#02626D]'}`}
+                                style={{ width: `${Math.min(100, cat.percent)}%` }}
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-between text-[9px] text-slate-400 font-medium">
+                              <span>Booked: {cat.bookedQty} KG</span>
+                              <span>Max: {cat.maxLimit} KG</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Order Cards List inside Slot (24 Items Per Page) */}
                 <div className="p-3 space-y-2.5 flex-1">
                   {slotOrders.length === 0 ? (
@@ -2231,6 +2347,116 @@ export default function OrdersClient() {
                 <span className="text-[10px] text-emerald-600 font-medium">Slot order value</span>
               </div>
             </div>
+
+            {/* Slot Category Capacity Breakdown Section */}
+            {slotCategories.length > 0 && (() => {
+              const slotOrders = filteredOrders.filter((o) => o.slot === selectedSlotForAnalytics);
+              const catAnalytics = slotCategories.map((cat) => {
+                const maxLimit = cat.slotLimits?.[selectedSlotForAnalytics as SlotTime] || 0;
+                const assignedIds = new Set(cat.assignedItemIds || []);
+                const assignedNames = new Set((cat.assignedItemNames || []).map((n) => n.toLowerCase()));
+
+                let bookedQty = 0;
+                slotOrders.forEach((order) => {
+                  if (order.orderStatus === 'Cancelled' || order.orderStatus === 'Rejected') return;
+                  (order.items || []).forEach((it) => {
+                    const itId = it.itemId || (it as any).id || '';
+                    const itName = (it.itemName || (it as any).name || '').toLowerCase();
+                    if (assignedIds.has(itId) || assignedNames.has(itName)) {
+                      bookedQty += parseFloat(String(it.quantity || 0)) || 0;
+                    }
+                  });
+                });
+
+                const remaining = maxLimit > 0 ? maxLimit - bookedQty : Infinity;
+                const percent = maxLimit > 0 ? Math.min(100, Math.round((bookedQty / maxLimit) * 100)) : 0;
+                const isExceeded = maxLimit > 0 && bookedQty > maxLimit;
+
+                return {
+                  id: cat.id,
+                  name: cat.name,
+                  color: cat.color || '#02626D',
+                  maxLimit,
+                  bookedQty: Math.round(bookedQty * 10) / 10,
+                  remaining: remaining !== Infinity ? Math.round(remaining * 10) / 10 : Infinity,
+                  percent,
+                  isExceeded,
+                  hasLimit: maxLimit > 0,
+                };
+              });
+
+              return (
+                <div className="p-3.5 bg-slate-50/80 border-b border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Layers size={13} className="text-indigo-600" />
+                      <span>Slot Category Capacity Breakdown</span>
+                    </span>
+                    <Link
+                      href="/slot-categories"
+                      className="text-[11px] font-bold text-indigo-600 hover:underline"
+                    >
+                      Manage Limits →
+                    </Link>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                    {catAnalytics.map((cat) => (
+                      <div
+                        key={cat.id}
+                        className={`p-2.5 bg-white rounded-xl border transition-all ${
+                          cat.isExceeded
+                            ? 'border-rose-300 bg-rose-50/40 ring-1 ring-rose-300'
+                            : 'border-slate-200 shadow-2xs'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 text-xs">
+                          <span className="font-bold truncate max-w-[120px]" style={{ color: cat.color }}>
+                            {cat.name}
+                          </span>
+                          {cat.hasLimit ? (
+                            <span
+                              className={`text-[9.5px] font-black px-1.5 py-0.2 rounded-md ${
+                                cat.isExceeded
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : cat.remaining <= cat.maxLimit * 0.2
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-emerald-100 text-emerald-800'
+                              }`}
+                            >
+                              {cat.isExceeded ? `${Math.abs(cat.remaining)} KG Over!` : `${cat.remaining} KG Left`}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-medium">No Limit</span>
+                          )}
+                        </div>
+
+                        {cat.hasLimit && (
+                          <div className="space-y-1 mt-1.5">
+                            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  cat.isExceeded
+                                    ? 'bg-rose-500'
+                                    : cat.percent >= 80
+                                    ? 'bg-amber-500'
+                                    : 'bg-[#02626D]'
+                                }`}
+                                style={{ width: `${Math.min(100, cat.percent)}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+                              <span>Booked: {cat.bookedQty} KG</span>
+                              <span>Max: {cat.maxLimit} KG</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Search Filter Bar */}
             <div className="p-3 sm:px-4 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between gap-3">

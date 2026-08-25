@@ -128,7 +128,6 @@ export interface UtilityOption {
 interface ProductCatalogTileProps {
   prod: ItemMasterOption;
   addedItem?: OrderItemLine;
-  currentSlotLimit?: number | string;
   isCustomisation: boolean;
   numericNoOfBoxes: number;
   packetCostPerBox: number;
@@ -144,7 +143,6 @@ interface ProductCatalogTileProps {
 const ProductCatalogTile = React.memo(function ProductCatalogTile({
   prod,
   addedItem,
-  currentSlotLimit,
   isCustomisation,
   numericNoOfBoxes,
   packetCostPerBox,
@@ -209,20 +207,6 @@ const ProductCatalogTile = React.memo(function ProductCatalogTile({
             <span className="truncate">{prod.category}</span>
           </div>
         </div>
-
-        {/* Slot Limit Chip */}
-        {currentSlotLimit ? (
-          <div className="mt-2 space-y-1">
-            <div className="inline-flex items-center gap-1 text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/80 font-semibold">
-              <Clock size={10} /> Slot Max: {currentSlotLimit} {prod.unit}
-            </div>
-            {isAdded && addedItem && addedItem.quantity > (parseFloat(String(currentSlotLimit)) || 0) && (
-              <div className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded flex items-center gap-1 animate-pulse">
-                <span>⚠️ Exceeds max limit ({currentSlotLimit} {prod.unit})</span>
-              </div>
-            )}
-          </div>
-        ) : null}
       </div>
 
       {/* Bottom Action Area */}
@@ -800,18 +784,6 @@ export default function CreateOrderClient() {
 
   const handleTileQuantityChange = useCallback((prodId: string, delta: number) => {
     const prod = itemsMaster.find((p) => p.id === prodId);
-    const existing = orderItems.find((it) => it.itemId === prodId);
-    const currentQty = existing?.quantity || 0;
-    const nextQty = existing ? Math.max(0, Math.round((currentQty + delta) * 10) / 10) : 1;
-
-    const rawLimit = prod?.slotAllowedWeights?.[orderSlot as keyof typeof prod.slotAllowedWeights];
-    const slotLimit = rawLimit !== undefined ? parseFloat(String(rawLimit)) : 0;
-    if (slotLimit > 0 && nextQty > slotLimit) {
-      toast.error(
-        'Slot Limit Exceeded',
-        `"${prod?.name || 'Item'}" allowed weight for ${orderSlot} is ${slotLimit} ${prod?.unit || 'KG'}. Current: ${nextQty} ${prod?.unit || 'KG'}.`
-      );
-    }
 
     setOrderItems((prev) => {
       const existingItem = prev.find((it) => it.itemId === prodId);
@@ -855,26 +827,13 @@ export default function CreateOrderClient() {
         return it;
       });
     });
-  }, [itemsMaster, orderItems, orderSlot]);
+  }, [itemsMaster]);
 
   const handleTileFieldChange = useCallback((
     prodId: string,
     field: 'quantity' | 'unitPrice' | 'mfgDesc' | 'pckDesc' | 'hasPacket',
     val: any
   ) => {
-    if (field === 'quantity') {
-      const qty = val === '' ? 0 : Math.max(0, parseFloat(val) || 0);
-      const prod = itemsMaster.find((p) => p.id === prodId);
-      const rawLimit = prod?.slotAllowedWeights?.[orderSlot as keyof typeof prod.slotAllowedWeights];
-      const slotLimit = rawLimit !== undefined ? parseFloat(String(rawLimit)) : 0;
-      if (slotLimit > 0 && qty > slotLimit) {
-        toast.error(
-          'Slot Limit Exceeded',
-          `"${prod?.name || 'Item'}" allowed weight for ${orderSlot} is ${slotLimit} ${prod?.unit || 'KG'}. You entered ${qty} ${prod?.unit || 'KG'}.`
-        );
-      }
-    }
-
     setOrderItems((prev) =>
       prev.map((item) => {
         if (item.itemId !== prodId) return item;
@@ -903,25 +862,15 @@ export default function CreateOrderClient() {
         };
       })
     );
-  }, [itemsMaster, orderSlot]);
+  }, []);
 
   // Summary Quantity Modifier
   const handleSummaryQuantityChange = useCallback((itemId: string, newQty: number) => {
-    const prod = itemsMaster.find((p) => p.id === itemId);
     const safeQty = Math.max(0, Math.round(newQty * 100) / 100);
 
     if (safeQty <= 0) {
       setOrderItems((prev) => prev.filter((it) => it.itemId !== itemId));
       return;
-    }
-
-    const rawLimit = prod?.slotAllowedWeights?.[orderSlot as keyof typeof prod.slotAllowedWeights];
-    const slotLimit = rawLimit !== undefined ? parseFloat(String(rawLimit)) : 0;
-    if (slotLimit > 0 && safeQty > slotLimit) {
-      toast.error(
-        'Slot Limit Exceeded',
-        `"${prod?.name || 'Item'}" allowed weight for ${orderSlot} is ${slotLimit} ${prod?.unit || 'KG'}. Current: ${safeQty} ${prod?.unit || 'KG'}.`
-      );
     }
 
     setOrderItems((prev) =>
@@ -934,7 +883,7 @@ export default function CreateOrderClient() {
         };
       })
     );
-  }, [itemsMaster, orderSlot]);
+  }, []);
 
   const handleSummaryRemoveItem = useCallback((itemId: string) => {
     setOrderItems((prev) => prev.filter((it) => it.itemId !== itemId));
@@ -1086,22 +1035,6 @@ export default function CreateOrderClient() {
     if (missingQtyItem) {
       toast.warning('Quantity Required', `Please enter a valid quantity for "${missingQtyItem.itemName}".`);
       return;
-    }
-
-    // Strict slot allowed weight / capacity enforcement
-    for (const item of validItems) {
-      const prod = itemsMaster.find((p) => p.id === item.itemId || p.name === item.itemName);
-      if (prod?.slotAllowedWeights && orderSlot) {
-        const rawLimit = prod.slotAllowedWeights[orderSlot as keyof typeof prod.slotAllowedWeights];
-        const limit = rawLimit !== undefined ? parseFloat(String(rawLimit)) : 0;
-        if (limit > 0 && item.quantity > limit) {
-          toast.error(
-            'Slot Weight Limit Exceeded',
-            `Cannot create order: "${item.itemName}" has exceeded the maximum allowed weight for slot "${orderSlot}". Maximum limit is ${limit} ${prod.unit}, but order requested ${item.quantity} ${prod.unit}. Please reduce the quantity.`
-          );
-          return;
-        }
-      }
     }
 
     const recv = effectiveReceivedAmount;
@@ -1982,14 +1915,12 @@ export default function CreateOrderClient() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
                       {paginatedProductTiles.map((prod) => {
                         const addedItem = orderItems.find((it) => it.itemId === prod.id);
-                        const currentSlotLimit = orderSlot && prod.slotAllowedWeights?.[orderSlot as keyof typeof prod.slotAllowedWeights];
 
                         return (
                           <ProductCatalogTile
                             key={prod.id}
                             prod={prod}
                             addedItem={addedItem}
-                            currentSlotLimit={currentSlotLimit}
                             isCustomisation={isCustomisation}
                             numericNoOfBoxes={numericNoOfBoxes}
                             packetCostPerBox={packetCostPerBox}

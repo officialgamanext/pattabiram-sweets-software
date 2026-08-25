@@ -1161,7 +1161,7 @@ export default function CreateOrderClient() {
 
     // Slot Category Capacity Enforcement
     for (const cap of slotCategoryCapacities) {
-      if (cap.hasLimit && cap.isExceeded) {
+      if (cap.hasLimit && cap.isExceeded && cap.currentOrderQty > 0) {
         toast.error(
           'Slot Category Limit Exceeded',
           `Cannot proceed: "${cap.name}" maximum allowed limit for ${orderSlot} is ${cap.maxLimit} KG. Booked in other orders: ${cap.bookedQty} KG. Available: ${cap.remainingBeforeCurrent} KG, but this order is requesting ${cap.currentOrderQty} KG (${Math.round((cap.totalProjected - cap.maxLimit) * 100) / 100} KG excess). Please reduce quantity.`

@@ -131,7 +131,7 @@ function getOrderEffectiveMfgDate(order: OrderRecord): string {
 export default function ManufacturingPortalClient() {
   const { employeeProfile } = useAuth();
   const isSuperAdmin = Boolean(employeeProfile?.isSuperAdmin);
-  const assignedMfgUnits = Array.isArray(employeeProfile?.assignedMfgUnits) ? employeeProfile.assignedMfgUnits : ['All'];
+  const assignedMfgUnits = Array.isArray(employeeProfile?.assignedMfgUnits) ? employeeProfile.assignedMfgUnits : [];
   const isAllUnitsAllowed = isSuperAdmin || assignedMfgUnits.includes('All');
 
   const [orders, setOrders] = useState<OrderRecord[]>([]);

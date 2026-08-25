@@ -147,8 +147,8 @@ export default function EmployeesClient() {
   const [formPermissions, setFormPermissions] = useState<Record<string, MenuAccessPermission>>({});
   
   // Assigned Units state for the employee
-  const [formAssignedMfgUnits, setFormAssignedMfgUnits] = useState<string[]>(['All']);
-  const [formAssignedPckUnits, setFormAssignedPckUnits] = useState<string[]>(['All']);
+  const [formAssignedMfgUnits, setFormAssignedMfgUnits] = useState<string[]>([]);
+  const [formAssignedPckUnits, setFormAssignedPckUnits] = useState<string[]>([]);
   
   // Camera capture state
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -272,8 +272,8 @@ export default function EmployeesClient() {
       setFormDepartment(emp.department || 'Production');
       setFormPhotoUrl(emp.photoUrl || '');
 
-      setFormAssignedMfgUnits(Array.isArray(emp.assignedMfgUnits) && emp.assignedMfgUnits.length > 0 ? emp.assignedMfgUnits : ['All']);
-      setFormAssignedPckUnits(Array.isArray(emp.assignedPckUnits) && emp.assignedPckUnits.length > 0 ? emp.assignedPckUnits : ['All']);
+      setFormAssignedMfgUnits(Array.isArray(emp.assignedMfgUnits) ? emp.assignedMfgUnits : []);
+      setFormAssignedPckUnits(Array.isArray(emp.assignedPckUnits) ? emp.assignedPckUnits : []);
 
       // Load dynamically merged permissions (any new menu added to APP_MENUS automatically appears!)
       setFormPermissions(getMergedEmployeePermissions(emp.permissions));
@@ -289,8 +289,8 @@ export default function EmployeesClient() {
       setFormAddress('');
       setFormDepartment('Production');
       setFormPhotoUrl('');
-      setFormAssignedMfgUnits(['All']);
-      setFormAssignedPckUnits(['All']);
+      setFormAssignedMfgUnits([]);
+      setFormAssignedPckUnits([]);
       setFormPermissions(getMergedEmployeePermissions());
     }
     setIsModalOpen(true);
@@ -968,13 +968,13 @@ export default function EmployeesClient() {
                     <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold flex items-center gap-1">
                       <Factory size={10} />
                       <span>
-                        Mfg: {!emp.assignedMfgUnits || emp.assignedMfgUnits.includes('All') ? 'All Units' : `${emp.assignedMfgUnits.length} Units`}
+                        Mfg: {emp.assignedMfgUnits?.includes('All') ? 'All Units' : emp.assignedMfgUnits && emp.assignedMfgUnits.length > 0 ? `${emp.assignedMfgUnits.length} Units` : 'None'}
                       </span>
                     </span>
                     <span className="px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 font-semibold flex items-center gap-1">
                       <Package size={10} />
                       <span>
-                        Pck: {!emp.assignedPckUnits || emp.assignedPckUnits.includes('All') ? 'All Units' : `${emp.assignedPckUnits.length} Units`}
+                        Pck: {emp.assignedPckUnits?.includes('All') ? 'All Units' : emp.assignedPckUnits && emp.assignedPckUnits.length > 0 ? `${emp.assignedPckUnits.length} Units` : 'None'}
                       </span>
                     </span>
                   </div>

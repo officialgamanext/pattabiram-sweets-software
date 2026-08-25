@@ -155,9 +155,13 @@ export default function CreditClient() {
     return () => unsub();
   }, []);
 
-  // 2. Filter for orders that have outstanding credit balance or partial/pending status
+  // 2. Filter for orders that are Delivered and have outstanding credit balance or partial/pending status
   const creditOrders = useMemo(() => {
     return orders.filter((order) => {
+      // Only delivered orders go to Credit & Due
+      const isDelivered = (order.orderStatus || '').trim().toLowerCase() === 'delivered';
+      if (!isDelivered) return false;
+
       // Exclude cancelled / rejected orders if any
       if (order.orderStatus === 'Cancelled' || order.orderStatus === 'Rejected') return false;
 

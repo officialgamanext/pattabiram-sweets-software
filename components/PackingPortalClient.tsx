@@ -82,7 +82,7 @@ function isOrderEligibleForPacking(order: OrderRecord): boolean {
 export default function PackingPortalClient() {
   const { employeeProfile } = useAuth();
   const isSuperAdmin = Boolean(employeeProfile?.isSuperAdmin);
-  const assignedPckUnits = Array.isArray(employeeProfile?.assignedPckUnits) ? employeeProfile.assignedPckUnits : ['All'];
+  const assignedPckUnits = Array.isArray(employeeProfile?.assignedPckUnits) ? employeeProfile.assignedPckUnits : [];
   const isAllUnitsAllowed = isSuperAdmin || assignedPckUnits.includes('All');
 
   const [orders, setOrders] = useState<OrderRecord[]>([]);

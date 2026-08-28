@@ -5,17 +5,21 @@ import { generateTestReceipt, generateReceiptEscPos, ReceiptData } from '@/lib/e
 import { toast } from '@/context/ToastContext';
 
 export type PrinterType = 'USB' | 'Bluetooth' | 'None';
+export type UsbSubtype = 'WebUSB' | 'Serial' | 'None';
 export type PaperWidth = '58mm' | '80mm';
 
 interface PrinterContextType {
   isConnected: boolean;
   printerType: PrinterType;
+  usbSubtype: UsbSubtype;
   printerName: string;
   paperWidth: PaperWidth;
   isPrinting: boolean;
   statusMessage: string;
   lastError: string | null;
   connectUsbPrinter: () => Promise<boolean>;
+  connectWebUsbPrinter: () => Promise<boolean>;
+  connectUsbSerialPrinter: () => Promise<boolean>;
   connectBluetoothPrinter: () => Promise<boolean>;
   disconnectPrinter: () => Promise<void>;
   printRaw: (data: Uint8Array | string) => Promise<boolean>;
@@ -43,6 +47,7 @@ const BLE_SERVICES = [
 export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [printerType, setPrinterType] = useState<PrinterType>('None');
+  const [usbSubtype, setUsbSubtype] = useState<UsbSubtype>('None');
   const [printerName, setPrinterName] = useState<string>('');
   const [paperWidth, setPaperWidthState] = useState<PaperWidth>('58mm');
   const [isPrinting, setIsPrinting] = useState<boolean>(false);
@@ -54,6 +59,9 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const bleDeviceRef = useRef<any>(null);
   const bleCharacteristicRef = useRef<any>(null);
   const usbDeviceRef = useRef<any>(null);
+  const usbInterfaceRef = useRef<number | null>(null);
+  const usbEndpointRef = useRef<number | null>(null);
+  const printQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
 
   // Load saved preferences on mount
   useEffect(() => {
@@ -83,7 +91,8 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       if (serialPortRef.current) {
         try {
-          if (serialPortRef.current.readable) {
+          await printQueueRef.current.catch(() => {});
+          if (serialPortRef.current.writable && !serialPortRef.current.writable.locked) {
             await serialPortRef.current.close();
           }
         } catch {
@@ -104,15 +113,25 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       if (usbDeviceRef.current) {
         try {
+          if (usbInterfaceRef.current !== null) {
+            try {
+              await usbDeviceRef.current.releaseInterface(usbInterfaceRef.current);
+            } catch {
+              // ignore
+            }
+          }
           await usbDeviceRef.current.close();
         } catch {
           // ignore
         }
         usbDeviceRef.current = null;
+        usbInterfaceRef.current = null;
+        usbEndpointRef.current = null;
       }
 
       setIsConnected(false);
       setPrinterType('None');
+      setUsbSubtype('None');
       setPrinterName('');
       setStatusMessage('Disconnected');
     } catch (e: any) {
@@ -120,74 +139,153 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
-  // Connect USB Printer (Web Serial / Web USB)
-  const connectUsbPrinter = useCallback(async (): Promise<boolean> => {
+  // 1. Primary USB Connection: Web USB Direct
+  const connectWebUsbPrinter = useCallback(async (): Promise<boolean> => {
     setLastError(null);
-    setStatusMessage('Connecting to USB Thermal Printer...');
+    setStatusMessage('Connecting to Web USB Printer...');
 
     try {
-      // Check if Web Serial is supported (Preferred for ESC/POS USB thermal printers)
-      if (typeof navigator !== 'undefined' && 'serial' in navigator) {
-        const serial = (navigator as any).serial;
-        const port = await serial.requestPort();
-        await port.open({ baudRate: 9600 });
-        
-        serialPortRef.current = port;
-        setIsConnected(true);
-        setPrinterType('USB');
-        
-        // Attempt to extract device info if available
-        const info = port.getInfo ? port.getInfo() : {};
-        const devTitle = info.usbVendorId
-          ? `USB Thermal Printer (VID:${info.usbVendorId.toString(16).toUpperCase()})`
-          : 'USB Thermal Receipt Printer';
-
-        setPrinterName(devTitle);
-        setStatusMessage(`Connected to ${devTitle}`);
-        return true;
-      }
-
-      // Secondary Web USB Fallback
-      if (typeof navigator !== 'undefined' && 'usb' in navigator) {
-        const usb = (navigator as any).usb;
-        const device = await usb.requestDevice({
-          filters: [{ classCode: 7 }], // USB Printer Class
-        });
-
-        await device.open();
-        if (device.configuration === null) {
-          await device.selectConfiguration(1);
-        }
-        await device.claimInterface(0);
-
-        usbDeviceRef.current = device;
-        setIsConnected(true);
-        setPrinterType('USB');
-        const devName = device.productName || 'WebUSB Thermal Printer';
-        setPrinterName(devName);
-        setStatusMessage(`Connected to ${devName}`);
-        return true;
-      }
-
-      // If browser doesn't support WebUSB/Serial API
-      const errMsg = 'Web USB / Web Serial API is not supported in this browser. Use Google Chrome or Microsoft Edge for direct hardware printing.';
-      setLastError(errMsg);
-      setStatusMessage(errMsg);
-      toast.warning('Browser Not Supported', errMsg);
-      return false;
-    } catch (err: any) {
-      if (err.name === 'NotFoundError' || err.message?.includes('No port selected') || err.message?.includes('cancelled')) {
-        setStatusMessage('USB selection cancelled.');
+      if (typeof navigator === 'undefined' || !('usb' in navigator)) {
+        const msg = 'Web USB is not supported in this browser. Use Google Chrome or Microsoft Edge.';
+        setLastError(msg);
+        setStatusMessage(msg);
+        toast.warning('Browser Not Supported', msg);
         return false;
       }
-      console.error('USB Printer connection error:', err);
-      const msg = err.message || 'Failed to connect USB thermal printer.';
+
+      const usb = (navigator as any).usb;
+      const device = await usb.requestDevice({
+        filters: [
+          { classCode: 7 },   // Standard USB Printer Class
+          { classCode: 255 }, // Vendor Specific POS chip Class
+          { classCode: 0 },   // Composite USB device Class
+        ],
+      });
+
+      await device.open();
+      if (!device.configuration) {
+        await device.selectConfiguration(1);
+      }
+
+      // Discover bulk OUT endpoint dynamically
+      let targetInterfaceNumber: number | null = null;
+      let targetEndpointNumber: number | null = null;
+
+      if (device.configuration && device.configuration.interfaces) {
+        for (const iface of device.configuration.interfaces) {
+          for (const alt of iface.alternates) {
+            const outEp = alt.endpoints.find((ep: any) => ep.direction === 'out');
+            if (outEp) {
+              targetInterfaceNumber = iface.interfaceNumber;
+              targetEndpointNumber = outEp.endpointNumber;
+              break;
+            }
+          }
+          if (targetEndpointNumber !== null) break;
+        }
+      }
+
+      const ifaceToClaim = targetInterfaceNumber !== null ? targetInterfaceNumber : 0;
+      const epToUse = targetEndpointNumber !== null ? targetEndpointNumber : 1;
+
+      try {
+        await device.claimInterface(ifaceToClaim);
+      } catch (claimErr: any) {
+        console.warn('Interface claim notice:', claimErr);
+      }
+
+      // Clean existing handles
+      await disconnectPrinter();
+
+      usbDeviceRef.current = device;
+      usbInterfaceRef.current = ifaceToClaim;
+      usbEndpointRef.current = epToUse;
+
+      setIsConnected(true);
+      setPrinterType('USB');
+      setUsbSubtype('WebUSB');
+
+      const devName = device.productName || device.manufacturerName || 'USB Thermal Receipt Printer';
+      setPrinterName(devName);
+      setStatusMessage(`Connected via WebUSB: ${devName}`);
+      toast.success('Printer Connected', `Connected to ${devName}`);
+      return true;
+    } catch (err: any) {
+      if (err.name === 'NotFoundError' || err.message?.includes('No device selected') || err.message?.includes('cancelled')) {
+        setStatusMessage('USB pairing cancelled.');
+        return false;
+      }
+      console.error('WebUSB pairing error:', err);
+      let msg = err.message || 'Failed to connect via WebUSB.';
+      if (msg.includes('Access denied') || msg.includes('SecurityError')) {
+        msg = 'Access denied. The Windows printer driver may be claiming this USB device. You can use Browser Print directly.';
+      }
       setLastError(msg);
       setStatusMessage(`USB error: ${msg}`);
-      toast.error('USB Connection Failed', msg);
+      toast.error('USB Pairing Failed', msg);
       return false;
     }
-  }, []);
+  }, [disconnectPrinter]);
+
+  // 2. Secondary USB Connection: Web Serial (COM port)
+  const connectUsbSerialPrinter = useCallback(async (): Promise<boolean> => {
+    setLastError(null);
+    setStatusMessage('Selecting USB Serial / COM Port...');
+
+    try {
+      if (typeof navigator === 'undefined' || !('serial' in navigator)) {
+        const msg = 'Web Serial API is not supported in this browser. Please use Chrome or Edge.';
+        setLastError(msg);
+        setStatusMessage(msg);
+        toast.warning('Browser Not Supported', msg);
+        return false;
+      }
+
+      const serial = (navigator as any).serial;
+      const port = await serial.requestPort();
+      await port.open({ baudRate: 9600 });
+
+      // Clean existing
+      await disconnectPrinter();
+
+      serialPortRef.current = port;
+      setIsConnected(true);
+      setPrinterType('USB');
+      setUsbSubtype('Serial');
+
+      const info = port.getInfo ? port.getInfo() : {};
+      const devTitle = info.usbVendorId
+        ? `USB Serial Printer (VID:${info.usbVendorId.toString(16).toUpperCase()})`
+        : 'USB Serial Thermal Printer';
+
+      setPrinterName(devTitle);
+      setStatusMessage(`Connected via Serial: ${devTitle}`);
+      toast.success('Serial Printer Connected', `Connected to ${devTitle}`);
+      return true;
+    } catch (err: any) {
+      if (err.name === 'NotFoundError' || err.message?.includes('No port selected') || err.message?.includes('cancelled')) {
+        setStatusMessage('Serial port selection cancelled.');
+        return false;
+      }
+      console.error('Serial port error:', err);
+      const msg = err.message || 'Failed to open serial port. The port may be locked by Windows or in use.';
+      setLastError(msg);
+      setStatusMessage(`Serial error: ${msg}`);
+      toast.error('Serial Open Failed', msg);
+      return false;
+    }
+  }, [disconnectPrinter]);
+
+  // Default USB button action: tries WebUSB first (standard for direct USB thermal printers)
+  const connectUsbPrinter = useCallback(async (): Promise<boolean> => {
+    if (typeof navigator !== 'undefined' && 'usb' in navigator) {
+      return await connectWebUsbPrinter();
+    }
+    if (typeof navigator !== 'undefined' && 'serial' in navigator) {
+      return await connectUsbSerialPrinter();
+    }
+    return false;
+  }, [connectWebUsbPrinter, connectUsbSerialPrinter]);
 
   // Connect Bluetooth Printer (Web Bluetooth API)
   const connectBluetoothPrinter = useCallback(async (): Promise<boolean> => {
@@ -196,7 +294,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     try {
       if (typeof navigator === 'undefined' || !(navigator as any).bluetooth) {
-        const errMsg = 'Web Bluetooth API is not supported in this browser. Please use Google Chrome or Microsoft Edge with Bluetooth enabled.';
+        const errMsg = 'Web Bluetooth API is not supported in this browser. Please use Chrome or Edge with Bluetooth enabled.';
         setLastError(errMsg);
         setStatusMessage(errMsg);
         toast.warning('Bluetooth Not Supported', errMsg);
@@ -217,6 +315,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
       device.addEventListener('gattserverdisconnected', () => {
         setIsConnected(false);
         setPrinterType('None');
+        setUsbSubtype('None');
         setPrinterName('');
         setStatusMessage('Bluetooth printer disconnected');
       });
@@ -240,14 +339,19 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
 
+      // Clean existing
+      await disconnectPrinter();
+
       bleDeviceRef.current = device;
       bleCharacteristicRef.current = writeChar;
 
       setIsConnected(true);
       setPrinterType('Bluetooth');
+      setUsbSubtype('None');
       const devName = device.name || 'Bluetooth Thermal Printer';
       setPrinterName(devName);
       setStatusMessage(`Connected to ${devName}`);
+      toast.success('Bluetooth Connected', `Connected to ${devName}`);
       return true;
     } catch (err: any) {
       if (err.name === 'NotFoundError' || err.message?.includes('User cancelled')) {
@@ -260,74 +364,156 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setStatusMessage(`Bluetooth error: ${msg}`);
       return false;
     }
-  }, []);
+  }, [disconnectPrinter]);
 
   // Stream raw bytes / ESC/POS commands to active hardware device
-  const printRaw = useCallback(async (data: Uint8Array | string): Promise<boolean> => {
-    setIsPrinting(true);
-    setStatusMessage('Sending print job...');
-    setLastError(null);
+  const printRaw = useCallback((data: Uint8Array | string): Promise<boolean> => {
+    const executePrint = async (): Promise<boolean> => {
+      setIsPrinting(true);
+      setStatusMessage('Sending print job...');
+      setLastError(null);
 
-    const bytes: Uint8Array =
-      typeof data === 'string' ? new TextEncoder().encode(data) : data;
+      const bytes: Uint8Array =
+        typeof data === 'string' ? new TextEncoder().encode(data) : data;
 
-    try {
-      // 1. USB Serial Port Stream
-      if (printerType === 'USB' && serialPortRef.current) {
-        const port = serialPortRef.current;
-        if (!port.writable) {
-          throw new Error('USB Serial port is not writable or was disconnected.');
-        }
-        const writer = port.writable.getWriter();
-        await writer.write(bytes);
-        writer.releaseLock();
-        setStatusMessage('Print completed successfully');
-        setIsPrinting(false);
-        return true;
-      }
-
-      // 2. Web USB Direct Transfer
-      if (printerType === 'USB' && usbDeviceRef.current) {
-        const device = usbDeviceRef.current;
-        // Transfer Out to endpoint 1 or first OUT endpoint
-        await device.transferOut(1, bytes);
-        setStatusMessage('Print completed via WebUSB');
-        setIsPrinting(false);
-        return true;
-      }
-
-      // 3. Bluetooth BLE Stream in chunks (max 512 bytes / chunk)
-      if (printerType === 'Bluetooth' && bleCharacteristicRef.current) {
-        const char = bleCharacteristicRef.current;
-        const chunkSize = 128; // safe BLE packet size for ESC/POS
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          const chunk = bytes.slice(i, i + chunkSize);
-          if (char.writeValueWithoutResponse) {
-            await char.writeValueWithoutResponse(chunk);
-          } else {
-            await char.writeValue(chunk);
+      try {
+        // 1. USB Serial Port Stream
+        if (printerType === 'USB' && serialPortRef.current) {
+          const port = serialPortRef.current;
+          if (!port.writable) {
+            throw new Error('USB Serial port is not writable or was disconnected.');
           }
-          // Micro delay to avoid BLE buffer saturation
-          await new Promise((res) => setTimeout(res, 25));
-        }
-        setStatusMessage('Print completed via Bluetooth');
-        setIsPrinting(false);
-        return true;
-      }
 
-      // Fallback: If no hardware printer is connected, trigger browser print
-      setStatusMessage('No direct thermal printer connected. Opening system print...');
-      window.print();
-      setIsPrinting(false);
-      return true;
-    } catch (err: any) {
-      console.error('Print execution error:', err);
-      const msg = err.message || 'Print job failed.';
-      setLastError(msg);
-      setStatusMessage(`Print failed: ${msg}`);
-      setIsPrinting(false);
-      return false;
-    }
+          // If locked, wait briefly for preceding task to release
+          let attempts = 0;
+          while (port.writable.locked && attempts < 10) {
+            await new Promise((res) => setTimeout(res, 50));
+            attempts++;
+          }
+
+          if (port.writable.locked) {
+            throw new Error('USB Serial stream is busy. Please try again.');
+          }
+
+          const writer = port.writable.getWriter();
+          try {
+            await writer.write(bytes);
+          } finally {
+            try {
+              writer.releaseLock();
+            } catch (lockErr) {
+              console.warn('Failed to release writer lock:', lockErr);
+            }
+          }
+
+          setStatusMessage('Print completed successfully via Serial');
+          return true;
+        }
+
+        // 2. Web USB Direct Transfer
+        if (printerType === 'USB' && usbDeviceRef.current) {
+          const device = usbDeviceRef.current;
+          const ep = usbEndpointRef.current || 1;
+
+          // Verify connection is open and interface claimed
+          if (!device.opened) {
+            await device.open();
+            if (!device.configuration) {
+              await device.selectConfiguration(1);
+            }
+            if (usbInterfaceRef.current !== null) {
+              await device.claimInterface(usbInterfaceRef.current);
+            }
+          }
+
+          // Clear any lingering endpoint halt / stall from previous print jobs
+          try {
+            await device.clearHalt('out', ep);
+          } catch {
+            // ignore if not halted
+          }
+
+          // Stream bytes in chunks (64 bytes per packet for USB Full-Speed printer buffer safety)
+          const chunkSize = 64;
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.slice(i, i + chunkSize);
+            let chunkSent = false;
+            let lastErr: any = null;
+
+            for (let attempt = 0; attempt < 3; attempt++) {
+              try {
+                const res = await device.transferOut(ep, chunk);
+                if (res.status === 'ok') {
+                  chunkSent = true;
+                  break;
+                }
+              } catch (e: any) {
+                lastErr = e;
+                // Attempt to clear endpoint halt
+                try {
+                  await device.clearHalt('out', ep);
+                } catch {
+                  // ignore
+                }
+                await new Promise((r) => setTimeout(r, 20));
+              }
+            }
+
+            if (!chunkSent) {
+              console.error('WebUSB chunk failure at offset', i, lastErr);
+              throw lastErr || new Error(`USB transfer stalled at byte ${i}`);
+            }
+
+            // Pacing delay (5ms) to give the printer's microcontroller FIFO buffer time to drain
+            if (i + chunkSize < bytes.length) {
+              await new Promise((r) => setTimeout(r, 5));
+            }
+          }
+
+          setStatusMessage('Print completed via WebUSB');
+          return true;
+        }
+
+        // 3. Bluetooth BLE Stream in chunks (max 128 bytes / chunk)
+        if (printerType === 'Bluetooth' && bleCharacteristicRef.current) {
+          const char = bleCharacteristicRef.current;
+          const chunkSize = 128; // safe BLE packet size for ESC/POS
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.slice(i, i + chunkSize);
+            if (char.writeValueWithoutResponse) {
+              await char.writeValueWithoutResponse(chunk);
+            } else {
+              await char.writeValue(chunk);
+            }
+            // Micro delay to avoid BLE buffer saturation
+            await new Promise((res) => setTimeout(res, 25));
+          }
+          setStatusMessage('Print completed via Bluetooth');
+          return true;
+        }
+
+        // Fallback: If no hardware printer is connected, trigger browser print
+        setStatusMessage('No direct thermal printer connected. Opening system print...');
+        window.print();
+        return true;
+      } catch (err: any) {
+        console.error('Print execution error:', err);
+        const msg = err.message || 'Print job failed.';
+        setLastError(msg);
+        setStatusMessage(`Print failed: ${msg}`);
+        return false;
+      } finally {
+        setIsPrinting(false);
+      }
+    };
+
+    // Serialize print operations through queue
+    const nextTask = printQueueRef.current
+      .catch(() => false)
+      .then(() => executePrint());
+
+    printQueueRef.current = nextTask;
+    return nextTask;
   }, [printerType]);
 
   // Quick Test Slip Print
@@ -355,12 +541,15 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
       value={{
         isConnected,
         printerType,
+        usbSubtype,
         printerName,
         paperWidth,
         isPrinting,
         statusMessage,
         lastError,
         connectUsbPrinter,
+        connectWebUsbPrinter,
+        connectUsbSerialPrinter,
         connectBluetoothPrinter,
         disconnectPrinter,
         printRaw,

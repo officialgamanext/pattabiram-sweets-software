@@ -34,12 +34,16 @@ import type { ItemRecord } from './ItemsClient';
 
 export interface WholesalerItem {
   id: string;
-  name: string;
-  mobile: string;
+  code?: string;
+  name?: string;
+  personalMobile?: string;
+  businessMobile?: string;
+  mobile?: string;
+  businessName?: string;
   companyName?: string;
   priceListId?: string;
   priceListName?: string;
-  status: string;
+  status?: string;
 }
 
 export interface PriceListRecord {
@@ -274,19 +278,39 @@ export default function WholesalerOrdersClient() {
     setIsSavingOrder(true);
     const newOrderId = `WSO-${Date.now().toString().slice(-6)}`;
 
+    const wholesalerMobile =
+      selectedWholesaler.personalMobile ||
+      selectedWholesaler.businessMobile ||
+      selectedWholesaler.mobile ||
+      '';
+    const wholesalerName =
+      selectedWholesaler.name || selectedWholesaler.businessName || 'Wholesaler';
+    const companyName =
+      selectedWholesaler.businessName || selectedWholesaler.companyName || '';
+    const priceListName = selectedWholesaler.priceListName || 'Standard';
+
     try {
       await addDoc(collection(db, 'orders'), {
         orderId: newOrderId,
-        wholesalerId: selectedWholesaler.id,
-        wholesalerName: selectedWholesaler.name,
-        wholesalerMobile: selectedWholesaler.mobile,
-        priceListName: selectedWholesaler.priceListName || 'Standard',
-        customerName: selectedWholesaler.name,
-        customerMobile: selectedWholesaler.mobile,
-        items: selectedLines,
-        subtotal: modalSubtotal,
-        tax: modalTax,
-        totalAmount: modalTotal,
+        wholesalerId: selectedWholesaler.id || '',
+        wholesalerName: wholesalerName,
+        wholesalerMobile: wholesalerMobile,
+        companyName: companyName,
+        priceListName: priceListName,
+        customerName: wholesalerName,
+        customerMobile: wholesalerMobile,
+        items: selectedLines.map((line) => ({
+          itemId: line.itemId || '',
+          name: line.name || '',
+          unit: line.unit || 'Kg',
+          standardPrice: Number(line.standardPrice) || 0,
+          assignedPrice: Number(line.assignedPrice) || 0,
+          quantity: Number(line.quantity) || 0,
+          totalAmount: Number(line.totalAmount) || 0,
+        })),
+        subtotal: Number(modalSubtotal) || 0,
+        tax: Number(modalTax) || 0,
+        totalAmount: Number(modalTotal) || 0,
         orderType: 'Wholesaler B2B',
         status: 'Pending',
         createdAt: serverTimestamp(),
@@ -512,11 +536,16 @@ export default function WholesalerOrdersClient() {
                   className="w-full h-9 px-3 bg-white text-xs rounded-lg border border-slate-300 text-slate-800 font-semibold focus:outline-none focus:border-indigo-600"
                 >
                   <option value="">-- Choose Wholesaler --</option>
-                  {wholesalers.map((ws) => (
-                    <option key={ws.id} value={ws.id}>
-                      {ws.name} ({ws.mobile}) {ws.priceListName ? `— Assigned: ${ws.priceListName}` : ''}
-                    </option>
-                  ))}
+                  {wholesalers.map((ws) => {
+                    const phone =
+                      ws.personalMobile || ws.businessMobile || ws.mobile || '';
+                    const title = ws.name || ws.businessName || 'Wholesaler';
+                    return (
+                      <option key={ws.id} value={ws.id}>
+                        {title} {phone ? `(${phone})` : ''} {ws.priceListName ? `— Assigned: ${ws.priceListName}` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
 
                 {selectedWholesaler && (

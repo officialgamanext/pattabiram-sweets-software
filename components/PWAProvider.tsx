@@ -8,6 +8,16 @@ export default function PWAProvider({ children }: { children: React.ReactNode })
       return;
     }
 
+    // In development mode, unregister any active service worker to prevent 404 chunk mismatch errors
+    if (process.env.NODE_ENV !== 'production') {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) {
+          registration.unregister().catch(() => {});
+        }
+      });
+      return;
+    }
+
     let refreshing = false;
 
     // Reload page automatically when the new service worker takes control (after deploy)
@@ -18,7 +28,7 @@ export default function PWAProvider({ children }: { children: React.ReactNode })
       }
     });
 
-    // Register Service Worker
+    // Register Service Worker in production
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {

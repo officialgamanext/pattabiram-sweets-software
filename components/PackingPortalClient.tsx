@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, updateDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
-import type { OrderRecord, OrderItemLine } from './OrdersClient';
+import type { OrderRecord, OrderItemLine, CustomisationData } from './OrdersClient';
 import CustomSelect from '@/components/CustomSelect';
 import { useAuth } from '@/context/AuthContext';
 
@@ -55,6 +55,9 @@ export interface AggregatedPackingSummary {
     quantity: number;
     pckStatus: 'Pending' | 'Packing Started' | 'Moved to Store';
     packingDescription?: string;
+    isCustomisation?: boolean;
+    customisationDetails?: CustomisationData | null;
+    hasPacket?: boolean;
   }[];
 }
 
@@ -264,7 +267,10 @@ export default function PackingPortalClient() {
             slot: order.slot,
             quantity: item.quantity || 0,
             pckStatus: itemPckStatus,
-            packingDescription: item.packingDescription
+            packingDescription: item.packingDescription,
+            isCustomisation: Boolean(order.isCustomisation),
+            customisationDetails: order.customisationDetails || null,
+            hasPacket: Boolean(item.hasPacket)
           });
         } else {
           map.set(key, {
@@ -285,7 +291,10 @@ export default function PackingPortalClient() {
                 slot: order.slot,
                 quantity: item.quantity || 0,
                 pckStatus: itemPckStatus,
-                packingDescription: item.packingDescription
+                packingDescription: item.packingDescription,
+                isCustomisation: Boolean(order.isCustomisation),
+                customisationDetails: order.customisationDetails || null,
+                hasPacket: Boolean(item.hasPacket)
               }
             ]
           });
@@ -677,24 +686,70 @@ export default function PackingPortalClient() {
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                         {item.orders.map((ord, idx) => (
-                          <div key={idx} className="bg-white p-2.5 rounded-lg border border-slate-200 text-xs space-y-1.5">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <span className="font-mono font-bold text-slate-800">{ord.orderCode}</span>
-                                <p className="text-[11px] text-slate-500">{ord.customerName} ({ord.slot})</p>
+                          <div key={idx} className="bg-white p-2.5 rounded-lg border border-slate-200 text-xs space-y-1.5 flex flex-col justify-between">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <span className="font-mono font-bold text-slate-800">{ord.orderCode}</span>
+                                  <p className="text-[11px] text-slate-500">{ord.customerName} ({ord.slot})</p>
+                                </div>
+                                <span className="font-mono font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded border border-violet-100">
+                                  {ord.quantity} {item.unit}
+                                </span>
                               </div>
-                              <span className="font-mono font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded border border-violet-100">
-                                {ord.quantity} {item.unit}
-                              </span>
-                            </div>
 
-                            {/* Packing Description / Notes */}
-                            {ord.packingDescription && (
-                              <p className="text-[11px] font-medium text-violet-800 bg-violet-50/90 px-2 py-1 rounded-md border border-violet-100 flex items-start gap-1">
-                                <span>📦</span>
-                                <span><strong>Packing Note:</strong> {ord.packingDescription}</span>
-                              </p>
-                            )}
+                              {/* Customisation Badge if applicable */}
+                              {ord.isCustomisation && ord.customisationDetails && (
+                                <div className="p-2 rounded-lg bg-amber-50/90 border border-amber-200 text-[11px] space-y-1">
+                                  <div className="flex items-center justify-between font-bold text-amber-950">
+                                    <span className="flex items-center gap-1">
+                                      <Boxes size={12} className="text-amber-700 flex-shrink-0" />
+                                      <span>Custom ({ord.customisationDetails.noOfBoxes || 1} {ord.customisationDetails.noOfBoxes === 1 ? 'Box' : 'Boxes'})</span>
+                                    </span>
+                                    <span className="text-[10px] bg-amber-200/80 text-amber-900 px-1.5 py-0.2 rounded border border-amber-300 font-semibold truncate max-w-[120px]">
+                                      {ord.customisationDetails.boxType || 'Custom Box'}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1 text-[10px] text-amber-900 font-medium">
+                                    {ord.customisationDetails.hasSticker && (
+                                      <span className="bg-white/90 px-1.5 py-0.5 rounded border border-amber-200">
+                                        🏷️ {ord.customisationDetails.stickerType || 'Sticker'}
+                                      </span>
+                                    )}
+                                    {ord.customisationDetails.hasShrink && (
+                                      <span className="bg-white/90 px-1.5 py-0.5 rounded border border-amber-200">
+                                        ✨ {ord.customisationDetails.shrinkType || 'Shrink Wrap'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {ord.customisationDetails.boxImageUrl && (
+                                    <div className="pt-1 flex items-center gap-2">
+                                      <img
+                                        src={ord.customisationDetails.boxImageUrl}
+                                        alt="Custom Box"
+                                        className="w-8 h-8 rounded border border-amber-300 object-cover shadow-2xs"
+                                      />
+                                      <span className="text-[10px] text-amber-800 font-semibold">Custom Design</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Packet badge if applicable */}
+                              {ord.hasPacket && (
+                                <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
+                                  <span>🛍️ Packet Required</span>
+                                </div>
+                              )}
+
+                              {/* Packing Description / Notes */}
+                              {ord.packingDescription && (
+                                <p className="text-[11px] font-medium text-orange-900 bg-orange-50/90 px-2 py-1 rounded-md border border-orange-200 flex items-start gap-1">
+                                  <span>📦</span>
+                                  <span><strong>Packing Note:</strong> {ord.packingDescription}</span>
+                                </p>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -733,6 +788,57 @@ export default function PackingPortalClient() {
                         Overall Order Status: {order.orderStatus}
                       </span>
                     </div>
+
+                    {/* Customisation Box Banner if present */}
+                    {order.isCustomisation && order.customisationDetails && (
+                      <div className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-200/90 shadow-2xs space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="p-1 rounded-md bg-amber-200/70 text-amber-900">
+                              <Boxes size={14} />
+                            </span>
+                            <span className="text-xs font-extrabold text-amber-950 uppercase tracking-wider">
+                              Customisation Order Details
+                            </span>
+                          </div>
+                          <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-950 border border-amber-300">
+                            📦 {order.customisationDetails.noOfBoxes} {order.customisationDetails.noOfBoxes === 1 ? 'Box' : 'Boxes'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-white/80 p-2.5 rounded-lg border border-amber-200/70">
+                          <div>
+                            <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Box Type</p>
+                            <p className="font-extrabold text-slate-800">{order.customisationDetails.boxType || 'Standard Box'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Sticker</p>
+                            <p className="font-extrabold text-slate-800">
+                              {order.customisationDetails.hasSticker ? (order.customisationDetails.stickerType || 'Yes (Custom Sticker)') : 'No'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Shrink Wrap</p>
+                            <p className="font-extrabold text-slate-800">
+                              {order.customisationDetails.hasShrink ? (order.customisationDetails.shrinkType || 'Yes (Shrink Wrap)') : 'No'}
+                            </p>
+                          </div>
+                          {order.customisationDetails.boxImageUrl && (
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={order.customisationDetails.boxImageUrl}
+                                alt="Custom Box"
+                                className="w-9 h-9 rounded-md border border-amber-300 object-cover shadow-2xs"
+                              />
+                              <div>
+                                <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Box Preview</p>
+                                <p className="text-[11px] font-bold text-amber-900">Custom Box</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Items List for this order */}
                     <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-200/80">
@@ -779,9 +885,16 @@ export default function PackingPortalClient() {
                                 </div>
                                 
                                 <div className="flex items-center justify-between">
-                                  <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                                    <Building2 size={10} className="text-violet-600" /> {pckUnit}
-                                  </p>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                                      <Building2 size={10} className="text-violet-600" /> {pckUnit}
+                                    </p>
+                                    {item.hasPacket && (
+                                      <span className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                        🛍️ Packet
+                                      </span>
+                                    )}
+                                  </div>
                                   <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
                                     isMovedToStore
                                       ? 'bg-emerald-100 text-emerald-700'
@@ -795,7 +908,7 @@ export default function PackingPortalClient() {
 
                                 {/* Packing Description / Notes */}
                                 {item.packingDescription && (
-                                  <p className="text-[11px] font-medium text-violet-800 bg-violet-50/90 px-2 py-1 rounded-md border border-violet-100 flex items-start gap-1">
+                                  <p className="text-[11px] font-medium text-orange-900 bg-orange-50/90 px-2 py-1 rounded-md border border-orange-200 flex items-start gap-1">
                                     <span>📦</span>
                                     <span><strong>Packing Note:</strong> {item.packingDescription}</span>
                                   </p>

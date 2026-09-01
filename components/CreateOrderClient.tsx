@@ -1035,12 +1035,12 @@ export default function CreateOrderClient() {
   const shrinkChargesTotal = isCustomisation && shrinkType !== 'None' ? Math.max(0, numericNoOfBoxes) * selectedShrinkPrice : 0;
 
   const pCharges = !isCustomisation ? Math.max(0, numericNoOfBoxes) * (globalSettings.globalPackingBoxPrice || 0) : 0;
-  const addCharges = !isCustomisation ? (parseFloat(String(additionalCharges)) || 0) : 0;
+  const addCharges = parseFloat(String(additionalCharges)) || 0;
   const transportChargesVal = isTransportRequired ? (parseFloat(String(transportCharges)) || 0) : 0;
   const discountVal = parseFloat(String(discountAmount)) || 0;
 
   const grandTotal = isCustomisation
-    ? Math.max(0, subTotal + boxChargesTotal + stickerChargesTotal + shrinkChargesTotal + packetChargesTotal + transportChargesVal - discountVal)
+    ? Math.max(0, subTotal + boxChargesTotal + stickerChargesTotal + shrinkChargesTotal + packetChargesTotal + transportChargesVal + addCharges - discountVal)
     : Math.max(0, subTotal + pCharges + addCharges + transportChargesVal - discountVal);
 
   // Compute total received from splits
@@ -1302,7 +1302,7 @@ export default function CreateOrderClient() {
           shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
           packetChargesTotal: packetChargesTotal,
           packingCharges: !isCustomisation ? pCharges : 0,
-          additionalCharges: !isCustomisation ? addCharges : 0,
+          additionalCharges: addCharges,
           discountAmount: discountVal,
           totalAmount: grandTotal,
           receivedAmount: recv,
@@ -1359,7 +1359,7 @@ export default function CreateOrderClient() {
         shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
         packetChargesTotal: packetChargesTotal,
         packingCharges: !isCustomisation ? pCharges : 0,
-        additionalCharges: !isCustomisation ? addCharges : 0,
+        additionalCharges: addCharges,
         discountAmount: discountVal,
         totalAmount: grandTotal,
         receivedAmount: recv,
@@ -1855,6 +1855,37 @@ export default function CreateOrderClient() {
                             className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-[#02626D] hover:file:bg-teal-100 cursor-pointer"
                           />
                         </div>
+                      </div>
+
+                      {/* Custom Box Charges Summary Badge */}
+                      <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/80 text-xs">
+                        <div className="flex items-center justify-between text-amber-950 font-bold">
+                          <span>Custom Packaging Total ({numericNoOfBoxes} boxes):</span>
+                          <span className="font-extrabold text-amber-900">
+                            ₹ {(boxChargesTotal + stickerChargesTotal + shrinkChargesTotal).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-[10px] text-amber-900/80 font-medium">
+                          <span>Box: ₹{selectedBoxPrice}/ea</span>
+                          {stickerType !== 'None' && <span>• Sticker: +₹{selectedStickerPrice}/ea</span>}
+                          {shrinkType !== 'None' && <span>• Shrink: +₹{selectedShrinkPrice}/ea</span>}
+                        </div>
+                      </div>
+
+                      {/* Additional Charges Input in Custom Mode */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Additional Charges (₹, Optional)
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder="0.00"
+                          value={additionalCharges}
+                          onChange={(e) => setAdditionalCharges(e.target.value)}
+                          className="w-full h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
+                        />
                       </div>
                     </div>
                   )}
@@ -2357,6 +2388,13 @@ export default function CreateOrderClient() {
                       <div className="flex justify-between py-0.5 text-amber-900">
                         <span>Packet Charges:</span>
                         <span className="font-bold">+ ₹ {packetChargesTotal.toFixed(2)}</span>
+                      </div>
+                    )}
+
+                    {addCharges > 0 && (
+                      <div className="flex justify-between py-0.5 text-amber-900">
+                        <span>Additional Charges:</span>
+                        <span className="font-bold">+ ₹ {addCharges.toFixed(2)}</span>
                       </div>
                     )}
                   </>

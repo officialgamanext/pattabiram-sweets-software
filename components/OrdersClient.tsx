@@ -1035,11 +1035,11 @@ export default function OrdersClient() {
   const shrinkChargesTotal = isCustomisation && shrinkType !== 'None' ? Math.max(0, numericNoOfBoxes) * selectedShrinkPrice : 0;
 
   const pCharges = !isCustomisation ? Math.max(0, numericNoOfBoxes) * globalSettings.globalPackingBoxPrice : 0;
-  const addCharges = !isCustomisation ? parseFloat(additionalCharges) || 0 : 0;
+  const addCharges = parseFloat(additionalCharges) || 0;
   const discountVal = parseFloat(discountAmount) || 0;
 
   const grandTotal = isCustomisation
-    ? Math.max(0, subTotal + boxChargesTotal + stickerChargesTotal + shrinkChargesTotal + packetChargesTotal - discountVal)
+    ? Math.max(0, subTotal + boxChargesTotal + stickerChargesTotal + shrinkChargesTotal + packetChargesTotal + addCharges - discountVal)
     : Math.max(0, subTotal + pCharges + addCharges - discountVal);
 
   // Automatically compute Payment Status based on received amount vs grand total
@@ -1177,7 +1177,7 @@ export default function OrdersClient() {
           shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
           packetChargesTotal: packetChargesTotal,
           packingCharges: !isCustomisation ? pCharges : 0,
-          additionalCharges: !isCustomisation ? addCharges : 0,
+          additionalCharges: addCharges,
           discountAmount: discountVal,
           totalAmount: grandTotal,
           receivedAmount: parseFloat(receivedAmount) || 0,
@@ -1224,7 +1224,7 @@ export default function OrdersClient() {
           shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
           packetChargesTotal: packetChargesTotal,
           packingCharges: !isCustomisation ? pCharges : 0,
-          additionalCharges: !isCustomisation ? addCharges : 0,
+          additionalCharges: addCharges,
           discountAmount: discountVal,
           totalAmount: grandTotal,
           receivedAmount: parseFloat(receivedAmount) || 0,
@@ -1782,44 +1782,45 @@ export default function OrdersClient() {
                   if (categoriesWithLimits.length === 0) return null;
 
                   return (
-                    <div className="px-3 py-2 bg-gradient-to-r from-slate-50 to-indigo-50/30 border-b border-slate-100 space-y-1.5">
-                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        <span className="flex items-center gap-1">
-                          <Layers size={11} className="text-indigo-600" />
-                          <span>Category Capacity</span>
-                        </span>
-                        <Link href="/slot-categories" className="text-indigo-600 hover:underline">
-                          Limits
-                        </Link>
-                      </div>
+                    // <div className="px-3 py-2 bg-gradient-to-r from-slate-50 to-indigo-50/30 border-b border-slate-100 space-y-1.5">
+                    //   <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    //     <span className="flex items-center gap-1">
+                    //       <Layers size={11} className="text-indigo-600" />
+                    //       <span>Category Capacity</span>
+                    //     </span>
+                    //     <Link href="/slot-categories" className="text-indigo-600 hover:underline">
+                    //       Limits
+                    //     </Link>
+                    //   </div>
 
-                      <div className="space-y-1.5">
-                        {categoriesWithLimits.map((cat) => (
-                          <div key={cat.id} className="bg-white p-1.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1">
-                            <div className="flex items-center justify-between text-[10.5px]">
-                              <span className="font-bold truncate max-w-[120px]" style={{ color: cat.color }}>
-                                {cat.name}
-                              </span>
-                              <span className={`text-[9.5px] font-extrabold px-1.5 py-0.2 rounded ${cat.isExceeded ? 'bg-rose-100 text-rose-800' : cat.remaining <= (cat.maxLimit * 0.2) ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                                {cat.isExceeded ? `${Math.abs(cat.remaining)} KG Over` : `${cat.remaining} KG Left`}
-                              </span>
-                            </div>
+                    //   <div className="space-y-1.5">
+                    //     {categoriesWithLimits.map((cat) => (
+                    //       <div key={cat.id} className="bg-white p-1.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1">
+                    //         <div className="flex items-center justify-between text-[10.5px]">
+                    //           <span className="font-bold truncate max-w-[120px]" style={{ color: cat.color }}>
+                    //             {cat.name}
+                    //           </span>
+                    //           <span className={`text-[9.5px] font-extrabold px-1.5 py-0.2 rounded ${cat.isExceeded ? 'bg-rose-100 text-rose-800' : cat.remaining <= (cat.maxLimit * 0.2) ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                    //             {cat.isExceeded ? `${Math.abs(cat.remaining)} KG Over` : `${cat.remaining} KG Left`}
+                    //           </span>
+                    //         </div>
 
-                            <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${cat.isExceeded ? 'bg-rose-500' : cat.percent >= 80 ? 'bg-amber-500' : 'bg-[#02626D]'}`}
-                                style={{ width: `${Math.min(100, cat.percent)}%` }}
-                              />
-                            </div>
+                    //         <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                    //           <div
+                    //             className={`h-full rounded-full transition-all ${cat.isExceeded ? 'bg-rose-500' : cat.percent >= 80 ? 'bg-amber-500' : 'bg-[#02626D]'}`}
+                    //             style={{ width: `${Math.min(100, cat.percent)}%` }}
+                    //           />
+                    //         </div>
 
-                            <div className="flex items-center justify-between text-[9px] text-slate-400 font-medium">
-                              <span>Booked: {cat.bookedQty} KG</span>
-                              <span>Max: {cat.maxLimit} KG</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    //         <div className="flex items-center justify-between text-[9px] text-slate-400 font-medium">
+                    //           <span>Booked: {cat.bookedQty} KG</span>
+                    //           <span>Max: {cat.maxLimit} KG</span>
+                    //         </div>
+                    //       </div>
+                    //     ))}
+                    //   </div>
+                    // </div>
+                    <></>
                   );
                 })()}
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -234,6 +234,19 @@ export default function OrderDetailClient({ orderId }: Props) {
   const [payNote, setPayNote] = useState('');
   const [isSavingPayment, setIsSavingPayment] = useState(false);
 
+  // ── Split Payment State in Manage Payment modal
+  const [isSplitPayment, setIsSplitPayment] = useState(false);
+  const [splitPayments, setSplitPayments] = useState<
+    { id: string; mode: string; amount: string | number; note?: string }[]
+  >([
+    { id: 'split-1', mode: 'UPI', amount: '', note: '' },
+    { id: 'split-2', mode: 'Cash', amount: '', note: '' },
+  ]);
+
+  const splitTotal = useMemo(() => {
+    return splitPayments.reduce((sum, item) => sum + (parseFloat(String(item.amount)) || 0), 0);
+  }, [splitPayments]);
+
   // ── Edit Payment Entry state
   const [editingPayment, setEditingPayment] = useState<PaymentEntry | null>(null);
   const [editPayAmount, setEditPayAmount] = useState('');
@@ -387,6 +400,60 @@ export default function OrderDetailClient({ orderId }: Props) {
     } catch (e: any) {
       console.error('Failed to add payment:', e);
       toast.error('Payment Failed', e?.message || 'Could not record payment.');
+    } finally {
+      setIsSavingPayment(false);
+    }
+  };
+
+  // ── Add Split Payments ──────────────────────────────────────────
+  const handleAddSplitPayments = async () => {
+    if (!order) return;
+    const validSplits = splitPayments.filter((s) => (parseFloat(String(s.amount)) || 0) > 0);
+    if (validSplits.length === 0) {
+      toast.error('No Amounts Entered', 'Please enter an amount for at least one split payment.');
+      return;
+    }
+
+    const totalSplitAmount = validSplits.reduce((s, p) => s + (parseFloat(String(p.amount)) || 0), 0);
+    const remainingBalance = (order.totalAmount || 0) - displayReceived;
+
+    if (totalSplitAmount > remainingBalance + 0.001) {
+      toast.error(
+        'Invalid Split Total',
+        `Total split payment (₹${totalSplitAmount.toFixed(2)}) cannot exceed the remaining balance due of ₹${Math.max(0, remainingBalance).toFixed(2)}.`
+      );
+      return;
+    }
+
+    try {
+      setIsSavingPayment(true);
+      const now = new Date();
+      const newEntries: PaymentEntry[] = validSplits.map((s, idx) => ({
+        id: `pay-${Date.now()}-${idx}`,
+        amount: parseFloat(String(s.amount)),
+        mode: s.mode || 'UPI',
+        note: (s.note || '').trim(),
+        paidAt: new Date(now.getTime() + idx * 1000).toISOString(),
+      }));
+
+      const currentList = getEffectivePayments(order);
+      const updatedList = [...currentList, ...newEntries];
+
+      await savePaymentsToFirebase(updatedList);
+      toast.success(
+        'Split Payments Recorded',
+        `${validSplits.length} split payments totaling ₹${totalSplitAmount.toFixed(2)} recorded successfully.`
+      );
+
+      // Reset split form
+      setSplitPayments([
+        { id: 'split-1', mode: 'UPI', amount: '', note: '' },
+        { id: 'split-2', mode: 'Cash', amount: '', note: '' },
+      ]);
+      setIsSplitPayment(false);
+    } catch (e: any) {
+      console.error('Failed to add split payments:', e);
+      toast.error('Payment Failed', e?.message || 'Could not record split payments.');
     } finally {
       setIsSavingPayment(false);
     }
@@ -1227,87 +1294,356 @@ export default function OrderDetailClient({ orderId }: Props) {
                   </div>
                 </div>
               ) : (
-                /* ── ADD NEW PAYMENT FORM ── */
+                /* ── ADD NEW PAYMENT FORM (SINGLE OR SPLIT) ── */
                 order.paymentStatus !== 'Completed' && (
-                  <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-4">
-                    <p className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <Plus size={13} /> Add New Payment
-                    </p>
+                  <div className="space-y-3">
+                    {/* Payment Mode Switcher (Single vs Split) */}
+                    <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setIsSplitPayment(false)}
+                        className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${
+                          !isSplitPayment
+                            ? 'bg-emerald-600 text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Single Payment
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSplitPayment(true);
+                          if (splitPayments.length >= 1 && !splitPayments[0].amount && payAmount) {
+                            setSplitPayments((prev) =>
+                              prev.map((s, i) => (i === 0 ? { ...s, amount: payAmount, mode: payMode } : s))
+                            );
+                          }
+                        }}
+                        className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          isSplitPayment
+                            ? 'bg-emerald-600 text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <span>Split Payment</span>
+                        <span className="text-[9px] bg-amber-400 text-amber-950 px-1.5 py-0.2 rounded font-extrabold">NEW</span>
+                      </button>
+                    </div>
 
-                    <div>
-                      <div className="flex justify-between items-center mb-1.5">
-                        <label className="block text-xs font-semibold text-slate-600">
-                          Amount (₹) <span className="text-red-500">*</span>
-                        </label>
-                        <span className="text-[10px] font-bold text-slate-400">
-                          Max: ₹{Math.max(0, balanceDue).toFixed(2)}
-                        </span>
+                    {!isSplitPayment ? (
+                      /* ── SINGLE PAYMENT FORM ── */
+                      <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-4 animate-in fade-in duration-150">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <Plus size={13} /> Add Single Payment
+                          </p>
+                          <div className="flex items-center gap-1 text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => setPayAmount(balanceDue > 0 ? String(Math.round(balanceDue * 100) / 100) : '')}
+                              className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold hover:bg-emerald-200 cursor-pointer"
+                            >
+                              100% Full
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPayAmount(balanceDue > 0 ? String(Math.round((balanceDue / 2) * 100) / 100) : '')}
+                              className="px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 font-bold hover:bg-sky-200 cursor-pointer"
+                            >
+                              50% Half
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPayAmount('')}
+                              className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between items-center mb-1.5">
+                            <label className="block text-xs font-semibold text-slate-600">
+                              Amount (₹) <span className="text-red-500">*</span>
+                            </label>
+                            <span className="text-[10px] font-bold text-slate-400">
+                              Max: ₹{Math.max(0, balanceDue).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="relative">
+                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">₹</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0.01"
+                              max={Math.max(0, balanceDue)}
+                              placeholder={`Max: ${Math.max(0, balanceDue).toFixed(2)}`}
+                              value={payAmount}
+                              onChange={e => {
+                                const val = e.target.value;
+                                const num = parseFloat(val) || 0;
+                                if (num > balanceDue && balanceDue > 0) {
+                                  setPayAmount(String(balanceDue));
+                                } else {
+                                  setPayAmount(val);
+                                }
+                              }}
+                              className={`w-full pl-8 pr-4 py-2.5 text-sm font-bold border rounded-xl focus:outline-none bg-white ${
+                                parseFloat(payAmount) > balanceDue
+                                  ? 'text-red-600 border-red-300 focus:border-red-500'
+                                  : 'text-emerald-700 border-slate-200 focus:border-emerald-500'
+                              }`}
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1.5">Payment Mode</label>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {['Cash', 'UPI', 'Card', 'Bank Transfer', 'Cheque', 'Credit'].map(mode => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setPayMode(mode as any)}
+                                className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${payMode === mode
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                              >
+                                {getModeIcon(mode as any)} {mode}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1.5">Note (Optional)</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Advance payment, Final settlement..."
+                            value={payNote}
+                            onChange={e => setPayNote(e.target.value)}
+                            className="w-full px-3.5 py-2.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleAddPayment}
+                          disabled={isSavingPayment || !payAmount || parseFloat(payAmount) <= 0}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {isSavingPayment ? <Loader2 size={14} className="animate-spin" /> : <BadgeCheck size={15} />}
+                          Confirm Payment (₹{(parseFloat(payAmount) || 0).toFixed(2)})
+                        </button>
                       </div>
-                      <div className="relative">
-                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">₹</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0.01"
-                          max={Math.max(0, balanceDue)}
-                          placeholder={`Max: ${Math.max(0, balanceDue).toFixed(2)}`}
-                          value={payAmount}
-                          onChange={e => {
-                            const val = e.target.value;
-                            const num = parseFloat(val) || 0;
-                            if (num > balanceDue && balanceDue > 0) {
-                              setPayAmount(String(balanceDue));
-                            } else {
-                              setPayAmount(val);
-                            }
+                    ) : (
+                      /* ── SPLIT PAYMENT FORM ── */
+                      <div className="bg-[#f0f9fa] rounded-2xl border border-[#b2e3e8] p-4 space-y-3.5 animate-in fade-in duration-150">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#b2e3e8]/70 pb-2.5">
+                          <div>
+                            <p className="text-xs font-extrabold text-[#02626D] uppercase tracking-wider flex items-center gap-1.5">
+                              <CreditCard size={13} /> Split Payment Collection
+                            </p>
+                            <p className="text-[10px] text-slate-500">Collect across multiple payment modes simultaneously</p>
+                          </div>
+
+                          <div className="flex items-center gap-1 text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const half = Math.round((balanceDue / 2) * 100) / 100;
+                                const otherHalf = Math.round((balanceDue - half) * 100) / 100;
+                                setSplitPayments([
+                                  { id: 'split-1', mode: 'UPI', amount: String(half), note: '' },
+                                  { id: 'split-2', mode: 'Cash', amount: String(otherHalf), note: '' },
+                                ]);
+                              }}
+                              className="px-2 py-0.5 rounded bg-sky-100 text-sky-800 font-bold hover:bg-sky-200 cursor-pointer"
+                            >
+                              50 / 50 Split
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSplitPayments([
+                                  { id: 'split-1', mode: 'UPI', amount: '', note: '' },
+                                  { id: 'split-2', mode: 'Cash', amount: '', note: '' },
+                                ]);
+                              }}
+                              className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Split Rows */}
+                        <div className="space-y-2.5">
+                          {splitPayments.map((split, index) => {
+                            const currentSplitsTotalExceptThis = splitPayments.reduce(
+                              (sum, s, i) => (i === index ? sum : sum + (parseFloat(String(s.amount)) || 0)),
+                              0
+                            );
+                            const remainingToFill = Math.max(0, Math.round((balanceDue - currentSplitsTotalExceptThis) * 100) / 100);
+
+                            return (
+                              <div
+                                key={split.id || index}
+                                className="bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs space-y-2"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] font-bold text-slate-700">
+                                    Split #{index + 1}
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    {remainingToFill > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSplitPayments((prev) =>
+                                            prev.map((s, i) => (i === index ? { ...s, amount: String(remainingToFill) } : s))
+                                          );
+                                        }}
+                                        className="text-[10px] font-bold text-[#02626D] bg-teal-50 px-2 py-0.5 rounded hover:bg-teal-100 cursor-pointer border border-teal-200"
+                                      >
+                                        Fill Balance (₹{remainingToFill.toFixed(2)})
+                                      </button>
+                                    )}
+                                    {splitPayments.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSplitPayments((prev) => prev.filter((_, i) => i !== index));
+                                        }}
+                                        className="text-slate-400 hover:text-red-500 p-0.5 rounded hover:bg-red-50 cursor-pointer"
+                                        title="Remove Split"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Mode</label>
+                                    <select
+                                      value={split.mode}
+                                      onChange={(e) => {
+                                        const newMode = e.target.value;
+                                        setSplitPayments((prev) =>
+                                          prev.map((s, i) => (i === index ? { ...s, mode: newMode } : s))
+                                        );
+                                      }}
+                                      className="w-full h-8 px-2.5 text-xs font-bold text-slate-800 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:border-[#02626D]"
+                                    >
+                                      {['UPI', 'Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit'].map((m) => (
+                                        <option key={m} value={m}>
+                                          {m}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Amount (₹) *</label>
+                                    <div className="relative">
+                                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">₹</span>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        placeholder="0.00"
+                                        value={split.amount}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setSplitPayments((prev) =>
+                                            prev.map((s, i) => (i === index ? { ...s, amount: val } : s))
+                                          );
+                                        }}
+                                        className="w-full h-8 pl-6 pr-2.5 text-xs font-black text-slate-900 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:border-[#02626D]"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <input
+                                    type="text"
+                                    placeholder="Split note / reference (optional)..."
+                                    value={split.note || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setSplitPayments((prev) =>
+                                        prev.map((s, i) => (i === index ? { ...s, note: val } : s))
+                                      );
+                                    }}
+                                    className="w-full h-7 px-2.5 text-[11px] border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:border-[#02626D]"
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Add Split Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentSum = splitPayments.reduce((sum, s) => sum + (parseFloat(String(s.amount)) || 0), 0);
+                            const rem = Math.max(0, Math.round((balanceDue - currentSum) * 100) / 100);
+                            setSplitPayments((prev) => [
+                              ...prev,
+                              {
+                                id: `split-${Date.now()}`,
+                                mode: prev.some((p) => p.mode === 'Cash') ? 'UPI' : 'Cash',
+                                amount: rem > 0 ? String(rem) : '',
+                                note: '',
+                              },
+                            ]);
                           }}
-                          className={`w-full pl-8 pr-4 py-2.5 text-sm font-bold border rounded-xl focus:outline-none bg-white ${
-                            parseFloat(payAmount) > balanceDue
-                              ? 'text-red-600 border-red-300 focus:border-red-500'
-                              : 'text-emerald-700 border-slate-200 focus:border-emerald-500'
-                          }`}
-                        />
+                          className="w-full py-1.5 rounded-lg border border-dashed border-[#02626D]/50 text-[#02626D] bg-white hover:bg-teal-50/60 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                        >
+                          <Plus size={13} /> Add Another Split
+                        </button>
+
+                        {/* Total Breakdown Summary for Splits */}
+                        <div className="p-2.5 rounded-xl bg-white border border-[#b2e3e8] text-xs space-y-1">
+                          <div className="flex justify-between items-center text-slate-600">
+                            <span>Total of Splits:</span>
+                            <span className="font-extrabold text-slate-900">₹ {splitTotal.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-slate-600">
+                            <span>Balance Due:</span>
+                            <span className="font-extrabold text-red-600">₹ {Math.max(0, balanceDue).toFixed(2)}</span>
+                          </div>
+                          <div className="pt-1 border-t border-slate-100 flex justify-between items-center font-bold">
+                            <span className="text-[11px] text-slate-500">Remaining after splits:</span>
+                            <span className={`text-xs font-black ${balanceDue - splitTotal < -0.001 ? 'text-red-600' : 'text-emerald-700'}`}>
+                              ₹ {Math.max(0, balanceDue - splitTotal).toFixed(2)}
+                              {balanceDue - splitTotal < -0.001 && ' (Exceeds balance!)'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Confirm Split Payment Button */}
+                        <button
+                          type="button"
+                          onClick={handleAddSplitPayments}
+                          disabled={
+                            isSavingPayment ||
+                            splitTotal <= 0 ||
+                            splitTotal > balanceDue + 0.001
+                          }
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {isSavingPayment ? <Loader2 size={14} className="animate-spin" /> : <BadgeCheck size={15} />}
+                          Confirm Split Payment (₹{splitTotal.toFixed(2)})
+                        </button>
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Payment Mode</label>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {['Cash', 'UPI', 'Card', 'Bank Transfer', 'Cheque', 'Credit'].map(mode => (
-                          <button
-                            key={mode}
-                            type="button"
-                            onClick={() => setPayMode(mode as any)}
-                            className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${payMode === mode
-                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
-                          >
-                            {getModeIcon(mode as any)} {mode}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Note (Optional)</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Advance payment, Final settlement..."
-                        value={payNote}
-                        onChange={e => setPayNote(e.target.value)}
-                        className="w-full px-3.5 py-2.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white"
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleAddPayment}
-                      disabled={isSavingPayment || !payAmount || parseFloat(payAmount) <= 0}
-                      className="w-full flex items-center justify-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      {isSavingPayment ? <Loader2 size={14} className="animate-spin" /> : <BadgeCheck size={15} />}
-                      Confirm Payment
-                    </button>
+                    )}
                   </div>
                 )
               )}

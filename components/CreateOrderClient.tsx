@@ -1768,22 +1768,35 @@ export default function CreateOrderClient() {
                   {/* Customised Order UI (When isCustomisation is ON) */}
                   {isCustomisation && (
                     <div className="space-y-3 pt-3 animate-in fade-in duration-150">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            No. of Boxes
-                          </label>
+                      {/* Prominent Custom Box Rate & Count Banner */}
+                      <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200/90 flex items-center justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-amber-950">Box Rate</span>
+                            <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-amber-200 text-amber-950 border border-amber-300">
+                              ₹{selectedBoxPrice} / box
+                            </span>
+                          </div>
+                          <p className="text-[10.5px] text-amber-800/80 font-medium">
+                            Model: <strong className="text-amber-950">{boxType}</strong> {stickerType !== 'None' ? `• Sticker: +₹${selectedStickerPrice}` : ''} {shrinkType !== 'None' ? `• Shrink: +₹${selectedShrinkPrice}` : ''}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <label className="text-xs font-bold text-amber-950 whitespace-nowrap">Boxes:</label>
                           <input
                             type="number"
                             step="any"
                             min="0"
-                            placeholder="Box count..."
+                            placeholder="0"
                             value={noOfBoxes}
                             onChange={(e) => setNoOfBoxes(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
-                            className="w-full h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D]"
+                            className="w-20 h-8 px-2.5 border border-amber-300 rounded-xl text-xs font-bold text-amber-950 bg-white focus:outline-none focus:border-amber-600 text-center"
                           />
                         </div>
+                      </div>
 
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-1">
                             Box Model
@@ -1800,9 +1813,7 @@ export default function CreateOrderClient() {
                             ))}
                           </select>
                         </div>
-                      </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-1">Shrink Wrap</label>
                           <select
@@ -1818,7 +1829,9 @@ export default function CreateOrderClient() {
                             ))}
                           </select>
                         </div>
+                      </div>
 
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-1">Branding Sticker</label>
                           <select
@@ -1833,6 +1846,21 @@ export default function CreateOrderClient() {
                               </option>
                             ))}
                           </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Additional Charges (₹, Optional)
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            placeholder="0.00"
+                            value={additionalCharges}
+                            onChange={(e) => setAdditionalCharges(e.target.value)}
+                            className="w-full h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
+                          />
                         </div>
                       </div>
 
@@ -1866,26 +1894,10 @@ export default function CreateOrderClient() {
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-2 text-[10px] text-amber-900/80 font-medium">
-                          <span>Box: ₹{selectedBoxPrice}/ea</span>
-                          {stickerType !== 'None' && <span>• Sticker: +₹{selectedStickerPrice}/ea</span>}
-                          {shrinkType !== 'None' && <span>• Shrink: +₹{selectedShrinkPrice}/ea</span>}
+                          <span>Box Rate: ₹{selectedBoxPrice}/box</span>
+                          {stickerType !== 'None' && <span>• Sticker: +₹{selectedStickerPrice}/box</span>}
+                          {shrinkType !== 'None' && <span>• Shrink: +₹{selectedShrinkPrice}/box</span>}
                         </div>
-                      </div>
-
-                      {/* Additional Charges Input in Custom Mode */}
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Additional Charges (₹, Optional)
-                        </label>
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          placeholder="0.00"
-                          value={additionalCharges}
-                          onChange={(e) => setAdditionalCharges(e.target.value)}
-                          className="w-full h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
-                        />
                       </div>
                     </div>
                   )}

@@ -1193,7 +1193,7 @@ export default function ManufacturingPortalClient() {
 
                             {/* Manufacturing Description / Notes */}
                             {ord.manufacturingDescription && (
-                              <p className="text-[11px] font-medium text-teal-800 bg-teal-50/90 px-2 py-1 rounded-md border border-teal-100 flex items-start gap-1">
+                              <p className="text-[11px] font-medium text-orange-900 bg-orange-50/90 px-2 py-1 rounded-md border border-orange-200 flex items-start gap-1">
                                 <span>🏭</span>
                                 <span><strong>Mfg Note:</strong> {ord.manufacturingDescription}</span>
                               </p>
@@ -1348,7 +1348,7 @@ export default function ManufacturingPortalClient() {
                                     </div>
                                     <p className="text-slate-500 text-[10px] truncate">{ord.customerName}</p>
                                     {ord.manufacturingDescription && (
-                                      <p className="text-teal-800 bg-teal-50 px-1 py-0.5 rounded border border-teal-100 text-[10px]">
+                                      <p className="text-orange-900 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200 text-[10px]">
                                         <strong>Note:</strong> {ord.manufacturingDescription}
                                       </p>
                                     )}
@@ -1449,7 +1449,7 @@ export default function ManufacturingPortalClient() {
 
                                 {/* Manufacturing Description / Notes */}
                                 {item.manufacturingDescription && (
-                                  <p className="text-[11px] font-medium text-teal-800 bg-teal-50/90 px-2 py-1 rounded-md border border-teal-100 flex items-start gap-1">
+                                  <p className="text-[11px] font-medium text-orange-900 bg-orange-50/90 px-2 py-1 rounded-md border border-orange-200 flex items-start gap-1">
                                     <span>🏭</span>
                                     <span><strong>Mfg Note:</strong> {item.manufacturingDescription}</span>
                                   </p>

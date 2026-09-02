@@ -40,6 +40,7 @@ import {
   WalletCards,
   Coins,
   Layers,
+  History,
 } from 'lucide-react';
 
 export default function Header() {
@@ -166,6 +167,7 @@ export default function Header() {
     { label: 'Customers', href: '/customers', icon: <UserCheck size={17} /> },
     { label: 'Employees', href: '/employees', icon: <UserCheck size={17} /> },
     { label: 'Payroll', href: '/payroll', icon: <CreditCard size={17} /> },
+    { label: 'Audit Logs', href: '/audit-logs', icon: <History size={17} /> },
   ].filter((item) => isNavAllowed(item.href));
 
   const portalNavItems = [
@@ -352,6 +354,15 @@ export default function Header() {
       icon: <Users size={22} />,
       category: 'Staff & People',
       badgeColor: 'bg-blue-500/15 text-blue-600 border-blue-200',
+    },
+    {
+      label: 'Audit Logs & Cash Handover',
+      description: 'Employee activity timeline, cash collections & handover settlement',
+      href: '/audit-logs',
+      icon: <History size={22} />,
+      category: 'Staff & People',
+      badgeColor: 'bg-teal-500/15 text-teal-700 border-teal-200',
+      tag: 'Cash & Audit',
     },
 
     // 5. System Tools

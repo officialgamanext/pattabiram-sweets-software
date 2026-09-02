@@ -34,6 +34,7 @@ export const APP_MENUS: MenuItemDefinition[] = [
   { key: 'employee_portal', name: 'Employee Portal', path: '/employee-portal' },
   { key: 'credit', name: 'Credit & Due Balances', path: '/credit' },
   { key: 'slot_categories', name: 'Slot Categories', path: '/slot-categories' },
+  { key: 'audit_logs', name: 'Audit Logs & Cash Handover', path: '/audit-logs' },
   { key: 'support', name: 'Support & Tickets', path: '/support' },
   { key: 'settings', name: 'Settings', path: '/settings' }
 ];

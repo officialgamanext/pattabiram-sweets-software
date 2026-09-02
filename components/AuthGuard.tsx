@@ -30,6 +30,7 @@ const ROUTE_MENU_KEY_MAP: Record<string, string> = {
   '/manufacturing-portal': 'manufacturing_portal',
   '/packing-portal': 'packing_portal',
   '/employee-portal': 'employee_portal',
+  '/audit-logs': 'audit_logs',
   '/support': 'support',
   '/settings': 'settings',
 };

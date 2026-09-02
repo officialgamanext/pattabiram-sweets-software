@@ -80,11 +80,15 @@ export interface CashHandoverRecord {
   date: string; // 'YYYY-MM-DD'
   purpose?: string;
   notes?: string;
+  status?: 'Pending Receipt' | 'Received & Verified' | 'Received';
+  receivedAt?: any;
+  receivedBy?: string;
   createdAt?: any;
 }
 
 export interface UnifiedAuditItem {
   id: string;
+  handoverDocId?: string;
   action: string;
   actionType: 'order_created' | 'payment_received' | 'cash_handover' | 'order_updated' | 'status_changed' | 'walk_in_sale' | 'b2b_order';
   description: string;
@@ -106,6 +110,9 @@ export interface UnifiedAuditItem {
   recipientName?: string;
   recipientRole?: string;
   notes?: string;
+  handoverStatus?: 'Pending Receipt' | 'Received & Verified' | 'Received';
+  receivedAt?: any;
+  receivedBy?: string;
 }
 
 const getTodayDateStr = () => {
@@ -400,10 +407,12 @@ export default function AuditLogsClient() {
       const empRole = ho.employeeRole || matchedEmp?.department || 'Staff';
       const empCode = matchedEmp?.empId || '';
       const hoAmt = parseFloat(String(ho.amount)) || 0;
+      const isReceived = ho.status === 'Received & Verified' || ho.status === 'Received';
 
       list.push({
         id: `handover-${ho.id}`,
-        action: 'Cash Handed Over',
+        handoverDocId: ho.id,
+        action: isReceived ? 'Cash Handover (Received & Confirmed)' : 'Cash Handover (Pending Receipt)',
         actionType: 'cash_handover',
         description: `Handed over ₹${hoAmt.toLocaleString('en-IN')} cash to ${ho.recipientName} (${ho.recipientRole || 'Receiver'})`,
         employeeId: ho.employeeId || matchedEmp?.id || 'unknown',
@@ -419,6 +428,9 @@ export default function AuditLogsClient() {
         recipientName: ho.recipientName,
         recipientRole: ho.recipientRole,
         notes: ho.notes || ho.purpose || 'Cash settlement handover',
+        handoverStatus: ho.status || 'Pending Receipt',
+        receivedAt: ho.receivedAt,
+        receivedBy: ho.receivedBy,
       });
     });
 
@@ -609,6 +621,7 @@ export default function AuditLogsClient() {
         date: handoverDate || getTodayDateStr(),
         purpose: handoverPurpose,
         notes: handoverNotes,
+        status: 'Pending Receipt',
         createdAt: serverTimestamp(),
       });
 
@@ -624,7 +637,7 @@ export default function AuditLogsClient() {
 
       toast.success(
         'Cash Handover Recorded',
-        `₹${amountVal.toLocaleString('en-IN')} handed over to ${handoverRecipientName} successfully.`
+        `₹${amountVal.toLocaleString('en-IN')} handed over to ${handoverRecipientName} successfully (Pending Confirmation).`
       );
       setIsHandoverModalOpen(false);
     } catch (err: any) {
@@ -632,6 +645,38 @@ export default function AuditLogsClient() {
       toast.error('Handover Failed', err?.message || 'Failed to record cash handover.');
     } finally {
       setIsSavingHandover(false);
+    }
+  };
+
+  // ── Confirm Cash Handover Received Handler ──────────────────────────────────
+  const [confirmingHandoverId, setConfirmingHandoverId] = useState<string | null>(null);
+
+  const handleConfirmHandoverReceived = async (handoverId: string, item: UnifiedAuditItem) => {
+    try {
+      setConfirmingHandoverId(handoverId);
+      await updateDoc(doc(db, 'cash_handovers', handoverId), {
+        status: 'Received & Verified',
+        receivedAt: serverTimestamp(),
+        receivedBy: item.recipientName || 'Manager',
+        updatedAt: serverTimestamp(),
+      });
+
+      toast.success(
+        'Cash Receipt Confirmed',
+        `₹${Math.abs(item.cashAmount).toLocaleString('en-IN')} marked as received by ${item.recipientName}.`
+      );
+
+      // If viewing modal is open for this item, update its status
+      if (viewingAuditItem && viewingAuditItem.handoverDocId === handoverId) {
+        setViewingAuditItem((prev) =>
+          prev ? { ...prev, handoverStatus: 'Received & Verified' } : null
+        );
+      }
+    } catch (err: any) {
+      console.error('Failed to confirm cash handover:', err);
+      toast.error('Confirmation Failed', err?.message || 'Failed to confirm receipt.');
+    } finally {
+      setConfirmingHandoverId(null);
     }
   };
 
@@ -1091,17 +1136,46 @@ export default function AuditLogsClient() {
                         )}
                       </td>
 
-                      {/* Handover Recipient */}
+                      {/* Handover Recipient & Receipt Confirmation */}
                       <td className="py-3 px-4">
                         {item.recipientName ? (
-                          <div>
-                            <p className="font-bold text-slate-900 flex items-center gap-1">
-                              <UserCheck size={12} className="text-teal-600" />
-                              <span>{item.recipientName}</span>
-                            </p>
-                            <p className="text-[10px] text-slate-400 font-mono">
-                              {item.recipientRole || 'Authorized Receiver'}
-                            </p>
+                          <div className="space-y-1">
+                            <div>
+                              <p className="font-bold text-slate-900 flex items-center gap-1">
+                                <UserCheck size={12} className="text-teal-600" />
+                                <span>{item.recipientName}</span>
+                              </p>
+                              <p className="text-[10px] text-slate-400 font-mono">
+                                {item.recipientRole || 'Authorized Receiver'}
+                              </p>
+                            </div>
+
+                            {/* Confirmation Received Badge or Button */}
+                            {item.actionType === 'cash_handover' && item.handoverDocId && (
+                              <div className="pt-0.5">
+                                {item.handoverStatus === 'Received & Verified' || item.handoverStatus === 'Received' ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                    <CheckCircle2 size={11} className="text-emerald-600" />
+                                    <span>Received &amp; Verified</span>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleConfirmHandoverReceived(item.handoverDocId!, item)}
+                                    disabled={confirmingHandoverId === item.handoverDocId}
+                                    className="h-6 px-2.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shadow-2xs inline-flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
+                                    title="Confirm cash received by recipient"
+                                  >
+                                    {confirmingHandoverId === item.handoverDocId ? (
+                                      <Loader2 size={11} className="animate-spin" />
+                                    ) : (
+                                      <Check size={11} strokeWidth={3} />
+                                    )}
+                                    <span>Confirm Received</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span className="text-slate-300 text-[11px]">—</span>
@@ -1613,6 +1687,21 @@ export default function AuditLogsClient() {
                     <span className="font-bold text-teal-800">{viewingAuditItem.recipientName} ({viewingAuditItem.recipientRole || 'Receiver'})</span>
                   </div>
                 )}
+                {viewingAuditItem.actionType === 'cash_handover' && (
+                  <div className="flex justify-between items-center pt-1 border-t border-slate-200">
+                    <span className="text-slate-500 font-sans">Receipt Status:</span>
+                    {viewingAuditItem.handoverStatus === 'Received & Verified' || viewingAuditItem.handoverStatus === 'Received' ? (
+                      <span className="text-emerald-700 font-bold font-sans bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                        <CheckCircle2 size={12} className="text-emerald-600" />
+                        <span>Received &amp; Verified</span>
+                      </span>
+                    ) : (
+                      <span className="text-amber-700 font-bold font-sans bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        Pending Confirmation
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Description & Notes */}
@@ -1629,12 +1718,31 @@ export default function AuditLogsClient() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end pt-2 border-t border-slate-100">
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+              {viewingAuditItem.actionType === 'cash_handover' &&
+                viewingAuditItem.handoverDocId &&
+                viewingAuditItem.handoverStatus !== 'Received & Verified' &&
+                viewingAuditItem.handoverStatus !== 'Received' && (
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmHandoverReceived(viewingAuditItem.handoverDocId!, viewingAuditItem)}
+                    disabled={confirmingHandoverId === viewingAuditItem.handoverDocId}
+                    className="flex-1 h-8 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    {confirmingHandoverId === viewingAuditItem.handoverDocId ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Check size={13} strokeWidth={3} />
+                    )}
+                    <span>Confirm Cash Received</span>
+                  </button>
+                )}
+
               <button
                 onClick={() => setViewingAuditItem(null)}
-                className="w-full h-8 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                className="flex-1 h-8 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
               >
-                Close
+                Close Details
               </button>
             </div>
           </div>

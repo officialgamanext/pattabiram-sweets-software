@@ -19,6 +19,7 @@ import {
   Tag,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
+import CustomDatePicker from '@/components/CustomDatePicker';
 import Pagination from '@/components/Pagination';
 import { db } from '@/lib/firebase';
 import { toast } from '@/context/ToastContext';
@@ -47,6 +48,7 @@ export interface WholesalerItem {
   priceListId?: string;
   priceListName?: string;
   status: 'Active' | 'Inactive';
+  date?: string;
   createdAt?: any;
 }
 
@@ -55,6 +57,14 @@ export interface PriceListDropdownItem {
   code: string;
   name: string;
 }
+
+const getTodayDateStr = () => {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 
 export default function WholesalersClient() {
   const [wholesalers, setWholesalers] = useState<WholesalerItem[]>([]);
@@ -75,6 +85,7 @@ export default function WholesalersClient() {
 
   // Form states
   const emptyForm = {
+    date: getTodayDateStr(),
     name: '',
     personalMobile: '',
     businessName: '',
@@ -176,6 +187,7 @@ export default function WholesalersClient() {
       await addDoc(collection(db, 'wholesalers'), {
         code: nextCode,
         ...newWholesaler,
+        date: newWholesaler.date || getTodayDateStr(),
         priceListId: finalPriceListId,
         priceListName: finalPriceListName,
         createdAt: serverTimestamp(),
@@ -195,6 +207,7 @@ export default function WholesalersClient() {
   const handleOpenEditModal = (item: WholesalerItem) => {
     setEditingWholesaler(item);
     setEditFormData({
+      date: item.date || getTodayDateStr(),
       name: item.name,
       personalMobile: item.personalMobile,
       businessName: item.businessName,
@@ -218,6 +231,7 @@ export default function WholesalersClient() {
       setIsSubmitting(true);
       const docRef = doc(db, 'wholesalers', editingWholesaler.id);
       await updateDoc(docRef, {
+        date: editFormData.date || getTodayDateStr(),
         name: editFormData.name,
         personalMobile: editFormData.personalMobile,
         businessName: editFormData.businessName,
@@ -593,6 +607,15 @@ export default function WholesalersClient() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Date</label>
+                  <CustomDatePicker
+                    value={newWholesaler.date || ''}
+                    onChange={(val) => setNewWholesaler({ ...newWholesaler, date: val })}
+                    allowAll={false}
+                    size="sm"
+                  />
+                </div>
+                <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
                   <CustomSelect
                     options={statusModalOptions}
@@ -760,6 +783,15 @@ export default function WholesalersClient() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Date</label>
+                  <CustomDatePicker
+                    value={editFormData.date || ''}
+                    onChange={(val) => setEditFormData({ ...editFormData, date: val })}
+                    allowAll={false}
+                    size="sm"
+                  />
+                </div>
+                <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
                   <CustomSelect
                     options={statusModalOptions}
@@ -862,6 +894,10 @@ export default function WholesalersClient() {
             </div>
 
             <div className="space-y-2.5 text-xs text-slate-600">
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-400">Date:</span>
+                <span className="font-semibold text-slate-800">{viewWholesaler.date || 'N/A'}</span>
+              </div>
               <div className="flex justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-400">Business Name:</span>
                 <span className="font-bold text-slate-900">{viewWholesaler.businessName}</span>

@@ -99,7 +99,8 @@ export interface OrderItemLine {
   packetCharge?: number;
   manufacturingDescription?: string;
   packingDescription?: string;
-  mfgStatus?: 'Pending' | 'Manufacturing Started' | 'Moved to Packing';
+  needsManufacturing?: boolean;
+  mfgStatus?: 'Pending' | 'Manufacturing Started' | 'Moved to Packing' | 'Not Required' | 'Skipped';
   pckStatus?: 'Pending' | 'Packing Started' | 'Moved to Store';
 }
 

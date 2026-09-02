@@ -60,7 +60,7 @@ export interface AggregatedItemSummary {
     customerName: string;
     slot: string;
     quantity: number;
-    mfgStatus: 'Pending' | 'Manufacturing Started' | 'Moved to Packing';
+    mfgStatus: 'Pending' | 'Manufacturing Started' | 'Moved to Packing' | 'Not Required' | 'Skipped';
     manufacturingDescription?: string;
   }[];
 }
@@ -81,7 +81,7 @@ export interface SlotWiseItemSummary {
     customerName: string;
     slot: string;
     quantity: number;
-    mfgStatus: 'Pending' | 'Manufacturing Started' | 'Moved to Packing';
+    mfgStatus: 'Pending' | 'Manufacturing Started' | 'Moved to Packing' | 'Not Required' | 'Skipped';
     manufacturingDescription?: string;
   }[];
 }
@@ -393,6 +393,11 @@ export default function ManufacturingPortalClient() {
       if (st === 'Delivered' || st === 'Cancelled') return;
 
       (order.items || []).forEach((item) => {
+        // Skip items that don't need manufacturing or are not required
+        if (item.needsManufacturing === false || (item as any).mfgStatus === 'Not Required' || (item as any).mfgStatus === 'Skipped') {
+          return;
+        }
+
         const itemMfgStatus = item.mfgStatus || (
           order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Packing Completed' || order.orderStatus === 'Moved to Store'
             ? 'Moved to Packing'
@@ -484,6 +489,9 @@ export default function ManufacturingPortalClient() {
 
       // Order must have at least 1 item that is accessible for this employee and pending manufacturing
       const hasPendingAccessibleItem = order.items?.some((item) => {
+        if (item.needsManufacturing === false || (item as any).mfgStatus === 'Not Required' || (item as any).mfgStatus === 'Skipped') {
+          return false;
+        }
         const key = (item.itemName || (item as any).name || '').toLowerCase().trim();
         const masterInfo = itemInfoMap.get(key);
         const unit = (item as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
@@ -528,6 +536,10 @@ export default function ManufacturingPortalClient() {
       const slot = (order.slot || 'Regular / General Slot').trim();
 
       (order.items || []).forEach((item) => {
+        if (item.needsManufacturing === false || (item as any).mfgStatus === 'Not Required' || (item as any).mfgStatus === 'Skipped') {
+          return;
+        }
+
         const itemMfgStatus = item.mfgStatus || (
           order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Packing Completed' || order.orderStatus === 'Moved to Store'
             ? 'Moved to Packing'
@@ -1400,6 +1412,7 @@ export default function ManufacturingPortalClient() {
                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Order Items to Produce</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                         {order.items?.filter((item) => {
+                          if (item.needsManufacturing === false || (item as any).mfgStatus === 'Not Required' || (item as any).mfgStatus === 'Skipped') return false;
                           const rawItemName = item.itemName || (item as any).name || 'Unknown Item';
                           const key = rawItemName.toLowerCase().trim();
                           const masterInfo = itemInfoMap.get(key);

@@ -16,13 +16,15 @@ import {
   ListOrdered,
   Building2,
   ShieldAlert,
-  Lock
+  Lock,
+  ArrowRightLeft
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, updateDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import type { OrderRecord, OrderItemLine, CustomisationData } from './OrdersClient';
 import CustomSelect from '@/components/CustomSelect';
 import { useAuth } from '@/context/AuthContext';
+import SwitchPackingUnitModal from '@/components/SwitchPackingUnitModal';
 
 export interface DynamicUnit {
   id: string;
@@ -134,9 +136,20 @@ export function isOrderMatchingPackingUnit(
 
 export function getEffectivePackingUnitName(
   order: OrderRecord,
+  item: any,
   itemPckUnitName: string,
   allUnits: DynamicUnit[]
 ): string {
+  // 1. Explicit item-level override takes precedence
+  if (item?.packingUnitOverride) {
+    return item.packingUnitOverride;
+  }
+
+  // 2. Explicit order-level override takes precedence
+  if ((order as any)?.packingUnitOverride) {
+    return (order as any).packingUnitOverride;
+  }
+
   const isCustom = Boolean(order.isCustomisation);
   const isTransport = Boolean(order.isTransportRequired);
 
@@ -180,6 +193,22 @@ export default function PackingPortalClient() {
   const [selectedUnit, setSelectedUnit] = useState('all');
   const [activeTab, setActiveTab] = useState<'item_wise' | 'order_wise'>('item_wise');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // Switch Packing Unit Modal State
+  const [switchModalData, setSwitchModalData] = useState<{
+    isOpen: boolean;
+    orderId: string;
+    orderCode: string;
+    targetType: 'order' | 'item';
+    itemName?: string;
+    currentUnitName: string;
+  }>({
+    isOpen: false,
+    orderId: '',
+    orderCode: '',
+    targetType: 'order',
+    currentUnitName: '',
+  });
 
   // Accessible packing units for the logged-in employee
   const accessiblePckUnits = useMemo(() => {
@@ -301,8 +330,19 @@ export default function PackingPortalClient() {
   // Helper to check if an item in an order is permitted to be shown given the current selected unit / employee access
   const isItemAllowedForPacking = (
     order: OrderRecord,
+    item: any,
     itemPckUnitName: string
   ): boolean => {
+    // 1. Explicit override on item or order takes precedence
+    const overrideUnit = item?.packingUnitOverride || (order as any)?.packingUnitOverride;
+    if (overrideUnit) {
+      if (selectedUnit !== 'all') {
+        return selectedUnit.toLowerCase() === overrideUnit.toLowerCase();
+      }
+      if (isAllUnitsAllowed) return true;
+      return accessiblePckUnits.some((u) => u.name.toLowerCase() === overrideUnit.toLowerCase());
+    }
+
     const isCustom = Boolean(order.isCustomisation);
     const isTransport = Boolean(order.isTransportRequired);
 
@@ -375,7 +415,7 @@ export default function PackingPortalClient() {
         const category = item.category || masterInfo?.category || 'General';
 
         // Check if item is allowed for current packing portal view / unit filter
-        if (!isItemAllowedForPacking(order, pckUnitName)) return;
+        if (!isItemAllowedForPacking(order, item, pckUnitName)) return;
 
         // Apply Search Term
         if (
@@ -387,7 +427,7 @@ export default function PackingPortalClient() {
           return;
         }
 
-        const effectiveUnitName = getEffectivePackingUnitName(order, pckUnitName, pckUnits);
+        const effectiveUnitName = getEffectivePackingUnitName(order, item, pckUnitName, pckUnits);
         const existing = map.get(key);
 
         if (existing) {
@@ -447,7 +487,7 @@ export default function PackingPortalClient() {
         const masterInfo = itemInfoMap.get(key);
         const pckUnit = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
 
-        if (!isItemAllowedForPacking(order, pckUnit)) return false;
+        if (!isItemAllowedForPacking(order, item, pckUnit)) return false;
 
         const itemMfgStatus = item.mfgStatus || (
           order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
@@ -824,9 +864,28 @@ export default function PackingPortalClient() {
                                   <span className="font-mono font-bold text-slate-800">{ord.orderCode}</span>
                                   <p className="text-[11px] text-slate-500">{ord.customerName} ({ord.slot})</p>
                                 </div>
-                                <span className="font-mono font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded border border-violet-100">
-                                  {ord.quantity} {item.unit}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded border border-violet-100">
+                                    {ord.quantity} {item.unit}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSwitchModalData({
+                                        isOpen: true,
+                                        orderId: ord.orderId,
+                                        orderCode: ord.orderCode,
+                                        targetType: 'item',
+                                        itemName: item.itemName,
+                                        currentUnitName: item.packingUnitName,
+                                      });
+                                    }}
+                                    className="p-1 text-slate-400 hover:text-[#02626D] hover:bg-teal-50 rounded transition-colors cursor-pointer border border-transparent hover:border-teal-200"
+                                    title={`Send ${item.itemName} for order ${ord.orderCode} to another packing unit (Requires OTP)`}
+                                  >
+                                    <ArrowRightLeft size={12} />
+                                  </button>
+                                </div>
                               </div>
 
                               {/* Customisation Badge if applicable */}
@@ -925,9 +984,29 @@ export default function PackingPortalClient() {
                         )}
                       </div>
 
-                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
-                        Overall Order Status: {order.orderStatus}
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                          Overall Status: {order.orderStatus}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentUnit = (order as any).packingUnitOverride || (order.items?.[0] as any)?.packingUnitOverride || (order.items?.[0] as any)?.packingUnitName || 'General Packing';
+                            setSwitchModalData({
+                              isOpen: true,
+                              orderId: order.id,
+                              orderCode: order.code,
+                              targetType: 'order',
+                              currentUnitName: currentUnit,
+                            });
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-[#02626D] text-xs font-bold border border-teal-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                          title="Switch entire order to another packing unit (Requires OTP authorization)"
+                        >
+                          <ArrowRightLeft size={13} />
+                          <span>Send to other unit</span>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Customisation Box Banner if present */}
@@ -1006,12 +1085,12 @@ export default function PackingPortalClient() {
                           const key = (item.itemName || '').toLowerCase().trim();
                           const masterInfo = itemInfoMap.get(key);
                           const pckUnit = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
-                          return isItemAllowedForPacking(order, pckUnit);
+                          return isItemAllowedForPacking(order, item, pckUnit);
                         }).map((item, idx) => {
                           const key = (item.itemName || '').toLowerCase().trim();
                           const masterInfo = itemInfoMap.get(key);
                           const pckUnit = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
-                          const effectiveUnit = getEffectivePackingUnitName(order, pckUnit, pckUnits);
+                          const effectiveUnit = getEffectivePackingUnitName(order, item, pckUnit, pckUnits);
 
                           const itemMfgStatus = item.mfgStatus || (
                             order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
@@ -1072,30 +1151,51 @@ export default function PackingPortalClient() {
                                 )}
                               </div>
 
-                              {/* Single Item Action */}
-                              {!isMovedToStore ? (
-                                <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5">
-                                  <button
-                                    disabled={isUpdatingSingle}
-                                    onClick={() => handleSingleItemPckStatusUpdate(order.id, item.itemName, 'Packing Started')}
-                                    className="flex-1 py-1 rounded bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
-                                  >
-                                    {isUpdatingSingle ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />} Start
-                                  </button>
+                              {/* Action Row */}
+                              <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                                {!isMovedToStore ? (
+                                  <>
+                                    <button
+                                      disabled={isUpdatingSingle}
+                                      onClick={() => handleSingleItemPckStatusUpdate(order.id, item.itemName, 'Packing Started')}
+                                      className="flex-1 py-1 rounded bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                                    >
+                                      {isUpdatingSingle ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />} Start
+                                    </button>
 
-                                  <button
-                                    disabled={isUpdatingSingle}
-                                    onClick={() => handleSingleItemPckStatusUpdate(order.id, item.itemName, 'Moved to Store')}
-                                    className="flex-1 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
-                                  >
-                                    {isUpdatingSingle ? <Loader2 size={11} className="animate-spin" /> : <Store size={11} />} Complete
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="pt-1 text-[10px] font-bold text-emerald-600 flex items-center gap-1">
-                                  <CheckCircle2 size={12} /> Moved to Store
-                                </div>
-                              )}
+                                    <button
+                                      disabled={isUpdatingSingle}
+                                      onClick={() => handleSingleItemPckStatusUpdate(order.id, item.itemName, 'Moved to Store')}
+                                      className="flex-1 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                                    >
+                                      {isUpdatingSingle ? <Loader2 size={11} className="animate-spin" /> : <Store size={11} />} Complete
+                                    </button>
+                                  </>
+                                ) : (
+                                  <div className="pt-1 text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                                    <CheckCircle2 size={12} /> Moved to Store
+                                  </div>
+                                )}
+
+                                {/* Switch Item Unit Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSwitchModalData({
+                                      isOpen: true,
+                                      orderId: order.id,
+                                      orderCode: order.code,
+                                      targetType: 'item',
+                                      itemName: item.itemName,
+                                      currentUnitName: effectiveUnit,
+                                    });
+                                  }}
+                                  className="p-1.5 text-slate-400 hover:text-[#02626D] hover:bg-teal-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-teal-200"
+                                  title={`Send ${item.itemName} to another packing unit (Requires OTP)`}
+                                >
+                                  <ArrowRightLeft size={13} />
+                                </button>
+                              </div>
 
                             </div>
                           );
@@ -1109,6 +1209,20 @@ export default function PackingPortalClient() {
           )
         )}
       </div>
+
+      {/* Switch Packing Unit Modal (OTP Protected) */}
+      <SwitchPackingUnitModal
+        isOpen={switchModalData.isOpen}
+        onClose={() => setSwitchModalData((prev) => ({ ...prev, isOpen: false }))}
+        orderId={switchModalData.orderId}
+        orderCode={switchModalData.orderCode}
+        targetType={switchModalData.targetType}
+        itemName={switchModalData.itemName}
+        currentUnitName={switchModalData.currentUnitName}
+        pckUnits={pckUnits}
+        userEmail={employeeProfile ? `${employeeProfile.name} (${employeeProfile.empId || employeeProfile.mobile})` : 'Packing Portal Manager'}
+      />
+
     </div>
   );
 }

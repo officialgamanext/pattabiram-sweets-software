@@ -29,6 +29,8 @@ export interface DynamicUnit {
   code: string;
   name: string;
   status: string;
+  isCustomisationUnit?: boolean;
+  isTransportUnit?: boolean;
 }
 
 export interface ItemMasterInfo {
@@ -61,7 +63,7 @@ export interface AggregatedPackingSummary {
   }[];
 }
 
-function isOrderEligibleForPacking(order: OrderRecord): boolean {
+export function isOrderEligibleForPacking(order: OrderRecord): boolean {
   // 1. Exclude POS bills completely
   const orderType = ((order as any).orderType || (order as any).source || '').toString().toLowerCase();
   if (orderType.includes('pos') || orderType.includes('walk-in')) {
@@ -80,6 +82,87 @@ function isOrderEligibleForPacking(order: OrderRecord): boolean {
   }
 
   return true;
+}
+
+/**
+ * Checks if a specific packing unit is responsible for handling an order based on:
+ * - Customisation order -> Customisation packing unit(s)
+ * - Transport order -> Transport packing unit(s)
+ * - Both -> Both Customisation and Transport packing units
+ * - Standard order -> Standard (non-customisation, non-transport) packing units
+ */
+export function isOrderMatchingPackingUnit(
+  order: OrderRecord,
+  unit: DynamicUnit,
+  allUnits: DynamicUnit[]
+): boolean {
+  const isCustom = Boolean(order.isCustomisation);
+  const isTransport = Boolean(order.isTransportRequired);
+  const isUnitCustom = Boolean(unit.isCustomisationUnit);
+  const isUnitTransport = Boolean(unit.isTransportUnit);
+
+  const hasCustomUnits = allUnits.some((u) => Boolean(u.isCustomisationUnit));
+  const hasTransportUnits = allUnits.some((u) => Boolean(u.isTransportUnit));
+
+  // Case 1: Order has BOTH Customisation AND Transport
+  if (isCustom && isTransport) {
+    if (hasCustomUnits || hasTransportUnits) {
+      return isUnitCustom || isUnitTransport;
+    }
+    return !isUnitCustom && !isUnitTransport;
+  }
+
+  // Case 2: Order is Customisation ONLY
+  if (isCustom) {
+    if (hasCustomUnits) {
+      return isUnitCustom;
+    }
+    return !isUnitCustom && !isUnitTransport;
+  }
+
+  // Case 3: Order is Transport ONLY
+  if (isTransport) {
+    if (hasTransportUnits) {
+      return isUnitTransport;
+    }
+    return !isUnitCustom && !isUnitTransport;
+  }
+
+  // Case 4: Standard order (neither customisation nor transport)
+  return !isUnitCustom && !isUnitTransport;
+}
+
+export function getEffectivePackingUnitName(
+  order: OrderRecord,
+  itemPckUnitName: string,
+  allUnits: DynamicUnit[]
+): string {
+  const isCustom = Boolean(order.isCustomisation);
+  const isTransport = Boolean(order.isTransportRequired);
+
+  const customUnits = allUnits.filter((u) => u.isCustomisationUnit);
+  const transportUnits = allUnits.filter((u) => u.isTransportUnit);
+
+  if (isCustom && isTransport) {
+    const customNames = customUnits.map((u) => u.name).join(', ');
+    const transportNames = transportUnits.map((u) => u.name).join(', ');
+    if (customNames && transportNames) {
+      return `${customNames} & ${transportNames}`;
+    }
+    return customNames || transportNames || itemPckUnitName || 'General Packing';
+  }
+
+  if (isCustom) {
+    const customNames = customUnits.map((u) => u.name).join(', ');
+    return customNames || itemPckUnitName || 'Customisation Packing';
+  }
+
+  if (isTransport) {
+    const transportNames = transportUnits.map((u) => u.name).join(', ');
+    return transportNames || itemPckUnitName || 'Transport Packing';
+  }
+
+  return itemPckUnitName || 'General Packing';
 }
 
 export default function PackingPortalClient() {
@@ -111,10 +194,17 @@ export default function PackingPortalClient() {
     const unsubUnits = onSnapshot(
       collection(db, 'packing_units'),
       (snap) => {
-        const list = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<DynamicUnit, 'id'>)
-        }));
+        const list = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            code: data.code || '',
+            name: data.name || '',
+            status: data.status || 'Active',
+            isCustomisationUnit: Boolean(data.isCustomisationUnit),
+            isTransportUnit: Boolean(data.isTransportUnit),
+          };
+        });
         setPckUnits(list.filter((u) => u.status !== 'Inactive'));
       },
       (err) => console.error('Error fetching packing units:', err)
@@ -177,9 +267,18 @@ export default function PackingPortalClient() {
       });
     }
     accessiblePckUnits.forEach((u) => {
+      let roleTag = '';
+      if (u.isCustomisationUnit && u.isTransportUnit) {
+        roleTag = ' [Custom & Transport]';
+      } else if (u.isCustomisationUnit) {
+        roleTag = ' [Customisation]';
+      } else if (u.isTransportUnit) {
+        roleTag = ' [Transport]';
+      }
+
       opts.push({
         value: u.name,
-        label: `${u.name} (${u.code})`
+        label: `${u.name} (${u.code})${roleTag}`
       });
     });
     return opts;
@@ -199,10 +298,47 @@ export default function PackingPortalClient() {
     }
   }, [accessiblePckUnits, isAllUnitsAllowed, selectedUnit]);
 
-  // Helper to check if a specific packing unit is authorized for the logged-in employee
-  const isItemUnitAllowed = (unitName: string) => {
-    if (isAllUnitsAllowed) return true;
-    return assignedPckUnits.some((u) => u.toLowerCase() === (unitName || '').toLowerCase());
+  // Helper to check if an item in an order is permitted to be shown given the current selected unit / employee access
+  const isItemAllowedForPacking = (
+    order: OrderRecord,
+    itemPckUnitName: string
+  ): boolean => {
+    const isCustom = Boolean(order.isCustomisation);
+    const isTransport = Boolean(order.isTransportRequired);
+
+    if (selectedUnit !== 'all') {
+      const activeUnit = pckUnits.find((u) => u.name.toLowerCase() === selectedUnit.toLowerCase());
+      if (!activeUnit) return false;
+
+      // Check if activeUnit handles this order
+      if (!isOrderMatchingPackingUnit(order, activeUnit, pckUnits)) {
+        return false;
+      }
+
+      // If standard order, also check if item's assigned packing unit matches activeUnit
+      if (!isCustom && !isTransport) {
+        if (itemPckUnitName && activeUnit.name && itemPckUnitName.toLowerCase() !== activeUnit.name.toLowerCase()) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    // When selectedUnit === 'all'
+    if (isAllUnitsAllowed) {
+      return true;
+    }
+
+    // Restricted employee: check accessible units
+    return accessiblePckUnits.some((unit) => {
+      if (!isOrderMatchingPackingUnit(order, unit, pckUnits)) return false;
+      if (!isCustom && !isTransport) {
+        if (itemPckUnitName && unit.name && itemPckUnitName.toLowerCase() !== unit.name.toLowerCase()) {
+          return false;
+        }
+      }
+      return true;
+    });
   };
 
   // Aggregate items across active packing stage orders (mfgStatus === 'Moved to Packing' AND pckStatus !== 'Moved to Store')
@@ -238,13 +374,8 @@ export default function PackingPortalClient() {
         const pckUnitName = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
         const category = item.category || masterInfo?.category || 'General';
 
-        // Check employee unit authorization
-        if (!isItemUnitAllowed(pckUnitName)) return;
-
-        // Filter by selected Packing Unit
-        if (selectedUnit !== 'all' && pckUnitName.toLowerCase() !== selectedUnit.toLowerCase()) {
-          return;
-        }
+        // Check if item is allowed for current packing portal view / unit filter
+        if (!isItemAllowedForPacking(order, pckUnitName)) return;
 
         // Apply Search Term
         if (
@@ -256,6 +387,7 @@ export default function PackingPortalClient() {
           return;
         }
 
+        const effectiveUnitName = getEffectivePackingUnitName(order, pckUnitName, pckUnits);
         const existing = map.get(key);
 
         if (existing) {
@@ -281,7 +413,7 @@ export default function PackingPortalClient() {
             unit: item.unit || 'kg',
             imageUrl: item.imageUrl,
             manufacturingUnitName: mfgUnitName,
-            packingUnitName: pckUnitName,
+            packingUnitName: effectiveUnitName,
             totalQuantity: item.quantity || 0,
             orders: [
               {
@@ -303,7 +435,7 @@ export default function PackingPortalClient() {
     });
 
     return Array.from(map.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
-  }, [orders, itemInfoMap, selectedUnit, searchTerm, isAllUnitsAllowed, assignedPckUnits]);
+  }, [orders, itemInfoMap, selectedUnit, searchTerm, isAllUnitsAllowed, accessiblePckUnits, pckUnits]);
 
   const filteredOrderWiseList = useMemo(() => {
     return orders.filter((order) => {
@@ -315,8 +447,7 @@ export default function PackingPortalClient() {
         const masterInfo = itemInfoMap.get(key);
         const pckUnit = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
 
-        if (!isItemUnitAllowed(pckUnit)) return false;
-        if (selectedUnit !== 'all' && pckUnit.toLowerCase() !== selectedUnit.toLowerCase()) return false;
+        if (!isItemAllowedForPacking(order, pckUnit)) return false;
 
         const itemMfgStatus = item.mfgStatus || (
           order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
@@ -345,7 +476,7 @@ export default function PackingPortalClient() {
 
       return true;
     });
-  }, [orders, selectedUnit, searchTerm, itemInfoMap, isAllUnitsAllowed, assignedPckUnits]);
+  }, [orders, selectedUnit, searchTerm, itemInfoMap, isAllUnitsAllowed, accessiblePckUnits, pckUnits]);
 
   // Helper to remove any undefined fields before writing to Firestore
   const sanitizeForFirestore = (obj: any): any => {
@@ -776,12 +907,22 @@ export default function PackingPortalClient() {
                 return (
                   <div key={order.id} className="p-5 hover:bg-slate-50/50 transition-colors space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono font-bold text-xs text-violet-700 bg-violet-50 px-2.5 py-1 rounded-lg border border-violet-100">
                           {order.code}
                         </span>
                         <h3 className="text-sm font-bold text-slate-900">{order.customerName}</h3>
                         <span className="text-xs text-slate-400">• Slot: {order.slot}</span>
+                        {order.isCustomisation && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                            Customisation
+                          </span>
+                        )}
+                        {order.isTransportRequired && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                            Transport
+                          </span>
+                        )}
                       </div>
 
                       <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
@@ -840,6 +981,23 @@ export default function PackingPortalClient() {
                       </div>
                     )}
 
+                    {/* Transport Details Banner if present */}
+                    {order.isTransportRequired && (
+                      <div className="p-3 rounded-xl bg-teal-50/90 border border-teal-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-teal-800">🚚</span>
+                          <span className="text-xs font-extrabold text-teal-950 uppercase tracking-wider">
+                            Transport &amp; Delivery Logistics
+                          </span>
+                        </div>
+                        {order.deliveryAddress && (
+                          <span className="text-xs font-semibold text-teal-900">
+                            <strong className="text-teal-950">Destination:</strong> {order.deliveryAddress}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     {/* Items List for this order */}
                     <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-200/80">
                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Order Items to Pack</p>
@@ -848,13 +1006,12 @@ export default function PackingPortalClient() {
                           const key = (item.itemName || '').toLowerCase().trim();
                           const masterInfo = itemInfoMap.get(key);
                           const pckUnit = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
-                          if (!isItemUnitAllowed(pckUnit)) return false;
-                          if (selectedUnit !== 'all' && pckUnit.toLowerCase() !== selectedUnit.toLowerCase()) return false;
-                          return true;
+                          return isItemAllowedForPacking(order, pckUnit);
                         }).map((item, idx) => {
                           const key = (item.itemName || '').toLowerCase().trim();
                           const masterInfo = itemInfoMap.get(key);
                           const pckUnit = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
+                          const effectiveUnit = getEffectivePackingUnitName(order, pckUnit, pckUnits);
 
                           const itemMfgStatus = item.mfgStatus || (
                             order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
@@ -887,7 +1044,7 @@ export default function PackingPortalClient() {
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                                      <Building2 size={10} className="text-violet-600" /> {pckUnit}
+                                      <Building2 size={10} className="text-violet-600" /> {effectiveUnit}
                                     </p>
                                     {item.hasPacket && (
                                       <span className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">

@@ -40,6 +40,8 @@ export interface UnitItem {
   mobile: string;
   address: string;
   status: 'Active' | 'Inactive';
+  isCustomisationUnit?: boolean;
+  isTransportUnit?: boolean;
   createdAt?: any;
 }
 
@@ -71,12 +73,14 @@ export default function UnitManagementClient({
   const [editingUnit, setEditingUnit] = useState<UnitItem | null>(null);
   const [deletingUnit, setDeletingUnit] = useState<UnitItem | null>(null);
 
-  // New unit form state (Unit Name, Mobile Number, Address, Status)
+  // New unit form state (Unit Name, Mobile Number, Address, Status, Flags)
   const [newUnit, setNewUnit] = useState({
     name: '',
     mobile: '',
     address: '',
     status: 'Active' as 'Active' | 'Inactive',
+    isCustomisationUnit: false,
+    isTransportUnit: false,
   });
 
   // Edit unit form state
@@ -85,6 +89,8 @@ export default function UnitManagementClient({
     mobile: '',
     address: '',
     status: 'Active' as 'Active' | 'Inactive',
+    isCustomisationUnit: false,
+    isTransportUnit: false,
   });
 
   // Real-time Firebase Firestore listener
@@ -104,6 +110,8 @@ export default function UnitManagementClient({
             mobile: data.mobile || '',
             address: data.address || '',
             status: data.status || 'Active',
+            isCustomisationUnit: Boolean(data.isCustomisationUnit),
+            isTransportUnit: Boolean(data.isTransportUnit),
             createdAt: data.createdAt,
           };
         });
@@ -154,7 +162,14 @@ export default function UnitManagementClient({
 
       await addDoc(collection(db, collectionName), {
         code: nextCode,
-        ...newUnit,
+        name: newUnit.name,
+        mobile: newUnit.mobile,
+        address: newUnit.address,
+        status: newUnit.status,
+        ...(unitType === 'packing' ? {
+          isCustomisationUnit: Boolean(newUnit.isCustomisationUnit),
+          isTransportUnit: Boolean(newUnit.isTransportUnit),
+        } : {}),
         createdAt: serverTimestamp(),
       });
 
@@ -164,6 +179,8 @@ export default function UnitManagementClient({
         mobile: '',
         address: '',
         status: 'Active',
+        isCustomisationUnit: false,
+        isTransportUnit: false,
       });
     } catch (err: any) {
       console.error(`Failed to add ${unitType} unit to Firestore:`, err);
@@ -181,6 +198,8 @@ export default function UnitManagementClient({
       mobile: unit.mobile || '',
       address: unit.address || '',
       status: unit.status || 'Active',
+      isCustomisationUnit: Boolean(unit.isCustomisationUnit),
+      isTransportUnit: Boolean(unit.isTransportUnit),
     });
   };
 
@@ -197,6 +216,10 @@ export default function UnitManagementClient({
         mobile: editFormData.mobile,
         address: editFormData.address,
         status: editFormData.status,
+        ...(unitType === 'packing' ? {
+          isCustomisationUnit: Boolean(editFormData.isCustomisationUnit),
+          isTransportUnit: Boolean(editFormData.isTransportUnit),
+        } : {}),
         updatedAt: serverTimestamp(),
       });
 
@@ -331,6 +354,9 @@ export default function UnitManagementClient({
               <tr className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                 <th className="py-3.5 px-4 sm:px-6">Unit Code</th>
                 <th className="py-3.5 px-4">Unit Name</th>
+                {unitType === 'packing' && (
+                  <th className="py-3.5 px-4">Capabilities</th>
+                )}
                 <th className="py-3.5 px-4">Mobile Number</th>
                 <th className="py-3.5 px-4">Address</th>
                 <th className="py-3.5 px-4">Status</th>
@@ -340,7 +366,7 @@ export default function UnitManagementClient({
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={unitType === 'packing' ? 7 : 6} className="py-12 text-center text-slate-400">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 size={18} className="animate-spin text-indigo-600" />
                       <span>Loading units...</span>
@@ -349,7 +375,7 @@ export default function UnitManagementClient({
                 </tr>
               ) : filteredUnits.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={unitType === 'packing' ? 7 : 6} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2 py-4">
                       <IconComponent size={32} className="text-slate-300" />
                       <p className="font-semibold text-slate-600">No {title.toLowerCase()} found</p>
@@ -361,7 +387,30 @@ export default function UnitManagementClient({
                 paginatedUnits.map((unit) => (
                   <tr key={unit.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-4 px-4 sm:px-6 font-bold text-indigo-600">{unit.code}</td>
-                    <td className="py-4 px-4 font-semibold text-slate-900">{unit.name}</td>
+                    <td className="py-4 px-4 font-semibold text-slate-900">
+                      {unit.name}
+                    </td>
+                    {unitType === 'packing' && (
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {unit.isCustomisationUnit && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                              Customisation
+                            </span>
+                          )}
+                          {unit.isTransportUnit && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200">
+                              Transport Orders
+                            </span>
+                          )}
+                          {!unit.isCustomisationUnit && !unit.isTransportUnit && (
+                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                              Standard
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    )}
                     <td className="py-4 px-4 text-slate-600 whitespace-nowrap">{unit.mobile}</td>
                     <td className="py-4 px-4 text-slate-600 max-w-xs truncate">{unit.address}</td>
                     <td className="py-4 px-4">
@@ -448,6 +497,46 @@ export default function UnitManagementClient({
                   className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
                 />
               </div>
+
+              {unitType === 'packing' && (
+                <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2.5">
+                  <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Unit Capabilities</p>
+                  
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none group">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(newUnit.isCustomisationUnit)}
+                      onChange={(e) => setNewUnit({ ...newUnit, isCustomisationUnit: e.target.checked })}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
+                        Is Customisation Packing Unit
+                      </span>
+                      <p className="text-[11px] text-slate-500">
+                        Displays customized orders (exclusive to customisation packing units).
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none group">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(newUnit.isTransportUnit)}
+                      onChange={(e) => setNewUnit({ ...newUnit, isTransportUnit: e.target.checked })}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
+                        Is Transport Orders Packing Unit
+                      </span>
+                      <p className="text-[11px] text-slate-500">
+                        Displays orders requiring transport / delivery logistics.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -538,6 +627,46 @@ export default function UnitManagementClient({
                   className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
                 />
               </div>
+
+              {unitType === 'packing' && (
+                <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2.5">
+                  <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Unit Capabilities</p>
+                  
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none group">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editFormData.isCustomisationUnit)}
+                      onChange={(e) => setEditFormData({ ...editFormData, isCustomisationUnit: e.target.checked })}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
+                        Is Customisation Packing Unit
+                      </span>
+                      <p className="text-[11px] text-slate-500">
+                        Displays customized orders (exclusive to customisation packing units).
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none group">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editFormData.isTransportUnit)}
+                      onChange={(e) => setEditFormData({ ...editFormData, isTransportUnit: e.target.checked })}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
+                        Is Transport Orders Packing Unit
+                      </span>
+                      <p className="text-[11px] text-slate-500">
+                        Displays orders requiring transport / delivery logistics.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -651,6 +780,28 @@ export default function UnitManagementClient({
             </div>
 
             <div className="space-y-2.5 text-xs text-slate-600">
+              {unitType === 'packing' && (
+                <div className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400">Capabilities:</span>
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    {viewUnit.isCustomisationUnit && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                        Customisation Unit
+                      </span>
+                    )}
+                    {viewUnit.isTransportUnit && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200">
+                        Transport Orders Unit
+                      </span>
+                    )}
+                    {!viewUnit.isCustomisationUnit && !viewUnit.isTransportUnit && (
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                        Standard Packing Unit
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-400">Mobile Number:</span>
                 <span className="font-semibold text-slate-800">{viewUnit.mobile || 'N/A'}</span>

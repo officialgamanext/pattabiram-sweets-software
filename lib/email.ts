@@ -197,3 +197,194 @@ export async function sendPackingUnitTransferOtpEmail({
 
   return info;
 }
+
+export interface SlotLimitOverrideEmailParams {
+  otp: string;
+  categoryName: string;
+  itemName: string;
+  requestedQty: number;
+  unit?: string;
+  slot: string;
+  date: string;
+  maxLimit: number;
+  bookedQty: number;
+  requestedBy?: string;
+}
+
+export async function sendSlotLimitOverrideOtpEmail({
+  otp,
+  categoryName,
+  itemName,
+  requestedQty,
+  unit = 'KG',
+  slot,
+  date,
+  maxLimit,
+  bookedQty,
+  requestedBy = 'Order Booking Counter',
+}: SlotLimitOverrideEmailParams) {
+  const formattedDate = new Date().toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+
+  const totalProjected = Math.round((bookedQty + requestedQty) * 100) / 100;
+  const excessQty = Math.round((totalProjected - maxLimit) * 100) / 100;
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Slot Capacity Limit Override Authorization</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f1f5f9; padding: 32px 12px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card Container -->
+        <table role="presentation" width="100%" max-width="580" cellspacing="0" cellpadding="0" border="0" style="max-width: 580px; width: 100%; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;">
+          
+          <!-- Header Banner -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #02626D 0%, #014149 100%); padding: 32px 28px; text-align: center;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center">
+                    <div style="display: inline-block; background-color: rgba(255,255,255,0.15); padding: 6px 16px; border-radius: 50px; font-size: 11px; font-weight: 700; color: #ffffff; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px;">
+                      Pattabiram Sweets
+                    </div>
+                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 800; letter-spacing: -0.3px; line-height: 1.3;">
+                      Slot Capacity Limit Override
+                    </h1>
+                    <p style="margin: 6px 0 0 0; color: #ccfbf1; font-size: 13px; font-weight: 500;">
+                      Manager Authorization Required
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body Content -->
+          <tr>
+            <td style="padding: 32px 28px;">
+              <p style="margin: 0 0 18px 0; font-size: 14px; line-height: 1.6; color: #334155;">
+                Hello Administrator,
+              </p>
+              <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.6; color: #475569;">
+                An order booking request has exceeded the configured slot capacity limit for <strong>${categoryName}</strong>. Please enter the OTP below to authorize adding this excess quantity.
+              </p>
+
+              <!-- OTP Highlight Box -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: #f8fafc; border: 2px dashed #02626D; border-radius: 16px; margin: 24px 0;">
+                <tr>
+                  <td align="center" style="padding: 24px 16px;">
+                    <span style="display: block; font-size: 11px; font-weight: 800; color: #02626D; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px;">
+                      Your One-Time Authorization Code (OTP)
+                    </span>
+                    <div style="font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #02626D; font-family: 'Courier New', Courier, monospace; background: #ffffff; padding: 10px 24px; border-radius: 10px; display: inline-block; border: 1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.04);">
+                      ${otp}
+                    </div>
+                    <span style="display: block; font-size: 12px; font-weight: 600; color: #e11d48; margin-top: 10px;">
+                      ⏳ Valid for 5 minutes only
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Request Details Table -->
+              <div style="background-color: #f8fafc; border-radius: 14px; padding: 18px 20px; border: 1px solid #e2e8f0; margin-bottom: 24px;">
+                <h3 style="margin: 0 0 14px 0; font-size: 12px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">
+                  Capacity &amp; Item Details
+                </h3>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="6" border="0" style="font-size: 13px;">
+                  <tr>
+                    <td style="color: #64748b; font-weight: 600; width: 40%;">Item Name:</td>
+                    <td style="color: #02626D; font-weight: 800;">${itemName}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #64748b; font-weight: 600;">Slot Category:</td>
+                    <td style="color: #1e293b; font-weight: 700;">${categoryName}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #64748b; font-weight: 600;">Delivery Slot:</td>
+                    <td style="color: #1e293b; font-weight: 600;">${slot}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #64748b; font-weight: 600;">Target Date:</td>
+                    <td style="color: #1e293b; font-weight: 600;">${date}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #64748b; font-weight: 600;">Category Max Limit:</td>
+                    <td style="color: #1e293b; font-weight: 600;">${maxLimit} ${unit}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #64748b; font-weight: 600;">Already Booked:</td>
+                    <td style="color: #1e293b; font-weight: 600;">${bookedQty} ${unit}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #64748b; font-weight: 600;">Requested Quantity:</td>
+                    <td style="color: #d97706; font-weight: 800;">+${requestedQty} ${unit}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #64748b; font-weight: 600;">Total Projected:</td>
+                    <td style="color: #e11d48; font-weight: 800;">${totalProjected} ${unit} (Exceeds by ${excessQty > 0 ? excessQty : requestedQty} ${unit})</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #64748b; font-weight: 600;">Initiated By:</td>
+                    <td style="color: #1e293b; font-weight: 600;">${requestedBy}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #64748b; font-weight: 600;">Timestamp:</td>
+                    <td style="color: #1e293b; font-weight: 600;">${formattedDate}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- Security Notice Alert -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 8px; margin-bottom: 20px;">
+                <tr>
+                  <td style="padding: 12px 16px;">
+                    <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #92400e;">
+                      <strong>Capacity Alert:</strong> Approving this override will allow production and booking past the standard kitchen capacity limit for this slot.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.5;">
+                If you did not authorize this limit override, please reject or investigate with store staff.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 28px; text-align: center;">
+              <p style="margin: 0; font-size: 11px; color: #94a3b8; font-weight: 500;">
+                © ${new Date().getFullYear()} Pattabiram Sweets Management Software. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+
+  const info = await transporter.sendMail({
+    from: `"Pattabiram Sweets" <${smtpUser}>`,
+    to: alertEmail,
+    subject: `🔐 [${otp}] Authorization Code: Slot Limit Override for ${itemName} (${slot})`,
+    html: htmlContent,
+    text: `Pattabiram Sweets - Slot Capacity Limit Override\n\nYour OTP is: ${otp}\nItem: ${itemName}\nCategory: ${categoryName}\nSlot: ${slot}\nRequested Qty: ${requestedQty} ${unit}\nValid for 5 minutes.`,
+  });
+
+  return info;
+}

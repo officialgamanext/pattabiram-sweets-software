@@ -40,6 +40,7 @@ import { useAuth } from '@/context/AuthContext';
 import { usePrinter } from '@/context/PrinterContext';
 import CustomDatePicker from '@/components/CustomDatePicker';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
+import SlotLimitOverrideModal, { SlotLimitOverrideData } from '@/components/SlotLimitOverrideModal';
 
 export type SlotTime =
   | '9:00 AM - 12:00 PM'
@@ -875,15 +876,212 @@ export default function CreateOrderClient() {
     return filteredProductTiles.slice(0, visibleProductCount);
   }, [filteredProductTiles, visibleProductCount]);
 
-  // Tile Handlers with useCallback for Instant 0ms response
-  const handleToggleTileProduct = useCallback((prod: ItemMasterOption) => {
+  // Track authorized slot category overrides for this session
+  const [authorizedSlotCategoryIds, setAuthorizedSlotCategoryIds] = useState<Set<string>>(new Set());
+  const [slotOverrideModalData, setSlotOverrideModalData] = useState<SlotLimitOverrideData | null>(null);
+
+  // Helper to check if adding/increasing quantity for an item exceeds its slot category capacity
+  const checkSlotExceeded = useCallback(
+    (
+      prodId: string,
+      prodName: string,
+      proposedQty: number
+    ): {
+      isExceeded: boolean;
+      cat?: SlotCategory;
+      maxLimit: number;
+      bookedQty: number;
+      currentOtherQty: number;
+    } => {
+      if (!orderSlot || slotCategories.length === 0) {
+        return { isExceeded: false, maxLimit: 0, bookedQty: 0, currentOtherQty: 0 };
+      }
+
+      const pNameLower = prodName.toLowerCase().trim();
+      const cat = slotCategories.find((c) => {
+        const ids = c.assignedItemIds || [];
+        const names = (c.assignedItemNames || []).map((n) => n.toLowerCase().trim());
+        return ids.includes(prodId) || names.includes(pNameLower);
+      });
+
+      if (!cat) return { isExceeded: false, maxLimit: 0, bookedQty: 0, currentOtherQty: 0 };
+
+      const maxLimit = cat.slotLimits?.[orderSlot] || 0;
+      if (maxLimit <= 0) return { isExceeded: false, maxLimit: 0, bookedQty: 0, currentOtherQty: 0 };
+
+      // If already authorized in this session for this category, don't re-prompt
+      if (authorizedSlotCategoryIds.has(cat.id)) {
+        return { isExceeded: false, cat, maxLimit, bookedQty: 0, currentOtherQty: 0 };
+      }
+
+      // Calculate bookedQty in other orders for this slot & date
+      const relevantOrders = allOrdersForCapacity.filter((o) => {
+        if (editId && o.id === editId) return false;
+        if (o.orderStatus === 'Cancelled' || o.orderStatus === 'Rejected') return false;
+        if (o.slot !== orderSlot) return false;
+        const oDate = o.expectedDeliveryDate || o.manufacturingDate || o.orderDate;
+        return oDate === effectiveTargetDate;
+      });
+
+      const assignedIds = new Set(cat.assignedItemIds || []);
+      const assignedNames = new Set((cat.assignedItemNames || []).map((n) => n.toLowerCase().trim()));
+
+      let bookedQty = 0;
+      relevantOrders.forEach((o) => {
+        (o.items || []).forEach((it: any) => {
+          const itId = it.itemId || it.id || '';
+          const itName = (it.itemName || it.name || '').toLowerCase().trim();
+          if (assignedIds.has(itId) || assignedNames.has(itName)) {
+            const q = parseFloat(String(it.quantity || it.qty || 0)) || 0;
+            bookedQty += q;
+          }
+        });
+      });
+
+      // Calculate quantity of other items in the CURRENT order belonging to this category
+      let currentOtherQty = 0;
+      orderItems.forEach((it) => {
+        if (it.itemId === prodId) return; // exclude this item
+        const itId = it.itemId || '';
+        const itName = (it.itemName || '').toLowerCase().trim();
+        if (assignedIds.has(itId) || assignedNames.has(itName)) {
+          currentOtherQty += it.quantity || 0;
+        }
+      });
+
+      const totalProjected = bookedQty + currentOtherQty + proposedQty;
+      const isExceeded = totalProjected > maxLimit;
+
+      return {
+        isExceeded,
+        cat,
+        maxLimit,
+        bookedQty: Math.round(bookedQty * 100) / 100,
+        currentOtherQty: Math.round(currentOtherQty * 100) / 100,
+      };
+    },
+    [orderSlot, slotCategories, allOrdersForCapacity, effectiveTargetDate, editId, orderItems, authorizedSlotCategoryIds]
+  );
+
+  // Callback when OTP authorization succeeds for a slot limit override
+  const handleSlotOverrideAuthorized = (authData: SlotLimitOverrideData) => {
+    setAuthorizedSlotCategoryIds((prev) => new Set([...prev, authData.categoryId]));
+
     setOrderItems((prev) => {
-      const existingIndex = prev.findIndex((it) => it.itemId === prod.id);
-      if (existingIndex >= 0) {
-        return prev.filter((it) => it.itemId !== prod.id);
+      const existing = prev.find((it) => it.itemId === authData.itemId);
+      if (existing) {
+        return prev.map((it) =>
+          it.itemId === authData.itemId
+            ? {
+                ...it,
+                quantity: authData.requestedQty,
+                lineTotal: Math.round(authData.requestedQty * it.unitPrice * 100) / 100,
+              }
+            : it
+        );
       } else {
         const uniqueLineId = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-        const newLine: OrderItemLine = {
+        return [
+          ...prev,
+          {
+            lineId: uniqueLineId,
+            itemId: authData.itemId,
+            itemCode: authData.itemCode || 'ITEM',
+            itemName: authData.itemName,
+            category: 'General',
+            unit: authData.unit || 'KG',
+            imageUrl: authData.imageUrl || '',
+            unitPrice: authData.unitPrice,
+            quantity: authData.requestedQty,
+            lineTotal: Math.round(authData.requestedQty * authData.unitPrice * 100) / 100,
+            hasPacket: false,
+            packetCharge: 0,
+            manufacturingDescription: '',
+            packingDescription: '',
+          },
+        ];
+      }
+    });
+  };
+
+  // Tile Handlers with useCallback for Instant 0ms response
+  const handleToggleTileProduct = useCallback((prod: ItemMasterOption) => {
+    const existingItem = orderItems.find((it) => it.itemId === prod.id);
+    if (existingItem) {
+      setOrderItems((prev) => prev.filter((it) => it.itemId !== prod.id));
+    } else {
+      // Check slot capacity before adding with quantity 1
+      const check = checkSlotExceeded(prod.id, prod.name, 1);
+      if (check.isExceeded && check.cat) {
+        setSlotOverrideModalData({
+          categoryId: check.cat.id,
+          categoryName: check.cat.name,
+          itemId: prod.id,
+          itemCode: prod.code,
+          itemName: prod.name,
+          unit: prod.unit || 'KG',
+          unitPrice: prod.price,
+          imageUrl: prod.imageUrl || '',
+          requestedQty: 1,
+          slot: orderSlot,
+          date: effectiveTargetDate || 'Selected Date',
+          maxLimit: check.maxLimit,
+          bookedQty: check.bookedQty,
+        });
+        return;
+      }
+
+      const uniqueLineId = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const newLine: OrderItemLine = {
+        lineId: uniqueLineId,
+        itemId: prod.id,
+        itemCode: prod.code,
+        itemName: prod.name,
+        category: prod.category,
+        unit: prod.unit || 'KG',
+        imageUrl: prod.imageUrl || '',
+        unitPrice: prod.price,
+        quantity: 1,
+        lineTotal: prod.price * 1,
+        hasPacket: false,
+        packetCharge: 0,
+        manufacturingDescription: '',
+        packingDescription: '',
+      };
+      setOrderItems((prev) => [...prev, newLine]);
+    }
+  }, [orderItems, checkSlotExceeded, orderSlot, effectiveTargetDate]);
+
+  const handleTileQuantityChange = useCallback((prodId: string, delta: number) => {
+    const prod = itemsMaster.find((p) => p.id === prodId);
+    const existingItem = orderItems.find((it) => it.itemId === prodId);
+
+    if (!existingItem) {
+      if (delta <= 0 || !prod) return;
+      const check = checkSlotExceeded(prod.id, prod.name, delta);
+      if (check.isExceeded && check.cat) {
+        setSlotOverrideModalData({
+          categoryId: check.cat.id,
+          categoryName: check.cat.name,
+          itemId: prod.id,
+          itemCode: prod.code,
+          itemName: prod.name,
+          unit: prod.unit || 'KG',
+          unitPrice: prod.price,
+          imageUrl: prod.imageUrl || '',
+          requestedQty: delta,
+          slot: orderSlot,
+          date: effectiveTargetDate || 'Selected Date',
+          maxLimit: check.maxLimit,
+          bookedQty: check.bookedQty,
+        });
+        return;
+      }
+
+      const uniqueLineId = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      setOrderItems((prev) => [
+        ...prev,
+        {
           lineId: uniqueLineId,
           itemId: prod.id,
           itemCode: prod.code,
@@ -892,53 +1090,48 @@ export default function CreateOrderClient() {
           unit: prod.unit || 'KG',
           imageUrl: prod.imageUrl || '',
           unitPrice: prod.price,
-          quantity: 1,
-          lineTotal: prod.price * 1,
+          quantity: delta,
+          lineTotal: prod.price * delta,
           hasPacket: false,
           packetCharge: 0,
           manufacturingDescription: '',
           packingDescription: '',
-        };
-        return [...prev, newLine];
+        },
+      ]);
+      return;
+    }
+
+    const updatedQty = Math.max(0, Math.round(((existingItem.quantity || 0) + delta) * 10) / 10);
+    if (updatedQty === 0) {
+      setOrderItems((prev) => prev.filter((it) => it.itemId !== prodId));
+      return;
+    }
+
+    // Check slot limit if increasing
+    if (delta > 0 && prod) {
+      const check = checkSlotExceeded(prod.id, prod.name, updatedQty);
+      if (check.isExceeded && check.cat) {
+        setSlotOverrideModalData({
+          categoryId: check.cat.id,
+          categoryName: check.cat.name,
+          itemId: prod.id,
+          itemCode: prod.code,
+          itemName: prod.name,
+          unit: prod.unit || 'KG',
+          unitPrice: prod.price,
+          imageUrl: prod.imageUrl || '',
+          requestedQty: updatedQty,
+          slot: orderSlot,
+          date: effectiveTargetDate || 'Selected Date',
+          maxLimit: check.maxLimit,
+          bookedQty: check.bookedQty,
+        });
+        return;
       }
-    });
-  }, []);
+    }
 
-  const handleTileQuantityChange = useCallback((prodId: string, delta: number) => {
-    const prod = itemsMaster.find((p) => p.id === prodId);
-
-    setOrderItems((prev) => {
-      const existingItem = prev.find((it) => it.itemId === prodId);
-      if (!existingItem) {
-        if (delta <= 0 || !prod) return prev;
-        const uniqueLineId = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-        return [
-          ...prev,
-          {
-            lineId: uniqueLineId,
-            itemId: prod.id,
-            itemCode: prod.code,
-            itemName: prod.name,
-            category: prod.category,
-            unit: prod.unit || 'KG',
-            imageUrl: prod.imageUrl || '',
-            unitPrice: prod.price,
-            quantity: 1,
-            lineTotal: prod.price * 1,
-            hasPacket: false,
-            packetCharge: 0,
-            manufacturingDescription: '',
-            packingDescription: '',
-          },
-        ];
-      }
-
-      const updatedQty = Math.max(0, Math.round(((existingItem.quantity || 0) + delta) * 10) / 10);
-      if (updatedQty === 0) {
-        return prev.filter((it) => it.itemId !== prodId);
-      }
-
-      return prev.map((it) => {
+    setOrderItems((prev) =>
+      prev.map((it) => {
         if (it.itemId === prodId) {
           return {
             ...it,
@@ -947,15 +1140,43 @@ export default function CreateOrderClient() {
           };
         }
         return it;
-      });
-    });
-  }, [itemsMaster]);
+      })
+    );
+  }, [itemsMaster, orderItems, checkSlotExceeded, orderSlot, effectiveTargetDate]);
 
   const handleTileFieldChange = useCallback((
     prodId: string,
     field: 'quantity' | 'unitPrice' | 'mfgDesc' | 'pckDesc' | 'hasPacket',
     val: any
   ) => {
+    const prod = itemsMaster.find((p) => p.id === prodId);
+    const existingItem = orderItems.find((it) => it.itemId === prodId);
+
+    if (field === 'quantity') {
+      const qtyNum = val === '' ? 0 : Math.max(0, parseFloat(val) || 0);
+      if (qtyNum > (existingItem?.quantity || 0) && prod) {
+        const check = checkSlotExceeded(prod.id, prod.name, qtyNum);
+        if (check.isExceeded && check.cat) {
+          setSlotOverrideModalData({
+            categoryId: check.cat.id,
+            categoryName: check.cat.name,
+            itemId: prod.id,
+            itemCode: prod.code,
+            itemName: prod.name,
+            unit: prod.unit || 'KG',
+            unitPrice: prod.price,
+            imageUrl: prod.imageUrl || '',
+            requestedQty: qtyNum,
+            slot: orderSlot,
+            date: effectiveTargetDate || 'Selected Date',
+            maxLimit: check.maxLimit,
+            bookedQty: check.bookedQty,
+          });
+          return;
+        }
+      }
+    }
+
     setOrderItems((prev) =>
       prev.map((item) => {
         if (item.itemId !== prodId) return item;
@@ -984,7 +1205,7 @@ export default function CreateOrderClient() {
         };
       })
     );
-  }, []);
+  }, [itemsMaster, orderItems, checkSlotExceeded, orderSlot, effectiveTargetDate]);
 
   // Summary Quantity Modifier
   const handleSummaryQuantityChange = useCallback((itemId: string, newQty: number) => {
@@ -993,6 +1214,31 @@ export default function CreateOrderClient() {
     if (safeQty <= 0) {
       setOrderItems((prev) => prev.filter((it) => it.itemId !== itemId));
       return;
+    }
+
+    const prod = itemsMaster.find((p) => p.id === itemId);
+    const existingItem = orderItems.find((it) => it.itemId === itemId);
+
+    if (safeQty > (existingItem?.quantity || 0) && prod) {
+      const check = checkSlotExceeded(prod.id, prod.name, safeQty);
+      if (check.isExceeded && check.cat) {
+        setSlotOverrideModalData({
+          categoryId: check.cat.id,
+          categoryName: check.cat.name,
+          itemId: prod.id,
+          itemCode: prod.code,
+          itemName: prod.name,
+          unit: prod.unit || 'KG',
+          unitPrice: prod.price,
+          imageUrl: prod.imageUrl || '',
+          requestedQty: safeQty,
+          slot: orderSlot,
+          date: effectiveTargetDate || 'Selected Date',
+          maxLimit: check.maxLimit,
+          bookedQty: check.bookedQty,
+        });
+        return;
+      }
     }
 
     setOrderItems((prev) =>
@@ -1005,7 +1251,7 @@ export default function CreateOrderClient() {
         };
       })
     );
-  }, []);
+  }, [itemsMaster, orderItems, checkSlotExceeded, orderSlot, effectiveTargetDate]);
 
   const handleSummaryRemoveItem = useCallback((itemId: string) => {
     setOrderItems((prev) => prev.filter((it) => it.itemId !== itemId));
@@ -1162,11 +1408,13 @@ export default function CreateOrderClient() {
     // Slot Category Capacity Enforcement
     for (const cap of slotCategoryCapacities) {
       if (cap.hasLimit && cap.isExceeded && cap.currentOrderQty > 0) {
-        toast.error(
-          'Slot Category Limit Exceeded',
-          `Cannot proceed: "${cap.name}" maximum allowed limit for ${orderSlot} is ${cap.maxLimit} KG. Booked in other orders: ${cap.bookedQty} KG. Available: ${cap.remainingBeforeCurrent} KG, but this order is requesting ${cap.currentOrderQty} KG (${Math.round((cap.totalProjected - cap.maxLimit) * 100) / 100} KG excess). Please reduce quantity.`
-        );
-        return;
+        if (!authorizedSlotCategoryIds.has(cap.id)) {
+          toast.error(
+            'Slot Category Limit Exceeded',
+            `Cannot proceed: "${cap.name}" maximum allowed limit for ${orderSlot} is ${cap.maxLimit} KG. Booked in other orders: ${cap.bookedQty} KG. Available: ${cap.remainingBeforeCurrent} KG, but this order is requesting ${cap.currentOrderQty} KG (${Math.round((cap.totalProjected - cap.maxLimit) * 100) / 100} KG excess). Manager OTP authorization required.`
+          );
+          return;
+        }
       }
     }
 
@@ -2877,6 +3125,15 @@ export default function CreateOrderClient() {
           </div>
         </div>
       )}
+
+      {/* Slot Limit Override Authorization Modal (OTP Protected) */}
+      <SlotLimitOverrideModal
+        isOpen={Boolean(slotOverrideModalData)}
+        onClose={() => setSlotOverrideModalData(null)}
+        data={slotOverrideModalData}
+        userIdentifier={employeeProfile ? `${employeeProfile.name} (${employeeProfile.empId || employeeProfile.mobile})` : 'Order Booking Staff'}
+        onAuthorized={handleSlotOverrideAuthorized}
+      />
 
     </div>
   );

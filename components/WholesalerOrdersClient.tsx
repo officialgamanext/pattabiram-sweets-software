@@ -316,13 +316,11 @@ export default function WholesalerOrdersClient() {
     return orderItems.reduce((sum, item) => sum + item.totalAmount, 0);
   }, [orderItems]);
 
-  const modalTax = useMemo(() => {
-    return Math.round(modalSubtotal * 0.05); // 5% GST
-  }, [modalSubtotal]);
+  const modalTax = 0; // Prices are inclusive of GST
 
   const modalTotal = useMemo(() => {
-    return modalSubtotal + modalTax;
-  }, [modalSubtotal, modalTax]);
+    return modalSubtotal;
+  }, [modalSubtotal]);
 
   // Submit Order Handler
   const handleSaveOrder = async (e: React.FormEvent) => {
@@ -500,13 +498,11 @@ export default function WholesalerOrdersClient() {
     return editOrderItems.reduce((sum, item) => sum + item.totalAmount, 0);
   }, [editOrderItems]);
 
-  const editModalTax = useMemo(() => {
-    return Math.round(editModalSubtotal * 0.05); // 5% GST
-  }, [editModalSubtotal]);
+  const editModalTax = 0; // Prices are inclusive of GST
 
   const editModalTotal = useMemo(() => {
-    return editModalSubtotal + editModalTax;
-  }, [editModalSubtotal, editModalTax]);
+    return editModalSubtotal;
+  }, [editModalSubtotal]);
 
   // Open Edit Order Modal
   const handleOpenEditOrder = (order: WholesalerOrderRecord) => {
@@ -1041,7 +1037,7 @@ export default function WholesalerOrdersClient() {
             {/* Modal Footer with Order Totals & Submit */}
             <div className="border-t border-slate-200 pt-3 flex items-center justify-between gap-3">
               <div className="text-xs font-mono">
-                <span className="text-slate-500">Subtotal: ₹{modalSubtotal} | GST: ₹{modalTax} | </span>
+                <span className="text-slate-500">Subtotal: ₹{modalSubtotal} (GST Inclusive) | </span>
                 <span className="text-sm font-bold text-slate-900">Total: ₹{modalTotal}</span>
               </div>
 
@@ -1251,9 +1247,9 @@ export default function WholesalerOrdersClient() {
                 <span>Subtotal:</span>
                 <span>₹{viewingOrder.subtotal}</span>
               </div>
-              <div className="flex justify-between">
-                <span>GST (5%):</span>
-                <span>₹{viewingOrder.tax}</span>
+              <div className="flex justify-between text-[11px] text-slate-400">
+                <span>Tax:</span>
+                <span>GST Inclusive</span>
               </div>
               <div className="flex justify-between text-sm font-bold text-slate-900 border-t border-slate-100 pt-1">
                 <span>Total Amount:</span>
@@ -1408,7 +1404,7 @@ export default function WholesalerOrdersClient() {
             {/* Modal Footer with Order Totals & Submit */}
             <div className="border-t border-slate-200 pt-3 flex items-center justify-between gap-3">
               <div className="text-xs font-mono">
-                <span className="text-slate-500">Subtotal: ₹{editModalSubtotal} | GST: ₹{editModalTax} | </span>
+                <span className="text-slate-500">Subtotal: ₹{editModalSubtotal} (GST Inclusive) | </span>
                 <span className="text-sm font-bold text-slate-900">Total: ₹{editModalTotal}</span>
               </div>
 

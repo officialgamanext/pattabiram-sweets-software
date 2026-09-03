@@ -338,13 +338,11 @@ export default function PosClient() {
     return cart.reduce((sum, item) => sum + item.totalAmount, 0);
   }, [cart]);
 
-  const cartTax = useMemo(() => {
-    return Math.round(cartSubtotal * 0.05); // 5% GST
-  }, [cartSubtotal]);
+  const cartTax = 0; // Prices are inclusive of GST
 
   const cartGrandTotal = useMemo(() => {
-    return Math.max(0, cartSubtotal + cartTax - discountAmount);
-  }, [cartSubtotal, cartTax, discountAmount]);
+    return Math.max(0, cartSubtotal - discountAmount);
+  }, [cartSubtotal, discountAmount]);
 
   const totalItemCount = useMemo(() => {
     return cart.reduce((sum, i) => sum + (i.isWeight ? 1 : i.quantity), 0);
@@ -1062,9 +1060,15 @@ export default function PosClient() {
                 <span>Subtotal:</span>
                 <span className="font-semibold text-slate-800 font-mono">₹{cartSubtotal}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span>GST Tax (5%):</span>
-                <span className="font-semibold text-slate-800 font-mono">₹{cartTax}</span>
+              {discountAmount > 0 && (
+                <div className="flex items-center justify-between text-emerald-600">
+                  <span>Discount:</span>
+                  <span className="font-semibold font-mono">-₹{discountAmount}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>GST:</span>
+                <span className="italic">Inclusive in prices</span>
               </div>
 
               <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-base font-bold text-slate-900">
@@ -1384,9 +1388,15 @@ export default function PosClient() {
                   <span>Subtotal:</span>
                   <span className="font-semibold text-slate-800 font-mono">₹{cartSubtotal}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span>GST Tax (5%):</span>
-                  <span className="font-semibold text-slate-800 font-mono">₹{cartTax}</span>
+                {discountAmount > 0 && (
+                  <div className="flex items-center justify-between text-emerald-600">
+                    <span>Discount:</span>
+                    <span className="font-semibold font-mono">-₹{discountAmount}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>GST:</span>
+                  <span className="italic">Inclusive in prices</span>
                 </div>
                 <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-sm font-bold text-slate-900">
                   <span>Net Payable:</span>
@@ -1708,9 +1718,15 @@ export default function PosClient() {
                   <span>Subtotal:</span>
                   <span>₹{lastSettledBill.subtotal}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>GST (5%):</span>
-                  <span>₹{lastSettledBill.tax}</span>
+                {lastSettledBill.discount > 0 && (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>Discount:</span>
+                    <span>-₹{lastSettledBill.discount}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-[10px] text-slate-500 font-normal">
+                  <span>Tax:</span>
+                  <span>GST Inclusive</span>
                 </div>
                 <div className="flex justify-between text-xs border-t border-slate-200 pt-1 text-slate-900">
                   <span>TOTAL PAID:</span>

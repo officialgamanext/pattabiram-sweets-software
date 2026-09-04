@@ -23,6 +23,7 @@ import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import CustomDatePicker from '@/components/CustomDatePicker';
 import { usePrinter } from '@/context/PrinterContext';
+import { useBusinessSettings, formatStoreAddress, formatStorePhone } from '@/lib/businessSettings';
 
 export interface WalkInOrder {
   id: string;
@@ -54,6 +55,9 @@ export default function WalkInSalesClient() {
   const [selectedPaymentFilter, setSelectedPaymentFilter] = useState<'All' | 'Cash' | 'UPI' | 'Card'>('All');
   const [selectedDate, setSelectedDate] = useState<string>('All');
   const [activeOrderModal, setActiveOrderModal] = useState<WalkInOrder | null>(null);
+
+  // Business settings for receipt printing & modal
+  const { settings: businessSettings } = useBusinessSettings();
 
   // Load POS orders from Firestore
   useEffect(() => {
@@ -140,31 +144,42 @@ export default function WalkInSalesClient() {
         sale.customerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sale.customerMobile?.includes(searchQuery);
       const matchPayment = selectedPaymentFilter === 'All' || sale.paymentMode === selectedPaymentFilter;
-      return matchQuery && matchPayment;
+      let matchDate = true;
+      if (selectedDate !== 'All' && sale.createdAt) {
+        try {
+          const saleDate = sale.createdAt.toDate
+            ? sale.createdAt.toDate().toISOString().split('T')[0]
+            : new Date(sale.createdAt).toISOString().split('T')[0];
+          matchDate = saleDate === selectedDate;
+        } catch (e) {
+          matchDate = true;
+        }
+      }
+      return matchQuery && matchPayment && matchDate;
     });
-  }, [sales, searchQuery, selectedPaymentFilter]);
+  }, [sales, searchQuery, selectedPaymentFilter, selectedDate]);
 
-  // Analytics Metrics Calculations
+  // Financial KPI calculations
   const totalRevenue = useMemo(() => {
-    return filteredSales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-  }, [filteredSales]);
-
-  const upiRevenue = useMemo(() => {
-    return filteredSales
-      .filter((s) => s.paymentMode === 'UPI')
-      .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    return filteredSales.reduce((acc, s) => acc + (s.totalAmount || 0), 0);
   }, [filteredSales]);
 
   const cashRevenue = useMemo(() => {
     return filteredSales
-      .filter((s) => s.paymentMode === 'Cash')
-      .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+      .filter((s) => s.paymentMode?.toLowerCase() === 'cash')
+      .reduce((acc, s) => acc + (s.totalAmount || 0), 0);
+  }, [filteredSales]);
+
+  const upiRevenue = useMemo(() => {
+    return filteredSales
+      .filter((s) => s.paymentMode?.toLowerCase() === 'upi')
+      .reduce((acc, s) => acc + (s.totalAmount || 0), 0);
   }, [filteredSales]);
 
   const cardRevenue = useMemo(() => {
     return filteredSales
-      .filter((s) => s.paymentMode === 'Card')
-      .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+      .filter((s) => s.paymentMode?.toLowerCase() === 'card')
+      .reduce((acc, s) => acc + (s.totalAmount || 0), 0);
   }, [filteredSales]);
 
   const avgBillValue = useMemo(() => {
@@ -177,9 +192,13 @@ export default function WalkInSalesClient() {
     if (!targetSale) return;
     if (isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
       await printReceipt({
-        storeName: 'PATTABIRAM SWEETS',
-        storeAddress: '12, Main Road, Pattabiram, Chennai - 600072',
-        storePhone: '+91 98765 43210',
+        storeName: businessSettings.businessName,
+        storeTagline: businessSettings.tagline,
+        storeAddress: formatStoreAddress(businessSettings),
+        storePhone: formatStorePhone(businessSettings),
+        storeEmail: businessSettings.email,
+        storeGst: businessSettings.gstNumber,
+        storeFssai: businessSettings.fssaiNumber,
         billNo: targetSale.orderId || targetSale.id,
         customerName: targetSale.customerName || 'Walk-in Customer',
         customerPhone: targetSale.customerMobile || '-',
@@ -200,10 +219,10 @@ export default function WalkInSalesClient() {
           };
         }),
         subtotal: targetSale.subtotal || targetSale.totalAmount,
-        tax: targetSale.tax || 0,
         discount: targetSale.discount || 0,
+        tax: targetSale.tax || 0,
         grandTotal: targetSale.totalAmount,
-        footerNote: 'Thank you for visiting Pattabiram Sweets! Have a sweet day!',
+        footerNote: businessSettings.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!',
       });
     } else {
       setActiveOrderModal(targetSale);
@@ -428,8 +447,12 @@ export default function WalkInSalesClient() {
             {/* Thermal Receipt Content */}
             <div id="receipt-print-area" className="p-4 bg-white font-mono text-slate-900 text-xs space-y-2 border border-slate-200 rounded-lg">
               <div className="text-center border-b border-slate-200 pb-2">
-                <h2 className="text-sm font-bold uppercase tracking-wider">Pattabiram Sweets</h2>
-                <p className="text-[10px] text-slate-500">12, Main Road, Pattabiram, Chennai - 600072</p>
+                <h2 className="text-sm font-bold uppercase tracking-wider">{businessSettings.businessName || 'Pattabiram Sweets'}</h2>
+                {businessSettings.tagline && <p className="text-[10px] text-slate-500 italic">{businessSettings.tagline}</p>}
+                <p className="text-[10px] text-slate-500">{formatStoreAddress(businessSettings)}</p>
+                <p className="text-[10px] text-slate-500">Ph: {formatStorePhone(businessSettings)}</p>
+                {businessSettings.gstNumber && <p className="text-[10px] font-semibold text-slate-700">GSTIN: {businessSettings.gstNumber}</p>}
+                {businessSettings.fssaiNumber && <p className="text-[9px] text-slate-500">FSSAI: {businessSettings.fssaiNumber}</p>}
               </div>
 
               <div className="text-[10px] space-y-0.5 border-b border-slate-200 pb-1.5">
@@ -473,7 +496,7 @@ export default function WalkInSalesClient() {
               </div>
 
               <div className="text-center text-[9px] text-slate-500 pt-2 border-t border-slate-200">
-                Thank you for visiting Pattabiram Sweets! Have a sweet day!
+                {businessSettings.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!'}
               </div>
             </div>
 
@@ -487,7 +510,7 @@ export default function WalkInSalesClient() {
               </button>
 
               <button
-                onClick={triggerPrintReceipt}
+                onClick={() => activeOrderModal && printSaleReceipt(activeOrderModal)}
                 className="h-8 text-xs font-semibold rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Printer size={14} /> Print Receipt

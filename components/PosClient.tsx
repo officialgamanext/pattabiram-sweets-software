@@ -36,6 +36,7 @@ import { db } from '@/lib/firebase';
 import { usePrinter } from '@/context/PrinterContext';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from '@/context/ToastContext';
+import { useBusinessSettings, formatStoreAddress, formatStorePhone } from '@/lib/businessSettings';
 import {
   collection,
   onSnapshot,
@@ -126,6 +127,9 @@ export default function PosClient() {
   const [loadingItems, setLoadingItems] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Business settings for dynamic bill header & footer
+  const { settings: businessSettings } = useBusinessSettings();
 
   // Global Thermal Printer Subsystem Context
   const {
@@ -637,9 +641,13 @@ export default function PosClient() {
     // Auto-trigger ESC/POS print if thermal printer is connected
     if (isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
       printReceipt({
-        storeName: 'PATTABIRAM SWEETS',
-        storeAddress: '12, Main Road, Pattabiram, Chennai - 600072',
-        storePhone: '+91 98765 43210',
+        storeName: businessSettings.businessName,
+        storeTagline: businessSettings.tagline,
+        storeAddress: formatStoreAddress(businessSettings),
+        storePhone: formatStorePhone(businessSettings),
+        storeEmail: businessSettings.email,
+        storeGst: businessSettings.gstNumber,
+        storeFssai: businessSettings.fssaiNumber,
         billNo: settledBill.billNo,
         customerName: settledBill.customerName,
         customerPhone: settledBill.customerPhone,
@@ -656,7 +664,7 @@ export default function PosClient() {
         tax: settledBill.tax,
         discount: settledBill.discount,
         grandTotal: settledBill.total,
-        footerNote: 'Thank you for visiting Pattabiram Sweets! Have a sweet day!',
+        footerNote: businessSettings.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!',
       }).catch((err) => console.error('Auto thermal print error:', err));
     }
 
@@ -673,9 +681,13 @@ export default function PosClient() {
   const triggerPrintReceipt = async () => {
     if (lastSettledBill && isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
       await printReceipt({
-        storeName: 'PATTABIRAM SWEETS',
-        storeAddress: '12, Main Road, Pattabiram, Chennai - 600072',
-        storePhone: '+91 98765 43210',
+        storeName: businessSettings.businessName,
+        storeTagline: businessSettings.tagline,
+        storeAddress: formatStoreAddress(businessSettings),
+        storePhone: formatStorePhone(businessSettings),
+        storeEmail: businessSettings.email,
+        storeGst: businessSettings.gstNumber,
+        storeFssai: businessSettings.fssaiNumber,
         billNo: lastSettledBill.billNo,
         customerName: lastSettledBill.customerName,
         customerPhone: lastSettledBill.customerPhone,
@@ -692,7 +704,7 @@ export default function PosClient() {
         tax: lastSettledBill.tax,
         discount: lastSettledBill.discount,
         grandTotal: lastSettledBill.total,
-        footerNote: 'Thank you for visiting Pattabiram Sweets! Have a sweet day!',
+        footerNote: businessSettings.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!',
       });
     } else {
       printWindow();
@@ -1684,9 +1696,12 @@ export default function PosClient() {
             {/* Thermal Receipt Print Area */}
             <div id="receipt-print-area" className="p-4 bg-white font-mono text-slate-900 text-xs space-y-2 border border-slate-200 rounded-lg">
               <div className="text-center border-b border-slate-200 pb-2">
-                <h2 className="text-sm font-bold uppercase tracking-wider">Pattabiram Sweets</h2>
-                <p className="text-[10px] text-slate-500">12, Main Road, Pattabiram, Chennai - 600072</p>
-                <p className="text-[10px] text-slate-500">Ph: +91 98765 43210</p>
+                <h2 className="text-sm font-bold uppercase tracking-wider">{businessSettings.businessName || 'Pattabiram Sweets'}</h2>
+                {businessSettings.tagline && <p className="text-[10px] text-slate-500 italic">{businessSettings.tagline}</p>}
+                <p className="text-[10px] text-slate-500">{formatStoreAddress(businessSettings)}</p>
+                <p className="text-[10px] text-slate-500">Ph: {formatStorePhone(businessSettings)}</p>
+                {businessSettings.gstNumber && <p className="text-[10px] font-semibold text-slate-700">GSTIN: {businessSettings.gstNumber}</p>}
+                {businessSettings.fssaiNumber && <p className="text-[9px] text-slate-500">FSSAI: {businessSettings.fssaiNumber}</p>}
               </div>
 
               <div className="text-[10px] space-y-0.5 border-b border-slate-200 pb-1.5">
@@ -1735,7 +1750,7 @@ export default function PosClient() {
               </div>
 
               <div className="text-center text-[9px] text-slate-500 pt-2 border-t border-slate-200">
-                Thank you for visiting Pattabiram Sweets! Have a sweet day!
+                {businessSettings.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!'}
               </div>
             </div>
 

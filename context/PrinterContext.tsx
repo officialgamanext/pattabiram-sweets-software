@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { generateTestReceipt, generateReceiptEscPos, ReceiptData } from '@/lib/escpos';
+import { getBusinessSettingsSync, formatStoreAddress, formatStorePhone } from '@/lib/businessSettings';
 import { toast } from '@/context/ToastContext';
 
 export type PrinterType = 'USB' | 'Bluetooth' | 'None';
@@ -522,10 +523,24 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return await printRaw(rawBytes);
   }, [paperWidth, printRaw]);
 
-  // Formatted Receipt Print
+  // Formatted Receipt Print (Auto-enriches with live business settings from Settings page)
   const printReceipt = useCallback(
     async (data: ReceiptData): Promise<boolean> => {
-      const rawBytes = generateReceiptEscPos(data, paperWidth);
+      const s = getBusinessSettingsSync();
+      const enrichedData: ReceiptData = {
+        ...data,
+        storeName: (data.storeName && data.storeName !== 'PATTABIRAM SWEETS') ? data.storeName : (s.businessName || 'PATTABIRAM SWEETS'),
+        storeTagline: data.storeTagline || s.tagline,
+        storeAddress: (data.storeAddress && !data.storeAddress.includes('12, Main Road, Pattabiram')) ? data.storeAddress : formatStoreAddress(s),
+        storePhone: (data.storePhone && !data.storePhone.includes('98765 43210')) ? data.storePhone : formatStorePhone(s),
+        storeEmail: data.storeEmail || s.email,
+        storeGst: data.storeGst || s.gstNumber,
+        storeFssai: data.storeFssai || s.fssaiNumber,
+        storeWebsite: data.storeWebsite || s.website,
+        footerNote: (data.footerNote && !data.footerNote.includes('Order verified')) ? data.footerNote : (s.footerNote || data.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!'),
+      };
+
+      const rawBytes = generateReceiptEscPos(enrichedData, paperWidth);
       return await printRaw(rawBytes);
     },
     [paperWidth, printRaw]

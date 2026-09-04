@@ -14,9 +14,13 @@ export interface ReceiptItem {
 
 export interface ReceiptData {
   storeName?: string;
+  storeTagline?: string;
   storeAddress?: string;
   storePhone?: string;
+  storeEmail?: string;
   storeGst?: string;
+  storeFssai?: string;
+  storeWebsite?: string;
   billNo: string;
   dateStr?: string;
   timeStr?: string;
@@ -382,14 +386,23 @@ export function generateReceiptEscPos(
 
   builder.bold(false);
 
+  if (data.storeTagline) {
+    builder.textLineCentered(data.storeTagline);
+  }
   if (data.storeAddress) {
     builder.textLineCentered(data.storeAddress);
   }
   if (data.storePhone) {
     builder.textLineCentered(`Ph: ${data.storePhone}`);
   }
+  if (data.storeEmail) {
+    builder.textLineCentered(`Email: ${data.storeEmail}`);
+  }
   if (data.storeGst) {
     builder.textLineCentered(`GSTIN: ${data.storeGst}`);
+  }
+  if (data.storeFssai) {
+    builder.textLineCentered(`FSSAI: ${data.storeFssai}`);
   }
 
   // 2. BILL / ORDER METADATA

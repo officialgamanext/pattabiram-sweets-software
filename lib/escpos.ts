@@ -45,6 +45,8 @@ export interface ReceiptData {
   transportCharges?: number;
   deliveryAddress?: string;
   grandTotal: number;
+  receivedAmount?: number;
+  creditAmount?: number;
   footerNote?: string;
   cashierName?: string;
 }
@@ -536,6 +538,15 @@ export function generateReceiptEscPos(
     builder.doubleHeight(true).row2('NET AMOUNT:', `Rs.${data.grandTotal.toFixed(2)}`).doubleHeight(false);
   } else {
     builder.doubleHeight(true).row2('NET GRAND TOTAL:', `Rs.${data.grandTotal.toFixed(2)}`).doubleHeight(false);
+  }
+
+  // Credit / Partial Payment Breakdown if applicable
+  if (data.creditAmount && data.creditAmount > 0) {
+    builder.drawLine('-');
+    if (data.receivedAmount !== undefined) {
+      builder.row2('Paid / Received:', `Rs.${data.receivedAmount.toFixed(2)}`);
+    }
+    builder.bold(true).row2('CREDIT / BALANCE DUE:', `Rs.${data.creditAmount.toFixed(2)}`).bold(false);
   }
 
   builder.bold(false).drawLine('=');

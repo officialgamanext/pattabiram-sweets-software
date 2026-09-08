@@ -34,6 +34,12 @@ import {
   TrendingUp,
   Activity,
   Star,
+  UserPlus,
+  Loader2,
+  Phone,
+  Mail,
+  MapPin,
+  AlertTriangle,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { usePrinter } from '@/context/PrinterContext';
@@ -70,8 +76,12 @@ export interface PosCartItem {
 export interface LiveSaleRecord {
   id: string;
   billNo: string;
+  receiptNumber?: string;
+  customerId?: string;
   customerName: string;
   customerPhone: string;
+  customerEmail?: string;
+  customerAddress?: string;
   cashierId?: string;
   cashierName?: string;
   cashierCode?: string;
@@ -84,6 +94,11 @@ export interface LiveSaleRecord {
   tax: number;
   discount: number;
   total: number;
+  grandTotal?: number;
+  receivedAmount?: number;
+  creditAmount?: number;
+  paymentStatus?: 'Paid' | 'Partial' | 'Credit';
+  status?: string;
   savedAt: string;
   date: string;
   time: string;
@@ -175,13 +190,20 @@ export default function LiveSalesClient() {
   const [posSplitUPI, setPosSplitUPI] = useState<string>('');
   const [discountAmount, setDiscountAmount] = useState<number>(0);
 
-  // Customer Selection State
+  // Customer Selection & Add Customer State
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerRecord | null>(null);
   const [customerSearch, setCustomerSearch] = useState<string>('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState<boolean>(false);
-  const [customCustomerName, setCustomCustomerName] = useState<string>('');
-  const [customCustomerPhone, setCustomCustomerPhone] = useState<string>('');
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState<boolean>(false);
+  const [newCustName, setNewCustName] = useState<string>('');
+  const [newCustMobile, setNewCustMobile] = useState<string>('');
+  const [newCustEmail, setNewCustEmail] = useState<string>('');
+  const [newCustAddress, setNewCustAddress] = useState<string>('');
+  const [isSavingCustomer, setIsSavingCustomer] = useState<boolean>(false);
+
+  // Received Amount & Credit State
+  const [receivedAmountInput, setReceivedAmountInput] = useState<string>('');
 
   // Modal State: Weight & Amount Calculator
   const [activeWeightItem, setActiveWeightItem] = useState<ItemRecord | null>(null);
@@ -229,8 +251,8 @@ export default function LiveSalesClient() {
         const data = d.data();
         return {
           id: d.id,
-          name: data.name || 'Walk-in',
-          phone: data.phone || data.mobile || '',
+          name: data.name || 'Customer',
+          phone: data.phone || data.mobile || data.mobileNumber || '',
           email: data.email || '',
           address: data.address || '',
         };
@@ -316,17 +338,103 @@ export default function LiveSalesClient() {
     return Math.max(0, subtotal - discountAmount);
   }, [subtotal, discountAmount]);
 
+  // Received Amount and Credit Due Calculations
+  const receivedAmount = useMemo(() => {
+    if (receivedAmountInput.trim() === '') {
+      return grandTotal;
+    }
+    const val = parseFloat(receivedAmountInput);
+    return isNaN(val) ? 0 : Math.max(0, val);
+  }, [receivedAmountInput, grandTotal]);
+
+  const creditAmount = useMemo(() => {
+    return Math.max(0, grandTotal - receivedAmount);
+  }, [grandTotal, receivedAmount]);
+
+  const paymentStatus = useMemo<'Paid' | 'Partial' | 'Credit'>(() => {
+    if (creditAmount <= 0) return 'Paid';
+    if (receivedAmount > 0) return 'Partial';
+    return 'Credit';
+  }, [creditAmount, receivedAmount]);
+
+  // Filter customers based on search query
+  const filteredCustomerOptions = useMemo(() => {
+    if (!customerSearch.trim()) return customers.slice(0, 10);
+    const q = customerSearch.toLowerCase().trim();
+    return customers
+      .filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.phone.toLowerCase().includes(q) ||
+          (c.email && c.email.toLowerCase().includes(q))
+      )
+      .slice(0, 20);
+  }, [customers, customerSearch]);
+
+  // Save New Customer & Immediately Select
+  const handleSaveAndSelectCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCustName.trim()) {
+      toast.error('Name Required', 'Customer name is mandatory.');
+      return;
+    }
+    if (!newCustMobile.trim() || newCustMobile.trim().length < 6) {
+      toast.error('Mobile Required', 'Valid customer mobile number is mandatory.');
+      return;
+    }
+
+    try {
+      setIsSavingCustomer(true);
+      const nextCode = `CUST-${Date.now().toString().slice(-4)}`;
+      const docRef = await addDoc(collection(db, 'customers'), {
+        code: nextCode,
+        name: newCustName.trim(),
+        phone: newCustMobile.trim(),
+        mobile: newCustMobile.trim(),
+        mobileNumber: newCustMobile.trim(),
+        email: newCustEmail.trim() || '',
+        address: newCustAddress.trim() || '',
+        status: 'Active',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      const newlyAdded: CustomerRecord = {
+        id: docRef.id,
+        name: newCustName.trim(),
+        phone: newCustMobile.trim(),
+        email: newCustEmail.trim() || '',
+        address: newCustAddress.trim() || '',
+      };
+
+      setSelectedCustomer(newlyAdded);
+      setCustomerSearch('');
+      setShowCustomerDropdown(false);
+      setShowAddCustomerModal(false);
+      setNewCustName('');
+      setNewCustMobile('');
+      setNewCustEmail('');
+      setNewCustAddress('');
+      toast.success('Customer Saved & Selected', `${newlyAdded.name} (${newlyAdded.phone}) selected for live sale.`);
+    } catch (err: any) {
+      console.error('Error saving customer:', err);
+      toast.error('Failed to save customer', err.message || 'Could not create customer.');
+    } finally {
+      setIsSavingCustomer(false);
+    }
+  };
+
   // Auto calculate split balance
   useEffect(() => {
     if (selectedPayment === 'Split') {
       const cashVal = parseFloat(posSplitCash) || 0;
-      if (cashVal <= grandTotal) {
-        setPosSplitUPI((grandTotal - cashVal).toFixed(2));
+      if (cashVal <= receivedAmount) {
+        setPosSplitUPI((receivedAmount - cashVal).toFixed(2));
       } else {
         setPosSplitUPI('0');
       }
     }
-  }, [posSplitCash, grandTotal, selectedPayment]);
+  }, [posSplitCash, receivedAmount, selectedPayment]);
 
   // Helper to add item to cart
   const addItemToCart = (item: ItemRecord, qty: number = 1, amount?: number) => {
@@ -401,26 +509,43 @@ export default function LiveSalesClient() {
       return;
     }
 
+    // MANDATORY CUSTOMER SELECTION CHECK
+    if (!selectedCustomer) {
+      toast.error(
+        'Customer Required',
+        'Customer selection is mandatory for Live Sales. Please search or add a customer to proceed.'
+      );
+      setShowCustomerDropdown(true);
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       const now = new Date();
       const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      const customerName = selectedCustomer ? selectedCustomer.name : customCustomerName.trim() || 'Walk-in Customer';
-      const customerPhone = selectedCustomer ? selectedCustomer.phone : customCustomerPhone.trim() || '';
+      const customerId = selectedCustomer.id;
+      const customerName = selectedCustomer.name;
+      const customerPhone = selectedCustomer.phone;
+      const customerEmail = selectedCustomer.email || '';
+      const customerAddress = selectedCustomer.address || '';
 
       const cashierName = selectedCashier?.name || employeeProfile?.name || (user?.email ? user.email.split('@')[0] : 'Cashier');
       const cashierId = selectedCashier?.id || employeeProfile?.id || user?.uid || 'staff';
 
-      const splitCashNum = selectedPayment === 'Split' ? parseFloat(posSplitCash) || 0 : selectedPayment === 'Cash' ? grandTotal : 0;
-      const splitUpiNum = selectedPayment === 'Split' ? parseFloat(posSplitUPI) || 0 : selectedPayment === 'UPI' ? grandTotal : 0;
-      const splitCardNum = selectedPayment === 'Card' ? grandTotal : 0;
+      const splitCashNum = selectedPayment === 'Split' ? parseFloat(posSplitCash) || 0 : selectedPayment === 'Cash' ? receivedAmount : 0;
+      const splitUpiNum = selectedPayment === 'Split' ? parseFloat(posSplitUPI) || 0 : selectedPayment === 'UPI' ? receivedAmount : 0;
+      const splitCardNum = selectedPayment === 'Card' ? receivedAmount : 0;
 
       const liveSalePayload: Omit<LiveSaleRecord, 'id'> = {
         billNo: activeBillNo,
+        receiptNumber: activeBillNo,
+        customerId,
         customerName,
         customerPhone,
+        customerEmail,
+        customerAddress,
         cashierId,
         cashierName,
         cashierCode: selectedCashier?.empId || '',
@@ -433,6 +558,11 @@ export default function LiveSalesClient() {
         tax: 0,
         discount: discountAmount,
         total: grandTotal,
+        grandTotal,
+        receivedAmount,
+        creditAmount,
+        paymentStatus,
+        status: creditAmount > 0 ? 'Credit Due' : 'Completed',
         savedAt: now.toISOString(),
         date: dateStr,
         time: timeStr,
@@ -454,7 +584,7 @@ export default function LiveSalesClient() {
         await logAuditEvent({
           action: 'Live Sale Completed',
           actionType: 'pos_sale',
-          description: `Completed Live Sale [${activeBillNo}] of ₹${grandTotal.toFixed(2)} (${selectedPayment}) by ${cashierName}`,
+          description: `Completed Live Sale [${activeBillNo}] of ₹${grandTotal.toFixed(2)} (Recv: ₹${receivedAmount.toFixed(2)}, Due: ₹${creditAmount.toFixed(2)}) by ${cashierName}`,
           employeeId: cashierId,
           employeeName: cashierName,
           employeeRole: 'Cashier',
@@ -462,7 +592,7 @@ export default function LiveSalesClient() {
           cashAmount: splitCashNum,
           paymentMode: selectedPayment,
           date: dateStr,
-          metadata: { billNo: activeBillNo, itemsCount: cart.length, liveSaleId: docRef.id },
+          metadata: { billNo: activeBillNo, itemsCount: cart.length, liveSaleId: docRef.id, creditAmount, receivedAmount },
         });
       } catch (err) {
         console.warn('Live sale audit log error:', err);
@@ -489,6 +619,8 @@ export default function LiveSalesClient() {
             tax: 0,
             discount: discountAmount,
             grandTotal,
+            receivedAmount,
+            creditAmount,
             paymentMode: selectedPayment,
           });
           toast.success('Printed Receipt', 'Live sale receipt sent to thermal printer.');
@@ -501,8 +633,8 @@ export default function LiveSalesClient() {
       setCart([]);
       setDiscountAmount(0);
       setSelectedCustomer(null);
-      setCustomCustomerName('');
-      setCustomCustomerPhone('');
+      setCustomerSearch('');
+      setReceivedAmountInput('');
       setPosSplitCash('');
       setPosSplitUPI('');
       setActiveBillNo(`LIVE-${Date.now().toString().slice(-6)}`);
@@ -712,38 +844,154 @@ export default function LiveSalesClient() {
               <span className="text-[11px] font-mono font-bold text-slate-500">{activeBillNo}</span>
             </div>
 
-            {/* Customer Pill / Quick Selector */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
-                <span>Customer Details:</span>
+            {/* Customer Selection (Mandatory) */}
+            <div className="space-y-1.5 relative">
+              <div className="flex items-center justify-between text-[11px] font-bold">
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-700">Customer</span>
+                  <span className="text-rose-500 font-extrabold">* (Mandatory)</span>
+                </div>
                 {selectedCustomer && (
                   <button
                     type="button"
-                    onClick={() => setSelectedCustomer(null)}
-                    className="text-rose-500 hover:underline text-[10.5px]"
+                    onClick={() => {
+                      setSelectedCustomer(null);
+                      setCustomerSearch('');
+                    }}
+                    className="text-rose-500 hover:text-rose-700 text-[10.5px] font-semibold flex items-center gap-0.5 cursor-pointer"
                   >
-                    Clear Customer
+                    Change Customer
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  placeholder="Customer Name (Optional)"
-                  value={selectedCustomer ? selectedCustomer.name : customCustomerName}
-                  onChange={(e) => setCustomCustomerName(e.target.value)}
-                  disabled={Boolean(selectedCustomer)}
-                  className="h-8 px-2.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D]"
-                />
-                <input
-                  type="tel"
-                  placeholder="Mobile Number"
-                  value={selectedCustomer ? selectedCustomer.phone : customCustomerPhone}
-                  onChange={(e) => setCustomCustomerPhone(e.target.value)}
-                  disabled={Boolean(selectedCustomer)}
-                  className="h-8 px-2.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D]"
-                />
-              </div>
+
+              {selectedCustomer ? (
+                <div className="p-2.5 rounded-xl border border-teal-200 bg-teal-50/60 flex items-center justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-xs text-slate-900 truncate">{selectedCustomer.name}</span>
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-[#02626D] text-white">Selected</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10.5px] text-slate-600 mt-0.5">
+                      <span className="flex items-center gap-0.5 font-medium">
+                        <Phone size={11} className="text-[#02626D]" /> {selectedCustomer.phone}
+                      </span>
+                      {selectedCustomer.address && (
+                        <span className="truncate max-w-[140px] text-slate-500">
+                          • {selectedCustomer.address}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <div className="relative flex-1">
+                      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Search customer name or mobile..."
+                        value={customerSearch}
+                        onFocus={() => setShowCustomerDropdown(true)}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value);
+                          setShowCustomerDropdown(true);
+                        }}
+                        className="w-full pl-8 pr-2.5 h-8.5 border border-amber-300 rounded-xl text-xs font-medium text-slate-800 bg-amber-50/30 focus:bg-white focus:outline-none focus:border-[#02626D] focus:ring-1 focus:ring-[#02626D]"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCustomerModal(true)}
+                      className="h-8.5 px-2.5 rounded-xl bg-[#02626D] hover:bg-[#014d56] text-white text-[11px] font-bold flex items-center gap-1 whitespace-nowrap shadow-2xs transition-all cursor-pointer"
+                    >
+                      <UserPlus size={13} />
+                      <span>+ Add</span>
+                    </button>
+                  </div>
+
+                  {/* Warning banner when no customer selected */}
+                  <div className="px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[11px] flex items-center gap-1.5">
+                    <AlertTriangle size={12} className="text-amber-600 flex-shrink-0" />
+                    <span>Please select or add a customer to enable live sale.</span>
+                  </div>
+
+                  {/* Customer Dropdown Results */}
+                  {showCustomerDropdown && (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl border border-slate-200 shadow-xl z-30 max-h-56 overflow-y-auto p-1 divide-y divide-slate-100">
+                      <div className="px-2 py-1 flex items-center justify-between text-[10.5px] font-bold text-slate-400 bg-slate-50 rounded-lg">
+                        <span>Select Matching Customer</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowCustomerDropdown(false)}
+                          className="text-slate-500 hover:text-slate-800"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+
+                      {filteredCustomerOptions.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-slate-500 space-y-1.5">
+                          <p>No customer found matching &ldquo;{customerSearch}&rdquo;</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowCustomerDropdown(false);
+                              if (/^\d+$/.test(customerSearch.trim())) {
+                                setNewCustMobile(customerSearch.trim());
+                              } else {
+                                setNewCustName(customerSearch.trim());
+                              }
+                              setShowAddCustomerModal(true);
+                            }}
+                            className="inline-flex items-center gap-1 px-3 py-1 bg-[#02626D] text-white font-bold text-xs rounded-lg hover:bg-[#014d56]"
+                          >
+                            <UserPlus size={12} />
+                            <span>Create &ldquo;{customerSearch || 'New Customer'}&rdquo;</span>
+                          </button>
+                        </div>
+                      ) : (
+                        filteredCustomerOptions.map((cust) => (
+                          <div
+                            key={cust.id}
+                            onClick={() => {
+                              setSelectedCustomer(cust);
+                              setCustomerSearch('');
+                              setShowCustomerDropdown(false);
+                            }}
+                            className="p-2 hover:bg-teal-50/60 rounded-lg cursor-pointer transition-all flex items-center justify-between"
+                          >
+                            <div>
+                              <p className="text-xs font-bold text-slate-800">{cust.name}</p>
+                              <p className="text-[10.5px] text-slate-500 flex items-center gap-1">
+                                <Phone size={10} className="text-[#02626D]" /> {cust.phone || 'No phone'}
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-bold text-[#02626D] bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
+                              Select
+                            </span>
+                          </div>
+                        ))
+                      )}
+
+                      <div className="p-1.5 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowCustomerDropdown(false);
+                            setShowAddCustomerModal(true);
+                          }}
+                          className="w-full py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <UserPlus size={13} className="text-[#02626D]" />
+                          <span>+ Add New Customer</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Cart Items List Table */}
@@ -879,7 +1127,7 @@ export default function LiveSalesClient() {
             </div>
 
             {/* Bill Financial Summary */}
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1.5">
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-2">
               <div className="flex justify-between text-slate-500">
                 <span>Subtotal ({cart.length} items):</span>
                 <span className="font-bold text-slate-800 font-mono">₹{subtotal.toFixed(2)}</span>
@@ -900,6 +1148,59 @@ export default function LiveSalesClient() {
                   ₹{grandTotal.toFixed(2)}
                 </span>
               </div>
+
+              {/* Received Amount Input & Credit Calculation */}
+              <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-700">Received Amount (₹):</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setReceivedAmountInput(grandTotal.toString())}
+                      className="px-1.5 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[10px] cursor-pointer"
+                    >
+                      Full Paid
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReceivedAmountInput('0')}
+                      className="px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold text-[10px] cursor-pointer"
+                    >
+                      100% Credit
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-xs">₹</span>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder={grandTotal.toFixed(2)}
+                    value={receivedAmountInput}
+                    onChange={(e) => setReceivedAmountInput(e.target.value)}
+                    className="w-full h-8 pl-6 pr-3 border border-slate-300 rounded-lg text-xs font-black text-slate-900 bg-white focus:outline-none focus:border-[#02626D]"
+                  />
+                </div>
+
+                {/* Credit / Balance Callout */}
+                {creditAmount > 0 ? (
+                  <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 space-y-0.5">
+                    <div className="flex justify-between items-center font-bold text-xs">
+                      <span>Remaining Credit Due:</span>
+                      <span className="text-amber-700 font-mono font-black text-sm">₹{creditAmount.toFixed(2)}</span>
+                    </div>
+                    <p className="text-[10px] text-amber-700">
+                      Balance will be stored as Credit Due for {selectedCustomer ? selectedCustomer.name : 'Customer'} and tracked in Live Sales Analytics.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10.5px] font-bold flex items-center gap-1">
+                    <CheckCircle2 size={12} className="text-emerald-600" />
+                    <span>Full payment received — Zero credit balance.</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Settle Action Button */}
@@ -907,14 +1208,29 @@ export default function LiveSalesClient() {
               type="button"
               onClick={handleSettleBill}
               disabled={isSubmitting || cart.length === 0}
-              className="w-full h-10 rounded-xl bg-[#02626D] hover:bg-[#014d56] disabled:opacity-50 text-white font-bold text-xs shadow-2xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+              className={`w-full h-11 rounded-xl font-bold text-xs shadow-2xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 ${
+                !selectedCustomer
+                  ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                  : 'bg-[#02626D] hover:bg-[#014d56] text-white disabled:opacity-50'
+              }`}
             >
               {isSubmitting ? (
-                <span>Settling Bill...</span>
+                <div className="flex items-center gap-1.5">
+                  <Loader2 size={15} className="animate-spin" />
+                  <span>Settling Live Sale...</span>
+                </div>
+              ) : !selectedCustomer ? (
+                <div className="flex items-center gap-1.5">
+                  <AlertTriangle size={15} />
+                  <span>Select Customer (Mandatory) to Settle</span>
+                </div>
               ) : (
                 <>
                   <Printer size={15} />
-                  <span>Settle &amp; Print Receipt (₹{grandTotal.toFixed(2)})</span>
+                  <span>
+                    Settle &amp; Print Slip (Recv: ₹{receivedAmount.toFixed(2)}
+                    {creditAmount > 0 ? ` | Due: ₹${creditAmount.toFixed(2)}` : ''})
+                  </span>
                 </>
               )}
             </button>
@@ -1065,10 +1381,24 @@ export default function LiveSalesClient() {
                 ))}
               </div>
 
-              <div className="pt-2 border-t border-slate-200 flex justify-between font-black text-sm text-[#02626D]">
-                <span>Total Paid:</span>
-                <span>₹{lastSettledBill.total.toFixed(2)}</span>
+              <div className="pt-2 border-t border-slate-200 flex justify-between font-black text-xs text-slate-700">
+                <span>Net Total:</span>
+                <span className="font-mono">₹{lastSettledBill.total.toFixed(2)}</span>
               </div>
+
+              <div className="flex justify-between font-bold text-xs text-emerald-700">
+                <span>Received / Paid:</span>
+                <span className="font-mono">
+                  ₹{(lastSettledBill.receivedAmount !== undefined ? lastSettledBill.receivedAmount : lastSettledBill.total).toFixed(2)}
+                </span>
+              </div>
+
+              {lastSettledBill.creditAmount && lastSettledBill.creditAmount > 0 ? (
+                <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 flex justify-between font-black text-xs text-amber-800">
+                  <span>CREDIT / DUE:</span>
+                  <span className="font-mono font-black text-sm text-amber-700">₹{lastSettledBill.creditAmount.toFixed(2)}</span>
+                </div>
+              ) : null}
             </div>
 
             {/* Print Buttons */}
@@ -1095,6 +1425,8 @@ export default function LiveSalesClient() {
                       tax: 0,
                       discount: lastSettledBill.discount,
                       grandTotal: lastSettledBill.total,
+                      receivedAmount: lastSettledBill.receivedAmount,
+                      creditAmount: lastSettledBill.creditAmount,
                       paymentMode: lastSettledBill.paymentMode,
                     });
                   } else {
@@ -1115,6 +1447,131 @@ export default function LiveSalesClient() {
                 Done
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 5. ADD NEW CUSTOMER MODAL (MANDATORY INTAKE) ───────────────────── */}
+      {showAddCustomerModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-[#02626D]">
+                  <UserPlus size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Add &amp; Select Customer</h3>
+                  <p className="text-[11px] text-slate-400">Mandatory for live sales billing &amp; credit tracking</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddCustomerModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveAndSelectCustomer} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Customer Name <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <User size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Ramesh Kumar"
+                    value={newCustName}
+                    onChange={(e) => setNewCustName(e.target.value)}
+                    className="w-full pl-8 pr-3 h-9 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Mobile Number <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <Phone size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="tel"
+                    required
+                    placeholder="e.g. 9876543210"
+                    value={newCustMobile}
+                    onChange={(e) => setNewCustMobile(e.target.value)}
+                    className="w-full pl-8 pr-3 h-9 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Email Address <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <div className="relative">
+                  <Mail size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    placeholder="e.g. customer@example.com"
+                    value={newCustEmail}
+                    onChange={(e) => setNewCustEmail(e.target.value)}
+                    className="w-full pl-8 pr-3 h-9 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Address / City <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <div className="relative">
+                  <MapPin size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. Door No. 4-12, Main Bazaar, Tirupati"
+                    value={newCustAddress}
+                    onChange={(e) => setNewCustAddress(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Form Action Buttons */}
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCustomerModal(false)}
+                  disabled={isSavingCustomer}
+                  className="px-4 h-9 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCustomer}
+                  className="px-5 h-9 rounded-xl bg-[#02626D] hover:bg-[#014d56] disabled:opacity-50 text-white font-bold text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isSavingCustomer ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Saving &amp; Selecting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      <span>Save &amp; Select Customer</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -10,6 +10,7 @@ export interface ReceiptItem {
   unit?: string;
   price: number;
   total: number;
+  note?: string;
 }
 
 export interface ReceiptData {
@@ -26,15 +27,39 @@ export interface ReceiptData {
   timeStr?: string;
   customerName?: string;
   customerPhone?: string;
+  customerEmail?: string;
+  customerAddress?: string;
   orderType?: string;
+  orderStatus?: string;
   paymentMode?: string;
   paymentStatus?: string;
+  splitCash?: number;
+  splitUpi?: number;
+  cashGiven?: number;
+  balanceReturn?: number;
   slot?: string;
   deliveryDate?: string;
+  deliveryTime?: string;
+  deliveryAddress?: string;
+  isCustomisation?: boolean;
+  customisationDetails?: {
+    noOfBoxes?: number;
+    boxType?: string;
+    boxPrice?: number;
+    hasShrink?: boolean;
+    shrinkType?: string;
+    shrinkPrice?: number;
+    hasSticker?: boolean;
+    stickerType?: string;
+    stickerPrice?: number;
+    selectedSweets?: Array<{ itemName?: string; name?: string; count?: number; weight?: number; unit?: string }>;
+    remarks?: string;
+  };
   items: ReceiptItem[];
   subtotal: number;
   tax?: number;
   discount?: number;
+  roundOff?: number;
   boxCharges?: number;
   boxDetails?: string;
   stickerCharges?: number;
@@ -43,10 +68,12 @@ export interface ReceiptData {
   packingCharges?: number;
   additionalCharges?: number;
   transportCharges?: number;
-  deliveryAddress?: string;
   grandTotal: number;
   receivedAmount?: number;
   creditAmount?: number;
+  advanceAmount?: number;
+  balanceAmount?: number;
+  remarks?: string;
   footerNote?: string;
   cashierName?: string;
 }
@@ -96,7 +123,7 @@ export class EscPosBuilder {
   private buffer: number[] = [];
   private paperWidth: '58mm' | '80mm';
 
-  constructor(paperWidth: '58mm' | '80mm' = '58mm') {
+  constructor(paperWidth: '58mm' | '80mm' = '80mm') {
     this.paperWidth = paperWidth;
   }
 
@@ -108,6 +135,7 @@ export class EscPosBuilder {
   // Initialize printer
   public init(): EscPosBuilder {
     this.buffer.push(0x1b, 0x40); // ESC @
+    this.alignLeft();
     return this;
   }
 
@@ -251,7 +279,7 @@ export class EscPosBuilder {
 /**
  * Generate a complete Test Print ESC/POS receipt
  */
-export function generateTestReceipt(paperWidth: '58mm' | '80mm' = '58mm'): Uint8Array {
+export function generateTestReceipt(paperWidth: '58mm' | '80mm' = '80mm'): Uint8Array {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-IN', {
     day: '2-digit',
@@ -355,7 +383,7 @@ export function generateTestReceipt(paperWidth: '58mm' | '80mm' = '58mm'): Uint8
  */
 export function generateReceiptEscPos(
   data: ReceiptData,
-  paperWidth: '58mm' | '80mm' = '58mm'
+  paperWidth: '58mm' | '80mm' = '80mm'
 ): Uint8Array {
   const builder = new EscPosBuilder(paperWidth);
   const is2Inch = paperWidth === '58mm';
@@ -377,13 +405,17 @@ export function generateReceiptEscPos(
     });
 
   // 1. STORE HEADER
-  builder.init().alignCenter().bold(true);
+  builder.init().bold(true);
 
+  const storeName = data.storeName || 'PATTABIRAM SWEETS';
   if (is2Inch) {
-    // 2-inch: Double height only ensures "PATTABIRAM SWEETS" fits cleanly on a single centered line
-    builder.doubleHeight(true).textLineCentered(data.storeName || 'PATTABIRAM SWEETS').doubleHeight(false);
+    builder.doubleHeight(true).textLineCentered(storeName).doubleHeight(false);
   } else {
-    builder.doubleSize(true).textLineCentered(data.storeName || 'PATTABIRAM SWEETS').doubleSize(false);
+    if (storeName.length <= 24) {
+      builder.doubleSize(true).textLineCentered(storeName).doubleSize(false);
+    } else {
+      builder.doubleHeight(true).textLineCentered(storeName).doubleHeight(false);
+    }
   }
 
   builder.bold(false);
@@ -406,40 +438,91 @@ export function generateReceiptEscPos(
   if (data.storeFssai) {
     builder.textLineCentered(`FSSAI: ${data.storeFssai}`);
   }
+  if (data.storeWebsite) {
+    builder.textLineCentered(`Web: ${data.storeWebsite}`);
+  }
 
   // 2. BILL / ORDER METADATA
   builder.drawLine('=').alignLeft();
 
   builder.bold(true).row2(`Bill: ${data.billNo}`, `${dateStr}`).bold(false);
-  builder.row2(`Time: ${timeStr}`, `Type: ${data.orderType || 'POS'}`);
+  builder.row2(`Time: ${timeStr}`, `Type: ${data.orderType || 'Walk-in POS'}`);
 
+  // Customer Information
   if (data.customerName || data.customerPhone) {
-    const custName = data.customerName || 'Walk-in';
-    const custPhone = data.customerPhone && data.customerPhone !== '-' ? data.customerPhone : '';
-    if (custPhone) {
-      builder.textLineWrapped(`Customer: ${custName} (${custPhone})`);
-    } else {
-      builder.textLineWrapped(`Customer: ${custName}`);
+    const custName = data.customerName || 'Walk-in Customer';
+    const custPhone = data.customerPhone && data.customerPhone !== '-' ? ` (${data.customerPhone})` : '';
+    builder.textLineWrapped(`Customer: ${custName}${custPhone}`);
+  }
+  if (data.customerEmail) {
+    builder.textLineWrapped(`Email: ${data.customerEmail}`);
+  }
+  if (data.customerAddress) {
+    builder.textLineWrapped(`Customer Addr: ${data.customerAddress}`);
+  }
+
+  // Delivery & Schedule Information (for orders)
+  if (data.deliveryDate || data.slot || data.deliveryTime) {
+    const dDate = data.deliveryDate ? `Delivery: ${data.deliveryDate}` : '';
+    const sTime = data.slot ? `Slot: ${data.slot}` : (data.deliveryTime ? `Time: ${data.deliveryTime}` : '');
+    if (dDate && sTime) {
+      builder.row2(dDate, sTime);
+    } else if (dDate || sTime) {
+      builder.textLine(dDate || sTime);
+    }
+  }
+  if (data.deliveryAddress) {
+    builder.textLineWrapped(`Delivery Addr: ${data.deliveryAddress}`);
+  }
+
+  // Payment Mode & Staff
+  const payStr = `Pay: ${data.paymentMode || 'Cash'}${data.paymentStatus ? ` (${data.paymentStatus})` : ''}`;
+  const staffStr = data.cashierName ? `Staff: ${data.cashierName}` : '';
+  if (staffStr) {
+    builder.row2(payStr, staffStr);
+  } else {
+    builder.textLine(payStr);
+  }
+
+  // Split payment breakdown if present
+  if (data.splitCash !== undefined || data.splitUpi !== undefined) {
+    const sCash = (data.splitCash || 0).toFixed(2);
+    const sUpi = (data.splitUpi || 0).toFixed(2);
+    builder.row2('Split Details:', `Cash: Rs.${sCash} | UPI: Rs.${sUpi}`);
+  }
+
+  // Order Status if not completed
+  if (data.orderStatus && data.orderStatus !== 'Delivered' && data.orderStatus !== 'Completed') {
+    builder.row2('Order Status:', data.orderStatus);
+  }
+
+  // 3. CUSTOM BOX ORDER DETAILS (if customised)
+  if (data.isCustomisation || data.customisationDetails) {
+    builder.drawLine('-');
+    builder.bold(true).textLine('CUSTOM BOX PACKING DETAILS:').bold(false);
+    const cd = data.customisationDetails;
+    if (cd?.noOfBoxes) {
+      builder.row2('Boxes Count:', `${cd.noOfBoxes} Box(es) @ Rs.${(cd.boxPrice || 0).toFixed(2)}`);
+    }
+    if (cd?.boxType) {
+      builder.row2('Box Type:', cd.boxType);
+    }
+    if (cd?.selectedSweets && cd.selectedSweets.length > 0) {
+      cd.selectedSweets.forEach((s) => {
+        const sName = s.itemName || s.name || 'Sweet';
+        const sQty = s.count ? `${s.count} pcs` : (s.weight ? `${s.weight} ${s.unit || 'g'}` : '');
+        builder.textLine(`  - ${sName}${sQty ? ` (${sQty})` : ''}`);
+      });
+    }
+    if (cd?.hasShrink) {
+      builder.row2('Shrink Wrap:', cd.shrinkType ? `${cd.shrinkType} (+Rs.${(cd.shrinkPrice || 0).toFixed(2)})` : `+Rs.${(cd.shrinkPrice || 0).toFixed(2)}`);
+    }
+    if (cd?.hasSticker) {
+      builder.row2('Sticker / Label:', cd.stickerType ? `${cd.stickerType} (+Rs.${(cd.stickerPrice || 0).toFixed(2)})` : `+Rs.${(cd.stickerPrice || 0).toFixed(2)}`);
     }
   }
 
-  if (data.slot || data.deliveryDate) {
-    const slotText = data.slot ? `Slot: ${data.slot}` : '';
-    const delivText = data.deliveryDate ? `Del: ${data.deliveryDate}` : '';
-    if (slotText && delivText) {
-      builder.row2(slotText, delivText);
-    } else {
-      builder.textLine(slotText || delivText);
-    }
-  }
-
-  if (data.paymentMode || data.paymentStatus) {
-    const payStr = `Pay: ${data.paymentMode || 'Cash'}`;
-    const statusStr = data.paymentStatus ? `(${data.paymentStatus})` : '';
-    builder.row2(`${payStr} ${statusStr}`.trim(), data.cashierName ? `Staff: ${data.cashierName}` : '');
-  }
-
-  // 3. ITEM TABLE HEADER
+  // 4. ITEM TABLE HEADER
   builder.drawLine('-');
 
   if (is2Inch) {
@@ -454,14 +537,17 @@ export function generateReceiptEscPos(
       const qtyLine = `  ${item.qty}${unitStr}${priceStr}`;
       const totalStr = `Rs.${item.total.toFixed(2)}`;
       builder.row2(qtyLine, totalStr);
+      if (item.note) {
+        builder.textLine(`  * ${item.note}`);
+      }
     });
   } else {
-    // 3-inch Table Header: 4-column layout
+    // 3-inch (80mm) Table Header: 4-column layout (22 + 8 + 8 + 10 = 48 columns)
     builder.bold(true);
-    const hName = 'ITEM DESCRIPTION'.padEnd(24).substring(0, 24);
+    const hName = 'ITEM DESCRIPTION'.padEnd(22).substring(0, 22);
     const hQty = 'QTY'.padStart(8).substring(0, 8);
-    const hRate = 'RATE'.padStart(7).substring(0, 7);
-    const hTotal = 'TOTAL'.padStart(9).substring(0, 9);
+    const hRate = 'RATE'.padStart(8).substring(0, 8);
+    const hTotal = 'TOTAL'.padStart(10).substring(0, 10);
     builder.textLine(`${hName}${hQty}${hRate}${hTotal}`).bold(false).drawLine('-');
 
     data.items.forEach((item) => {
@@ -470,25 +556,26 @@ export function generateReceiptEscPos(
       const rateText = item.price > 0 ? item.price.toFixed(2) : '—';
       const totalText = item.total.toFixed(2);
 
+      const colQ = qtyText.padStart(8).substring(0, 8);
+      const colR = rateText.padStart(8).substring(0, 8);
+      const colT = totalText.padStart(10).substring(0, 10);
+
       // If name is long, print on first line, then aligned values
       if (item.name.length > 22) {
         builder.textLine(item.name);
-        const padSpace = ' '.repeat(24);
-        const colQ = qtyText.padStart(8).substring(0, 8);
-        const colR = rateText.padStart(7).substring(0, 7);
-        const colT = totalText.padStart(9).substring(0, 9);
+        const padSpace = ' '.repeat(22);
         builder.textLine(`${padSpace}${colQ}${colR}${colT}`);
       } else {
-        const colN = item.name.padEnd(24).substring(0, 24);
-        const colQ = qtyText.padStart(8).substring(0, 8);
-        const colR = rateText.padStart(7).substring(0, 7);
-        const colT = totalText.padStart(9).substring(0, 9);
+        const colN = item.name.padEnd(22).substring(0, 22);
         builder.textLine(`${colN}${colQ}${colR}${colT}`);
+      }
+      if (item.note) {
+        builder.textLine(`  * ${item.note}`);
       }
     });
   }
 
-  // 4. TOTALS & CHARGES BREAKDOWN
+  // 5. TOTALS & CHARGES BREAKDOWN
   builder.drawLine('-');
 
   builder.row2('Sub Total:', `Rs.${data.subtotal.toFixed(2)}`);
@@ -530,33 +617,61 @@ export function generateReceiptEscPos(
     builder.row2('Tax / GST:', `+Rs.${data.tax.toFixed(2)}`);
   }
 
-  // 5. GRAND NET AMOUNT
+  if (data.roundOff !== undefined && data.roundOff !== 0) {
+    const rPrefix = data.roundOff > 0 ? '+Rs.' : '-Rs.';
+    builder.row2('Round Off:', `${rPrefix}${Math.abs(data.roundOff).toFixed(2)}`);
+  }
+
+  // 6. GRAND NET AMOUNT
   builder.drawLine('=').bold(true);
 
   if (is2Inch) {
-    // 2-inch: Bold and double height fits cleanly on 1 single line
     builder.doubleHeight(true).row2('NET AMOUNT:', `Rs.${data.grandTotal.toFixed(2)}`).doubleHeight(false);
   } else {
-    builder.doubleHeight(true).row2('NET GRAND TOTAL:', `Rs.${data.grandTotal.toFixed(2)}`).doubleHeight(false);
-  }
-
-  // Credit / Partial Payment Breakdown if applicable
-  if (data.creditAmount && data.creditAmount > 0) {
-    builder.drawLine('-');
-    if (data.receivedAmount !== undefined) {
-      builder.row2('Paid / Received:', `Rs.${data.receivedAmount.toFixed(2)}`);
-    }
-    builder.bold(true).row2('CREDIT / BALANCE DUE:', `Rs.${data.creditAmount.toFixed(2)}`).bold(false);
+    builder.doubleHeight(true).row2('NET AMOUNT:', `Rs.${data.grandTotal.toFixed(2)}`).doubleHeight(false);
   }
 
   builder.bold(false).drawLine('=');
 
-  // 6. FOOTER
+  // 7. PAYMENT, CASH TENDERED, CHANGE, CREDIT DUE BREAKDOWN
+  if (data.receivedAmount !== undefined) {
+    builder.row2('Total Paid / Received:', `Rs.${data.receivedAmount.toFixed(2)}`);
+  }
+
+  if (data.cashGiven && data.cashGiven > 0) {
+    builder.row2('Cash Tendered:', `Rs.${data.cashGiven.toFixed(2)}`);
+  }
+
+  if (data.balanceReturn && data.balanceReturn > 0) {
+    builder.bold(true).row2('Change Returned:', `Rs.${data.balanceReturn.toFixed(2)}`).bold(false);
+  }
+
+  if (data.advanceAmount && data.advanceAmount > 0) {
+    builder.row2('Advance Paid:', `Rs.${data.advanceAmount.toFixed(2)}`);
+  }
+
+  if (data.balanceAmount && data.balanceAmount > 0) {
+    builder.bold(true).row2('BALANCE DUE ON DELIVERY:', `Rs.${data.balanceAmount.toFixed(2)}`).bold(false);
+  }
+
+  if (data.creditAmount && data.creditAmount > 0) {
+    builder.bold(true).row2('CREDIT / BALANCE DUE:', `Rs.${data.creditAmount.toFixed(2)}`).bold(false);
+  }
+
+  // 8. SPECIAL INSTRUCTIONS / REMARKS
+  if (data.remarks) {
+    builder.drawLine('-');
+    builder.bold(true).textLine('Special Instructions:').bold(false);
+    builder.textLineWrapped(data.remarks);
+  }
+
+  // 9. FOOTER
+  builder.drawLine('-');
   builder
     .alignCenter()
-    .textLineCentered(data.footerNote || 'Thank you for visiting!')
+    .textLineCentered(data.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!')
     .textLineCentered('Please visit again')
-    .feed(2)
+    .feed(3)
     .cut();
 
   return builder.toUint8Array();

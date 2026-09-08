@@ -333,17 +333,20 @@ export default function OrdersClient() {
 
     if (isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
       await printReceipt({
-        storeName: 'PATTABIRAM SWEETS',
-        storeAddress: '12, Main Road, Pattabiram, Chennai - 600072',
-        storePhone: '+91 98765 43210',
         billNo: order.code || (order as any).orderId || order.id,
         customerName: order.customerName,
         customerPhone: order.customerMobile,
+        customerEmail: (order as any).customerEmail || undefined,
+        customerAddress: order.customerAddress || order.deliveryAddress || undefined,
+        cashierName: (order as any).createdByName || (order as any).createdBy || undefined,
         dateStr: order.orderDate,
         timeStr: order.orderTime,
         slot: order.slot,
         deliveryDate: order.expectedDeliveryDate || order.manufacturingDate,
+        deliveryTime: (order as any).deliveryTime || undefined,
+        deliveryAddress: order.deliveryAddress || undefined,
         orderType: order.isCustomisation ? 'Custom Box Order' : 'Standard Order',
+        orderStatus: order.orderStatus,
         paymentMode: order.paymentMode,
         paymentStatus: order.paymentStatus,
         items: orderItems,
@@ -357,8 +360,15 @@ export default function OrdersClient() {
         packetCharges: order.packetChargesTotal || 0,
         packingCharges: order.packingCharges || 0,
         additionalCharges: order.additionalCharges || 0,
+        transportCharges: order.transportCharges || 0,
         grandTotal: order.totalAmount,
-        footerNote: 'Order verified & recorded. Thank you!',
+        receivedAmount: order.receivedAmount,
+        advanceAmount: (order as any).advanceAmount !== undefined ? (order as any).advanceAmount : order.receivedAmount,
+        balanceAmount: (order as any).balanceAmount !== undefined ? (order as any).balanceAmount : Math.max(0, order.totalAmount - (order.receivedAmount || 0)),
+        isCustomisation: order.isCustomisation,
+        customisationDetails: order.customisationDetails as any,
+        remarks: (order as any).remarks || (order as any).notes || undefined,
+        footerNote: 'Thank you for choosing Pattabiram Sweets! Visit again!',
       });
     } else {
       toast.warning('Printer Not Connected', `Please connect USB/Bluetooth printer in the top Header to print ${order.code || 'Order'}.`);

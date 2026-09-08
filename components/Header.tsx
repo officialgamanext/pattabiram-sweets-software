@@ -53,6 +53,8 @@ export default function Header() {
     isConnected: isPrinterConnected,
     printerType,
     printerName,
+    paperWidth,
+    setPaperWidth,
     connectUsbPrinter,
     connectBluetoothPrinter,
     disconnectPrinter,
@@ -676,6 +678,40 @@ export default function Header() {
                       </span>
                     )}
                   </button>
+                </div>
+
+                {/* Paper Width Toggle */}
+                <div className="px-2 py-2 border-t border-[#01353b]">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-bold text-teal-200 uppercase tracking-wider">Paper Width</span>
+                    <span className="text-[10px] text-emerald-300 font-mono font-bold">
+                      {paperWidth === '80mm' ? '80mm (3-inch / 48 cols)' : '58mm (2-inch / 32 cols)'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setPaperWidth('80mm')}
+                      className={`py-1 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+                        paperWidth === '80mm'
+                          ? 'bg-amber-500 text-slate-950 shadow-xs'
+                          : 'bg-[#01353b] text-teal-200 hover:bg-[#035661]'
+                      }`}
+                    >
+                      ✓ 80mm (Full Width)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaperWidth('58mm')}
+                      className={`py-1 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+                        paperWidth === '58mm'
+                          ? 'bg-amber-500 text-slate-950 shadow-xs'
+                          : 'bg-[#01353b] text-teal-200 hover:bg-[#035661]'
+                      }`}
+                    >
+                      58mm (Compact)
+                    </button>
+                  </div>
                 </div>
 
                 <div className="px-1.5 pt-1 border-t border-[#01353b] space-y-1">

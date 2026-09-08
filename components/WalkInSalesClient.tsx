@@ -202,8 +202,18 @@ export default function WalkInSalesClient() {
         billNo: targetSale.orderId || targetSale.id,
         customerName: targetSale.customerName || 'Walk-in Customer',
         customerPhone: targetSale.customerMobile || '-',
+        customerEmail: (targetSale as any).customerEmail || undefined,
+        customerAddress: (targetSale as any).customerAddress || (targetSale as any).deliveryAddress || undefined,
+        cashierName: (targetSale as any).cashierName || (targetSale as any).createdBy || undefined,
         paymentMode: targetSale.paymentMode,
+        paymentStatus: (targetSale as any).paymentStatus || 'Paid',
         orderType: targetSale.orderType || 'Walk-in POS',
+        receivedAmount: (targetSale as any).receivedAmount !== undefined ? (targetSale as any).receivedAmount : targetSale.totalAmount,
+        creditAmount: (targetSale as any).creditAmount || undefined,
+        slot: (targetSale as any).slot || undefined,
+        deliveryDate: (targetSale as any).deliveryDate || (targetSale as any).expectedDeliveryDate || undefined,
+        deliveryAddress: (targetSale as any).deliveryAddress || undefined,
+        remarks: (targetSale as any).remarks || (targetSale as any).notes || undefined,
         items: (targetSale.items || []).map((it: any) => {
           const qty = parseFloat(it.quantity || it.qty || 1) || 1;
           let price = parseFloat(it.price || it.rate || it.itemPrice || it.unitPrice || 0) || 0;

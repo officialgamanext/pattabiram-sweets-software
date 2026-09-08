@@ -50,7 +50,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [printerType, setPrinterType] = useState<PrinterType>('None');
   const [usbSubtype, setUsbSubtype] = useState<UsbSubtype>('None');
   const [printerName, setPrinterName] = useState<string>('');
-  const [paperWidth, setPaperWidthState] = useState<PaperWidth>('58mm');
+  const [paperWidth, setPaperWidthState] = useState<PaperWidth>('80mm');
   const [isPrinting, setIsPrinting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('Ready');
   const [lastError, setLastError] = useState<string | null>(null);
@@ -67,9 +67,19 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Load saved preferences on mount
   useEffect(() => {
     try {
+      const v2Migrated = localStorage.getItem('pattabiram_printer_v2_migrated');
       const savedWidth = localStorage.getItem('pattabiram_printer_width') as PaperWidth;
-      if (savedWidth === '58mm' || savedWidth === '80mm') {
+
+      if (!v2Migrated) {
+        // Automatically default all devices to 80mm so full 3-inch paper width is occupied
+        setPaperWidthState('80mm');
+        localStorage.setItem('pattabiram_printer_width', '80mm');
+        localStorage.setItem('pattabiram_printer_v2_migrated', 'true');
+      } else if (savedWidth === '58mm' || savedWidth === '80mm') {
         setPaperWidthState(savedWidth);
+      } else {
+        setPaperWidthState('80mm');
+        localStorage.setItem('pattabiram_printer_width', '80mm');
       }
     } catch {
       // ignore
@@ -80,6 +90,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setPaperWidthState(width);
     try {
       localStorage.setItem('pattabiram_printer_width', width);
+      localStorage.setItem('pattabiram_printer_v2_migrated', 'true');
     } catch {
       // ignore
     }

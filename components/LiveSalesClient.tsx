@@ -97,6 +97,9 @@ export interface LiveSaleRecord {
   grandTotal?: number;
   receivedAmount?: number;
   creditAmount?: number;
+  cashGiven?: number;
+  balanceReturn?: number;
+  roundOff?: number;
   paymentStatus?: 'Paid' | 'Partial' | 'Credit';
   status?: string;
   savedAt: string;
@@ -607,7 +610,14 @@ export default function LiveSalesClient() {
             timeStr,
             customerName,
             customerPhone,
+            customerEmail: selectedCustomer?.email || undefined,
+            customerAddress: selectedCustomer?.address || undefined,
             cashierName,
+            orderType: 'Live Sale',
+            paymentMode: selectedPayment,
+            paymentStatus: paymentStatus,
+            splitCash: selectedPayment === 'Split' ? parseFloat(posSplitCash) || 0 : undefined,
+            splitUpi: selectedPayment === 'Split' ? parseFloat(posSplitUPI) || 0 : undefined,
             items: cart.map((i) => ({
               name: i.name,
               qty: i.quantity,
@@ -618,10 +628,10 @@ export default function LiveSalesClient() {
             subtotal,
             tax: 0,
             discount: discountAmount,
+            roundOff: 0,
             grandTotal,
             receivedAmount,
             creditAmount,
-            paymentMode: selectedPayment,
           });
           toast.success('Printed Receipt', 'Live sale receipt sent to thermal printer.');
         } catch (printErr) {
@@ -1413,7 +1423,16 @@ export default function LiveSalesClient() {
                       timeStr: lastSettledBill.time,
                       customerName: lastSettledBill.customerName,
                       customerPhone: lastSettledBill.customerPhone,
+                      customerEmail: lastSettledBill.customerEmail || undefined,
+                      customerAddress: lastSettledBill.customerAddress || undefined,
                       cashierName: lastSettledBill.cashierName,
+                      orderType: 'Live Sale',
+                      paymentMode: lastSettledBill.paymentMode,
+                      paymentStatus: lastSettledBill.paymentStatus,
+                      splitCash: lastSettledBill.splitCash,
+                      splitUpi: lastSettledBill.splitUpi,
+                      cashGiven: lastSettledBill.cashGiven,
+                      balanceReturn: lastSettledBill.balanceReturn,
                       items: lastSettledBill.items.map((i) => ({
                         name: i.name,
                         qty: i.quantity,
@@ -1424,10 +1443,10 @@ export default function LiveSalesClient() {
                       subtotal: lastSettledBill.subtotal,
                       tax: 0,
                       discount: lastSettledBill.discount,
+                      roundOff: (lastSettledBill as any).roundOff || 0,
                       grandTotal: lastSettledBill.total,
                       receivedAmount: lastSettledBill.receivedAmount,
                       creditAmount: lastSettledBill.creditAmount,
-                      paymentMode: lastSettledBill.paymentMode,
                     });
                   } else {
                     printWindow();

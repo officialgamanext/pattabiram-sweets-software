@@ -131,6 +131,9 @@ export default function PosClient() {
   // Business settings for dynamic bill header & footer
   const { settings: businessSettings } = useBusinessSettings();
 
+  // Auth profile for cashier tracking
+  const { user, employeeProfile } = useAuth();
+
   // Global Thermal Printer Subsystem Context
   const {
     isConnected: isPrinterConnected,
@@ -640,6 +643,7 @@ export default function PosClient() {
 
     // Auto-trigger ESC/POS print if thermal printer is connected
     if (isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
+      const cashier = employeeProfile?.name || user?.displayName || 'Counter Staff';
       printReceipt({
         storeName: businessSettings.businessName,
         storeTagline: businessSettings.tagline,
@@ -651,7 +655,14 @@ export default function PosClient() {
         billNo: settledBill.billNo,
         customerName: settledBill.customerName,
         customerPhone: settledBill.customerPhone,
-        paymentMode: settledBill.paymentMode,
+        customerEmail: selectedCustomer?.email || undefined,
+        customerAddress: selectedCustomer?.address || undefined,
+        cashierName: cashier,
+        paymentMode: selectedPayment,
+        paymentStatus: 'Paid',
+        splitCash: selectedPayment === 'Split' ? parseFloat(posSplitCash) || 0 : undefined,
+        splitUpi: selectedPayment === 'Split' ? parseFloat(posSplitUPI) || 0 : undefined,
+        receivedAmount: settledBill.total,
         orderType: 'Walk-in POS',
         items: settledBill.items.map((it) => ({
           name: it.name,
@@ -680,6 +691,7 @@ export default function PosClient() {
   // Thermal Receipt Print Execution
   const triggerPrintReceipt = async () => {
     if (lastSettledBill && isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
+      const cashier = employeeProfile?.name || user?.displayName || 'Counter Staff';
       await printReceipt({
         storeName: businessSettings.businessName,
         storeTagline: businessSettings.tagline,
@@ -691,7 +703,12 @@ export default function PosClient() {
         billNo: lastSettledBill.billNo,
         customerName: lastSettledBill.customerName,
         customerPhone: lastSettledBill.customerPhone,
+        customerEmail: selectedCustomer?.email || undefined,
+        customerAddress: selectedCustomer?.address || undefined,
+        cashierName: cashier,
         paymentMode: lastSettledBill.paymentMode,
+        paymentStatus: 'Paid',
+        receivedAmount: lastSettledBill.total,
         orderType: 'Walk-in POS',
         items: lastSettledBill.items.map((it) => ({
           name: it.name,

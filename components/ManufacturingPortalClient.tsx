@@ -93,6 +93,31 @@ export interface SlotGroup {
   items: SlotWiseItemSummary[];
 }
 
+export function getSlotOrderWeight(slotStr?: string): number {
+  if (!slotStr) return 999999;
+  const s = slotStr.trim();
+
+  // Standard 4 slots
+  if (s.startsWith('9:00 AM') || s.includes('9:00 AM')) return 9 * 60; // 540 min
+  if (s.startsWith('12:00 PM') || s.includes('12:00 PM')) return 12 * 60; // 720 min
+  if (s.startsWith('3:00 PM') || s.includes('3:00 PM')) return 15 * 60; // 900 min
+  if (s.startsWith('6:00 PM') || s.includes('6:00 PM')) return 18 * 60; // 1080 min
+
+  // Check any generic time like "10:30 AM", "02:15 PM"
+  const match = s.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
+  if (match) {
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2] ? parseInt(match[2], 10) : 0;
+    const meridian = match[3]?.toUpperCase();
+
+    if (meridian === 'PM' && hours < 12) hours += 12;
+    if (meridian === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+  }
+
+  return 999999;
+}
+
 function isOrderEligibleForManufacturing(order: OrderRecord): boolean {
   // 1. Exclude POS / Walk-in bills completely
   const orderType = ((order as any).orderType || (order as any).source || '').toString().toLowerCase();
@@ -478,12 +503,22 @@ export default function ManufacturingPortalClient() {
       });
     });
 
-    return Array.from(map.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
+    return Array.from(map.values())
+      .map((item) => ({
+        ...item,
+        orders: item.orders.sort((a, b) => getSlotOrderWeight(a.slot) - getSlotOrderWeight(b.slot)),
+      }))
+      .sort((a, b) => {
+        const aMin = Math.min(...a.orders.map((o) => getSlotOrderWeight(o.slot)));
+        const bMin = Math.min(...b.orders.map((o) => getSlotOrderWeight(o.slot)));
+        if (aMin !== bMin) return aMin - bMin;
+        return b.totalQuantity - a.totalQuantity;
+      });
   }, [filteredOrders, itemInfoMap, selectedUnit, searchTerm, isAllUnitsAllowed, assignedMfgUnits]);
 
-  // Order-wise active manufacturing list
+  // Order-wise active manufacturing list - sorted with earliest slot time at top
   const filteredOrderWiseList = useMemo(() => {
-    return filteredOrders.filter((order) => {
+    const list = filteredOrders.filter((order) => {
       const st = order.orderStatus as string;
       if (st === 'Delivered' || st === 'Cancelled') return false;
 
@@ -521,6 +556,13 @@ export default function ManufacturingPortalClient() {
       }
 
       return true;
+    });
+
+    return list.sort((a, b) => {
+      const aWeight = getSlotOrderWeight(a.slot);
+      const bWeight = getSlotOrderWeight(b.slot);
+      if (aWeight !== bWeight) return aWeight - bWeight;
+      return (a.code || '').localeCompare(b.code || '');
     });
   }, [filteredOrders, selectedUnit, searchTerm, itemInfoMap, isAllUnitsAllowed, assignedMfgUnits]);
 
@@ -621,16 +663,18 @@ export default function ManufacturingPortalClient() {
       });
     });
 
-    const extraSlots = Array.from(slotMap.keys()).filter(
-      (s) => !['9:00 AM - 12:00 PM', '12:00 PM - 3:00 PM', '3:00 PM - 6:00 PM', '6:00 PM - 9:00 PM'].includes(s)
-    );
+    const extraSlots = Array.from(slotMap.keys())
+      .filter(
+        (s) => !['9:00 AM - 12:00 PM', '12:00 PM - 3:00 PM', '3:00 PM - 6:00 PM', '6:00 PM - 9:00 PM'].includes(s)
+      )
+      .sort((a, b) => getSlotOrderWeight(a) - getSlotOrderWeight(b));
     const allSlotNames = [
       '9:00 AM - 12:00 PM',
       '12:00 PM - 3:00 PM',
       '3:00 PM - 6:00 PM',
       '6:00 PM - 9:00 PM',
       ...extraSlots,
-    ];
+    ].sort((a, b) => getSlotOrderWeight(a) - getSlotOrderWeight(b));
 
     const groups: SlotGroup[] = allSlotNames.map((slotName) => {
       const itemMap = slotMap.get(slotName);
@@ -1005,6 +1049,19 @@ export default function ManufacturingPortalClient() {
                     {alertItem.unit}
                   </span>
                 </div>
+                {alertItem.slots && alertItem.slots.length > 0 && (
+                  <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                    {alertItem.slots
+                      .slice()
+                      .sort((a, b) => getSlotOrderWeight(a) - getSlotOrderWeight(b))
+                      .map((sl, slIdx) => (
+                        <span key={slIdx} className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                          <Clock size={10} className="text-amber-700 shrink-0" />
+                          <span>{sl}</span>
+                        </span>
+                      ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1148,6 +1205,26 @@ export default function ManufacturingPortalClient() {
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 uppercase border border-slate-200">
                               {item.category}
                             </span>
+
+                            {/* Slot Delivery Time Badge */}
+                            {(() => {
+                              const sortedSlots = Array.from(new Set(item.orders.map((o) => o.slot || 'Regular'))).sort(
+                                (a, b) => getSlotOrderWeight(a) - getSlotOrderWeight(b)
+                              );
+                              return (
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {sortedSlots.map((s, sIdx) => (
+                                    <span
+                                      key={sIdx}
+                                      className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1 shadow-2xs"
+                                    >
+                                      <Clock size={11} className="text-amber-600 shrink-0" />
+                                      <span>{s}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                           
                           <p className="text-xs text-slate-500 mt-1">
@@ -1195,8 +1272,14 @@ export default function ManufacturingPortalClient() {
                           <div key={idx} className="bg-white p-2.5 rounded-lg border border-slate-200 text-xs space-y-1.5">
                             <div className="flex items-center justify-between">
                               <div>
-                                <span className="font-mono font-bold text-slate-800">{ord.orderCode}</span>
-                                <p className="text-[11px] text-slate-500">{ord.customerName} ({ord.slot})</p>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-mono font-bold text-slate-800">{ord.orderCode}</span>
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                                    <Clock size={10} className="text-amber-600" />
+                                    {ord.slot}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 mt-0.5">{ord.customerName}</p>
                               </div>
                               <span className="font-mono font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-100">
                                 {ord.quantity} {item.unit}
@@ -1394,12 +1477,15 @@ export default function ManufacturingPortalClient() {
                 return (
                   <div key={order.id} className="p-5 hover:bg-slate-50/50 transition-colors space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2.5 flex-wrap">
                         <span className="font-mono font-bold text-xs text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-100">
                           {orderCodeDisplay}
                         </span>
                         <h3 className="text-sm font-bold text-slate-900">{order.customerName || 'Customer'}</h3>
-                        <span className="text-xs text-slate-400">• Slot: {order.slot || 'Regular'}</span>
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1.5 shadow-2xs">
+                          <Clock size={13} className="text-amber-600 shrink-0" />
+                          <span>Slot: {order.slot || 'Regular Slot'}</span>
+                        </span>
                       </div>
 
                       <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">

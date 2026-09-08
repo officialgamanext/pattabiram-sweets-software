@@ -35,6 +35,10 @@ export const APP_MENUS: MenuItemDefinition[] = [
   { key: 'credit', name: 'Credit & Due Balances', path: '/credit' },
   { key: 'slot_categories', name: 'Slot Categories', path: '/slot-categories' },
   { key: 'tuesday_override', name: 'Tuesday Overrides', path: '/tuesday-override' },
+  { key: 'live_sales', name: 'Live Sales', path: '/live-sales' },
+  { key: 'live_sales_analytics', name: 'Live Sales Analytics', path: '/live-sales-analytics' },
+  { key: 'loose_sales', name: 'Loose Sales', path: '/loose-sales' },
+  { key: 'loose_sales_analytics', name: 'Loose Sales Analytics', path: '/loose-sales-analytics' },
   { key: 'audit_logs', name: 'Audit Logs & Cash Handover', path: '/audit-logs' },
   { key: 'support', name: 'Support & Tickets', path: '/support' },
   { key: 'settings', name: 'Settings', path: '/settings' }

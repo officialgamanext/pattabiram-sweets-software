@@ -10,6 +10,7 @@ interface CustomDatePickerProps {
   allowAll?: boolean;
   blockTuesdays?: boolean;
   allowedTuesdays?: string[];
+  onlyTuesdays?: boolean;
   placeholder?: string;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
@@ -38,6 +39,7 @@ export default function CustomDatePicker({
   allowAll = true,
   blockTuesdays = false,
   allowedTuesdays,
+  onlyTuesdays = false,
   placeholder = 'Select Date',
   className = '',
   size = 'md',
@@ -71,7 +73,7 @@ export default function CustomDatePicker({
   // Keep view in sync when value changes externally
   useEffect(() => {
     if (value && value !== 'All' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      const [y, m] = value.split('-').map(Number);
+      const [y, m, d] = value.split('-').map(Number);
       if (!isNaN(y) && !isNaN(m)) {
         setViewYear(y);
         setViewMonth(m - 1);
@@ -100,6 +102,7 @@ export default function CustomDatePicker({
     if (isNaN(dateObj.getTime())) return value;
 
     const dateFormatted = dateObj.toLocaleDateString('en-GB', {
+      weekday: onlyTuesdays ? 'short' : undefined,
       day: 'numeric',
       month: 'short',
       year: 'numeric',
@@ -161,9 +164,14 @@ export default function CustomDatePicker({
     let base = value && value !== 'All' && /^\d{4}-\d{2}-\d{2}$/.test(value)
       ? new Date(value + 'T00:00:00')
       : new Date();
-    base.setDate(base.getDate() - 1);
-    if (isBlockedTuesday(base)) {
+    
+    if (onlyTuesdays) {
+      base.setDate(base.getDate() - 7);
+    } else {
       base.setDate(base.getDate() - 1);
+      if (isBlockedTuesday(base)) {
+        base.setDate(base.getDate() - 1);
+      }
     }
     const y = base.getFullYear();
     const m = String(base.getMonth() + 1).padStart(2, '0');
@@ -176,9 +184,14 @@ export default function CustomDatePicker({
     let base = value && value !== 'All' && /^\d{4}-\d{2}-\d{2}$/.test(value)
       ? new Date(value + 'T00:00:00')
       : new Date();
-    base.setDate(base.getDate() + 1);
-    if (isBlockedTuesday(base)) {
+    
+    if (onlyTuesdays) {
+      base.setDate(base.getDate() + 7);
+    } else {
       base.setDate(base.getDate() + 1);
+      if (isBlockedTuesday(base)) {
+        base.setDate(base.getDate() + 1);
+      }
     }
     const y = base.getFullYear();
     const m = String(base.getMonth() + 1).padStart(2, '0');
@@ -192,37 +205,41 @@ export default function CustomDatePicker({
   const prevMonthDays = getDaysInMonth(viewYear, viewMonth - 1 < 0 ? 11 : viewMonth - 1);
 
   const sizeClasses = {
-    sm: 'px-2.5 py-1 text-xs rounded-md h-[32px] max-h-[36px]',
-    md: 'px-3 py-1 text-xs rounded-md h-[36px] max-h-[36px]',
-    lg: 'px-3.5 py-1 text-xs rounded-md h-[36px] max-h-[36px]',
+    sm: 'px-2.5 py-1 text-xs rounded-lg h-[32px] max-h-[36px]',
+    md: 'px-3 py-1 text-xs rounded-lg h-[36px] max-h-[36px]',
+    lg: 'px-3.5 py-1 text-xs rounded-lg h-[36px] max-h-[36px]',
   };
 
+  const isFullWidth = className.includes('w-full');
+
   return (
-    <div ref={containerRef} className={`relative inline-block ${className}`}>
+    <div ref={containerRef} className={`relative ${isFullWidth ? 'w-full block' : 'inline-block'} ${className}`}>
       {/* Date Trigger Field */}
-      <div className="flex items-center gap-1">
+      <div className={`flex items-center gap-1 ${isFullWidth ? 'w-full' : ''}`}>
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className={`flex items-center gap-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 font-semibold transition-all shadow-2xs cursor-pointer ${
-            sizeClasses[size]
-          } ${isOpen ? 'border-indigo-500 ring-2 ring-indigo-500/10' : ''}`}
+          className={`flex items-center justify-between gap-2 bg-white border border-slate-300 hover:border-[#02626D] text-slate-800 font-semibold transition-all shadow-2xs cursor-pointer ${
+            isFullWidth ? 'w-full' : ''
+          } ${sizeClasses[size]} ${isOpen ? 'border-[#02626D] ring-2 ring-[#02626D]/10' : ''}`}
         >
-          <CalendarIcon size={14} className="text-indigo-600 flex-shrink-0" />
-          <span className="truncate">{getFormattedLabel()}</span>
+          <div className="flex items-center gap-2 truncate">
+            <CalendarIcon size={14} className="text-[#02626D] flex-shrink-0" />
+            <span className="truncate">{getFormattedLabel()}</span>
+          </div>
 
-          <div className="flex items-center gap-0.5 ml-1 border-l border-slate-200 pl-1">
+          <div className="flex items-center gap-0.5 ml-1 border-l border-slate-200 pl-1 flex-shrink-0">
             <span
               onClick={handlePrevDayClick}
-              className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-100 transition-colors"
-              title="Previous Day"
+              className="text-slate-400 hover:text-[#02626D] p-0.5 rounded hover:bg-slate-100 transition-colors"
+              title={onlyTuesdays ? 'Previous Tuesday' : 'Previous Day'}
             >
               <ChevronLeft size={13} />
             </span>
             <span
               onClick={handleNextDayClick}
-              className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-100 transition-colors"
-              title="Next Day"
+              className="text-slate-400 hover:text-[#02626D] p-0.5 rounded hover:bg-slate-100 transition-colors"
+              title={onlyTuesdays ? 'Next Tuesday' : 'Next Day'}
             >
               <ChevronRight size={13} />
             </span>
@@ -299,6 +316,43 @@ export default function CustomDatePicker({
               const isTuesday = dateObj.getDay() === 2;
               const isAllowedTuesday = isTuesday && effectiveAllowedTuesdays.includes(dateStr);
 
+              // If only Tuesdays mode (e.g. Tuesday Override picker)
+              if (onlyTuesdays) {
+                if (!isTuesday) {
+                  return (
+                    <span
+                      key={day}
+                      className="h-8 w-8 mx-auto flex items-center justify-center rounded-xl text-xs font-medium text-slate-300 bg-slate-50/30 cursor-not-allowed select-none"
+                    >
+                      {day}
+                    </span>
+                  );
+                }
+
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => handleSelectDay(day)}
+                    title={`Tuesday, ${day} ${MONTH_NAMES[viewMonth]} ${viewYear}`}
+                    className={`relative h-8 w-8 mx-auto flex items-center justify-center rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#02626D] text-white shadow-xs scale-105'
+                        : isToday
+                        ? 'bg-teal-100 text-[#02626D] border border-teal-300'
+                        : isAllowedTuesday
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                        : 'bg-teal-50/60 text-[#02626D] hover:bg-teal-100 border border-teal-200/70'
+                    }`}
+                  >
+                    {day}
+                    {isAllowedTuesday && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-white" />
+                    )}
+                  </button>
+                );
+              }
+
               if (blockTuesdays && isTuesday && !isAllowedTuesday) {
                 return (
                   <button
@@ -306,7 +360,7 @@ export default function CustomDatePicker({
                     type="button"
                     disabled={true}
                     title="Tuesday is a Holiday / Factory Closed"
-                    className="h-8 w-8 mx-auto flex items-center justify-center rounded-xl text-xs font-semibold text-slate-300 bg-slate-50/70 cursor-not-allowed line-through"
+                    className="h-8 w-8 mx-auto flex items-center justify-center rounded-xl text-xs font-semibold text-slate-300 bg-slate-50/70 cursor-not-allowed line-through select-none"
                   >
                     {day}
                   </button>
@@ -321,9 +375,9 @@ export default function CustomDatePicker({
                   title={isAllowedTuesday ? 'Special Tuesday Enabled (Open for Orders)' : undefined}
                   className={`relative h-8 w-8 mx-auto flex items-center justify-center rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     isSelected
-                      ? 'bg-indigo-600 text-white shadow-xs scale-105'
+                      ? 'bg-[#02626D] text-white shadow-xs scale-105'
                       : isToday
-                      ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                      ? 'bg-teal-50 text-[#02626D] border border-teal-200 font-extrabold'
                       : isAllowedTuesday
                       ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 font-extrabold'
                       : 'text-slate-700 hover:bg-slate-100'
@@ -340,7 +394,11 @@ export default function CustomDatePicker({
 
           {/* Calendar Action Footer */}
           <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-3 gap-2 flex-wrap">
-            {blockTuesdays ? (
+            {onlyTuesdays ? (
+              <span className="text-[10px] font-bold text-[#02626D] bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                Tuesdays Only
+              </span>
+            ) : blockTuesdays ? (
               <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
                 Tuesdays: Closed
               </span>
@@ -351,7 +409,7 @@ export default function CustomDatePicker({
                   onChange(todayStr);
                   setIsOpen(false);
                 }}
-                className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-colors cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-teal-50 text-[#02626D] text-xs font-bold hover:bg-teal-100 transition-colors cursor-pointer"
               >
                 Today
               </button>
@@ -366,7 +424,7 @@ export default function CustomDatePicker({
                 }}
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
                   value === 'All'
-                    ? 'bg-indigo-600 text-white'
+                    ? 'bg-[#02626D] text-white'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >

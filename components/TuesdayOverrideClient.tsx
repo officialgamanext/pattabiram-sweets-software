@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from '@/context/ToastContext';
+import CustomDatePicker from '@/components/CustomDatePicker';
 import {
   useAllowedTuesdays,
   enableTuesdayOverride,
@@ -638,17 +639,20 @@ export default function TuesdayOverrideClient() {
 
             {/* Modal Form */}
             <form onSubmit={handleSaveEnable} className="space-y-4">
-              {/* Date Field */}
+              {/* Date Field with Custom Calendar */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Tuesday Date <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="date"
+                <CustomDatePicker
                   value={modalDate}
-                  onChange={(e) => setModalDate(e.target.value)}
-                  required
-                  className="w-full h-9 px-3 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] shadow-2xs"
+                  onChange={(val) => setModalDate(val)}
+                  allowAll={false}
+                  blockTuesdays={false}
+                  onlyTuesdays={true}
+                  placeholder="Click to Select Tuesday Date"
+                  size="md"
+                  className="w-full"
                 />
                 {modalDate && (
                   <p className="text-[11px] font-semibold text-emerald-700 mt-1 flex items-center gap-1">

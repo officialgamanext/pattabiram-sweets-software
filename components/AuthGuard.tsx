@@ -26,6 +26,7 @@ const ROUTE_MENU_KEY_MAP: Record<string, string> = {
   '/payroll': 'payroll',
   '/credit': 'credit',
   '/slot-categories': 'slot_categories',
+  '/tuesday-override': 'tuesday_override',
   '/utilities': 'utilities',
   '/manufacturing-portal': 'manufacturing_portal',
   '/packing-portal': 'packing_portal',

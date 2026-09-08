@@ -39,6 +39,7 @@ import { toast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
 import { usePrinter } from '@/context/PrinterContext';
 import CustomDatePicker from '@/components/CustomDatePicker';
+import { useAllowedTuesdays } from '@/lib/tuesdayOverrides';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 import SlotLimitOverrideModal, { SlotLimitOverrideData } from '@/components/SlotLimitOverrideModal';
 
@@ -335,6 +336,8 @@ export default function CreateOrderClient() {
 
   const editId = searchParams.get('editId') || searchParams.get('id') || '';
   const isEditMode = Boolean(editId);
+
+  const { allowedDates: allowedTuesdays } = useAllowedTuesdays();
 
   const initialSlot = (searchParams.get('slot') as SlotTime) || '9:00 AM - 12:00 PM';
   const initialDate = searchParams.get('date') || '';
@@ -1438,18 +1441,21 @@ export default function CreateOrderClient() {
       return;
     }
 
-    const isTuesdayDate = (dateStr: string) => {
+    const isBlockedTuesdayDate = (dateStr: string) => {
       if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
       const [y, m, d] = dateStr.split('-').map(Number);
-      return new Date(y, m - 1, d).getDay() === 2;
+      const isTue = new Date(y, m - 1, d).getDay() === 2;
+      if (!isTue) return false;
+      // If Tuesday is explicitly enabled in Overrides, allow it!
+      return !allowedTuesdays.includes(dateStr);
     };
 
-    if (isTuesdayDate(mfgDate)) {
-      toast.warning('Tuesday Blocked', 'Manufacturing Date cannot fall on Tuesday (Factory Closed).');
+    if (isBlockedTuesdayDate(mfgDate)) {
+      toast.warning('Tuesday Blocked', 'Manufacturing Date cannot fall on Tuesday (Factory Closed). To allow this date, enable it in Tuesday Overrides.');
       return;
     }
-    if (isTuesdayDate(expDeliveryDate)) {
-      toast.warning('Tuesday Blocked', 'Expected Delivery Date cannot fall on Tuesday (Store Closed).');
+    if (isBlockedTuesdayDate(expDeliveryDate)) {
+      toast.warning('Tuesday Blocked', 'Expected Delivery Date cannot fall on Tuesday (Store Closed). To allow this date, enable it in Tuesday Overrides.');
       return;
     }
 
@@ -1766,9 +1772,16 @@ export default function CreateOrderClient() {
                     onChange={(val) => setMfgDate(val)}
                     placeholder="Select Mfg Date"
                     blockTuesdays={true}
+                    allowedTuesdays={allowedTuesdays}
                     className="w-full"
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">Factory closed on Tuesdays</span>
+                  {allowedTuesdays.includes(mfgDate) ? (
+                    <span className="text-[10px] text-emerald-600 font-bold mt-0.5 block flex items-center gap-1">
+                      ✓ Special Tuesday Enabled (Open)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Factory closed on Tuesdays</span>
+                  )}
                 </div>
 
                 {/* Exp Delivery Date */}
@@ -1781,9 +1794,16 @@ export default function CreateOrderClient() {
                     onChange={(val) => setExpDeliveryDate(val)}
                     placeholder="Select Delivery Date"
                     blockTuesdays={true}
+                    allowedTuesdays={allowedTuesdays}
                     className="w-full"
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">Store closed on Tuesdays</span>
+                  {allowedTuesdays.includes(expDeliveryDate) ? (
+                    <span className="text-[10px] text-emerald-600 font-bold mt-0.5 block flex items-center gap-1">
+                      ✓ Special Tuesday Enabled (Open)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Store closed on Tuesdays</span>
+                  )}
                 </div>
 
                 {/* Specific Delivery Time (1-hr difference) */}

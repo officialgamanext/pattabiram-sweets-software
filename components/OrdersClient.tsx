@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
 import CustomDatePicker from '@/components/CustomDatePicker';
+import { useAllowedTuesdays } from '@/lib/tuesdayOverrides';
 import Pagination from '@/components/Pagination';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 import { usePrinter } from '@/context/PrinterContext';
@@ -262,6 +263,7 @@ export function getOrderStatusBadgeStyle(status?: string) {
 
 export default function OrdersClient() {
   const router = useRouter();
+  const { allowedDates: allowedTuesdays } = useAllowedTuesdays();
   const [activeTab, setActiveTab] = useState<'slot' | 'list'>('slot');
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [customersMaster, setCustomersMaster] = useState<CustomerOption[]>([]);
@@ -1094,18 +1096,20 @@ export default function OrdersClient() {
       return;
     }
 
-    const isTuesdayDate = (dateStr: string) => {
+    const isBlockedTuesdayDate = (dateStr: string) => {
       if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
       const [y, m, d] = dateStr.split('-').map(Number);
-      return new Date(y, m - 1, d).getDay() === 2;
+      const isTue = new Date(y, m - 1, d).getDay() === 2;
+      if (!isTue) return false;
+      return !allowedTuesdays.includes(dateStr);
     };
 
-    if (isTuesdayDate(mfgDate)) {
-      toast.warning('Tuesday Blocked', 'Manufacturing Date cannot fall on Tuesday (Factory Closed).');
+    if (isBlockedTuesdayDate(mfgDate)) {
+      toast.warning('Tuesday Blocked', 'Manufacturing Date cannot fall on Tuesday (Factory Closed). To allow this date, enable it in Tuesday Overrides.');
       return;
     }
-    if (isTuesdayDate(expDeliveryDate)) {
-      toast.warning('Tuesday Blocked', 'Expected Delivery Date cannot fall on Tuesday (Store Closed).');
+    if (isBlockedTuesdayDate(expDeliveryDate)) {
+      toast.warning('Tuesday Blocked', 'Expected Delivery Date cannot fall on Tuesday (Store Closed). To allow this date, enable it in Tuesday Overrides.');
       return;
     }
 

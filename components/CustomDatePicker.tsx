@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Check } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Check, Sparkles } from 'lucide-react';
+import { useAllowedTuesdays } from '@/lib/tuesdayOverrides';
 
 interface CustomDatePickerProps {
   value: string; // Format: 'YYYY-MM-DD' or 'All'
   onChange: (date: string) => void;
   allowAll?: boolean;
   blockTuesdays?: boolean;
+  allowedTuesdays?: string[];
   placeholder?: string;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
@@ -35,12 +37,17 @@ export default function CustomDatePicker({
   onChange,
   allowAll = true,
   blockTuesdays = false,
+  allowedTuesdays,
   placeholder = 'Select Date',
   className = '',
   size = 'md',
 }: CustomDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Fallback to real-time hook if allowedTuesdays is not explicitly passed
+  const { allowedDates: hookAllowedDates } = useAllowedTuesdays();
+  const effectiveAllowedTuesdays = allowedTuesdays || hookAllowedDates || [];
 
   // Get current date representation
   const today = new Date();
@@ -139,13 +146,23 @@ export default function CustomDatePicker({
     setIsOpen(false);
   };
 
+  const isBlockedTuesday = (d: Date) => {
+    if (!blockTuesdays) return false;
+    if (d.getDay() !== 2) return false;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dayStr = String(d.getDate()).padStart(2, '0');
+    const formatted = `${y}-${m}-${dayStr}`;
+    return !effectiveAllowedTuesdays.includes(formatted);
+  };
+
   const handlePrevDayClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     let base = value && value !== 'All' && /^\d{4}-\d{2}-\d{2}$/.test(value)
       ? new Date(value + 'T00:00:00')
       : new Date();
     base.setDate(base.getDate() - 1);
-    if (blockTuesdays && base.getDay() === 2) {
+    if (isBlockedTuesday(base)) {
       base.setDate(base.getDate() - 1);
     }
     const y = base.getFullYear();
@@ -160,7 +177,7 @@ export default function CustomDatePicker({
       ? new Date(value + 'T00:00:00')
       : new Date();
     base.setDate(base.getDate() + 1);
-    if (blockTuesdays && base.getDay() === 2) {
+    if (isBlockedTuesday(base)) {
       base.setDate(base.getDate() + 1);
     }
     const y = base.getFullYear();
@@ -280,8 +297,9 @@ export default function CustomDatePicker({
               const isToday = todayStr === dateStr;
               const dateObj = new Date(viewYear, viewMonth, day);
               const isTuesday = dateObj.getDay() === 2;
+              const isAllowedTuesday = isTuesday && effectiveAllowedTuesdays.includes(dateStr);
 
-              if (blockTuesdays && isTuesday) {
+              if (blockTuesdays && isTuesday && !isAllowedTuesday) {
                 return (
                   <button
                     key={day}
@@ -300,15 +318,21 @@ export default function CustomDatePicker({
                   key={day}
                   type="button"
                   onClick={() => handleSelectDay(day)}
-                  className={`h-8 w-8 mx-auto flex items-center justify-center rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  title={isAllowedTuesday ? 'Special Tuesday Enabled (Open for Orders)' : undefined}
+                  className={`relative h-8 w-8 mx-auto flex items-center justify-center rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     isSelected
                       ? 'bg-indigo-600 text-white shadow-xs scale-105'
                       : isToday
                       ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                      : isAllowedTuesday
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 font-extrabold'
                       : 'text-slate-700 hover:bg-slate-100'
                   }`}
                 >
                   {day}
+                  {isAllowedTuesday && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-white" />
+                  )}
                 </button>
               );
             })}
@@ -317,8 +341,8 @@ export default function CustomDatePicker({
           {/* Calendar Action Footer */}
           <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-3 gap-2 flex-wrap">
             {blockTuesdays ? (
-              <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
-                Tuesday: Closed
+              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                Tuesdays: Closed
               </span>
             ) : (
               <button

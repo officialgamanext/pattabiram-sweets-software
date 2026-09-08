@@ -41,6 +41,7 @@ import {
   Coins,
   Layers,
   History,
+  CalendarCheck,
 } from 'lucide-react';
 
 export default function Header() {
@@ -131,6 +132,7 @@ export default function Header() {
       '/payroll': 'payroll',
       '/credit': 'credit',
       '/slot-categories': 'slot_categories',
+      '/tuesday-override': 'tuesday_override',
       '/utilities': 'utilities',
       '/manufacturing-portal': 'manufacturing_portal',
       '/packing-portal': 'packing_portal',
@@ -161,6 +163,7 @@ export default function Header() {
     { label: 'Manufacturing', href: '/manufacturing', icon: <Factory size={17} /> },
     { label: 'Packing Unit', href: '/packing', icon: <Package size={17} /> },
     { label: 'Slot Categories', href: '/slot-categories', icon: <Layers size={17} /> },
+    { label: 'Tuesday Overrides', href: '/tuesday-override', icon: <CalendarCheck size={17} /> },
     { label: 'Utilities', href: '/utilities', icon: <Sliders size={17} /> },
     { label: 'Wholesalers', href: '/wholesalers', icon: <Users size={17} /> },
     { label: 'Wholesaler Orders', href: '/wholesaler-orders', icon: <Users size={17} /> },
@@ -292,6 +295,15 @@ export default function Header() {
       category: 'Management',
       badgeColor: 'bg-indigo-500/15 text-indigo-700 border-indigo-200',
       tag: 'Capacity',
+    },
+    {
+      label: 'Tuesday Overrides',
+      description: 'Select & enable specific Tuesdays for order creation and factory operations',
+      href: '/tuesday-override',
+      icon: <CalendarCheck size={22} />,
+      category: 'Management',
+      badgeColor: 'bg-teal-500/15 text-teal-700 border-teal-200',
+      tag: 'Rules',
     },
     {
       label: 'Utilities',

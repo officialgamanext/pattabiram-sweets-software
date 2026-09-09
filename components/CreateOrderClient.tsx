@@ -101,6 +101,9 @@ export interface OrderItemLine {
   packetCharge?: number;
   manufacturingDescription?: string;
   packingDescription?: string;
+  needsManufacturing?: boolean;
+  mfgStatus?: string;
+  pckStatus?: string;
 }
 
 export interface ItemMasterOption {
@@ -368,8 +371,16 @@ export default function CreateOrderClient() {
   const [isLoadingOrder, setIsLoadingOrder] = useState<boolean>(Boolean(editId));
   const [existingOrderCode, setExistingOrderCode] = useState<string>('');
   const [existingOrderTime, setExistingOrderTime] = useState<string>('');
+  const [existingMfgDate, setExistingMfgDate] = useState<string>('');
+  const [existingExpDeliveryDate, setExistingExpDeliveryDate] = useState<string>('');
   const [existingCreatedAt, setExistingCreatedAt] = useState<any>(null);
   const [existingPayments, setExistingPayments] = useState<any[]>([]);
+  const [originalCategoryQuantities, setOriginalCategoryQuantities] = useState<Record<string, number>>({});
+  const [loadedCustomisationPrices, setLoadedCustomisationPrices] = useState<{
+    boxPrice?: number;
+    shrinkPrice?: number;
+    stickerPrice?: number;
+  }>({});
 
   // Customer State
   const [customersMaster, setCustomersMaster] = useState<CustomerOption[]>([]);
@@ -430,7 +441,7 @@ export default function CreateOrderClient() {
   const [paymentMode, setPaymentMode] = useState<string>('UPI');
   const [isSplitPayment, setIsSplitPayment] = useState<boolean>(false);
   const [splitPayments, setSplitPayments] = useState<
-    { id: string; mode: string; amount: string | number; note?: string }[]
+    { id: string; mode: string; amount: string | number; note?: string; paidAt?: string }[]
   >([{ id: 'split-1', mode: 'UPI', amount: '', note: '' }]);
   const [paymentStatus, setPaymentStatus] = useState<string>('Pending');
   const [orderStatus, setOrderStatus] = useState<string>('Order Created');
@@ -454,31 +465,35 @@ export default function CreateOrderClient() {
         const data = snap.data();
         if (!isMounted) return;
 
-        setExistingOrderCode(data.code || '');
+        setExistingOrderCode(data.code || data.orderId || '');
         setExistingOrderTime(data.orderTime || '');
         setExistingCreatedAt(data.createdAt || null);
         setExistingPayments(data.payments || []);
 
+        const mfg = data.manufacturingDate || data.orderDate || '';
+        const deliv = data.expectedDeliveryDate || data.orderDate || '';
+        setExistingMfgDate(mfg);
+        setExistingExpDeliveryDate(deliv);
+
         if (data.slot) setOrderSlot(data.slot as SlotTime);
         if (data.deliveryTime) setDeliveryTime(data.deliveryTime);
         else if (data.orderTime) setDeliveryTime(data.orderTime);
-        if (data.manufacturingDate) setMfgDate(data.manufacturingDate);
-        else if (data.orderDate) setMfgDate(data.orderDate);
+        if (mfg) setMfgDate(mfg);
+        if (deliv) setExpDeliveryDate(deliv);
 
-        if (data.expectedDeliveryDate) setExpDeliveryDate(data.expectedDeliveryDate);
-        else if (data.orderDate) setExpDeliveryDate(data.orderDate);
-
-        if (data.customerName) {
+        const custName = data.customerName || data.wholesalerName || data.customer || '';
+        const custMobile = data.customerMobile || data.customerPhone || data.wholesalerMobile || '';
+        if (custName || custMobile || data.customerId) {
           setSelectedCustomer({
-            id: data.customerId || '',
+            id: data.customerId || data.wholesalerId || '',
             code: data.customerCode || 'CUST-000',
-            name: data.customerName,
-            mobile: data.customerMobile || '',
-            type: (data.customerType as 'Customer' | 'Wholesaler') || 'Customer',
-            address: data.customerAddress || '',
+            name: custName || 'Customer',
+            mobile: custMobile || '',
+            type: (data.customerType as 'Customer' | 'Wholesaler') || (data.wholesalerId || data.wholesalerName ? 'Wholesaler' : 'Customer'),
+            address: data.customerAddress || data.deliveryAddress || data.address || '',
             priceListName: data.priceListName || '',
           });
-          setCustomerSearchTerm(`${data.customerName}${data.customerMobile ? ` (${data.customerMobile})` : ''}`);
+          setCustomerSearchTerm(custName ? `${custName}${custMobile ? ` (${custMobile})` : ''}` : custMobile);
         }
 
         setIsCustomisation(Boolean(data.isCustomisation));
@@ -494,6 +509,12 @@ export default function CreateOrderClient() {
           else if (data.customisationDetails.hasShrink) setShrinkType('Standard Shrink Wrap');
           if (data.customisationDetails.stickerType) setStickerType(data.customisationDetails.stickerType);
           else if (data.customisationDetails.hasSticker) setStickerType('Custom Brand Sticker');
+
+          setLoadedCustomisationPrices({
+            boxPrice: data.customisationDetails.boxPrice,
+            shrinkPrice: data.customisationDetails.shrinkPrice,
+            stickerPrice: data.customisationDetails.stickerPrice,
+          });
         } else {
           setNoOfBoxes(data.noOfBoxes !== undefined ? data.noOfBoxes : '');
           if (data.boxType) setBoxType(data.boxType);
@@ -535,6 +556,9 @@ export default function CreateOrderClient() {
                 packetCharge: it.hasPacket ? 5 : (it.packetCharge || 0),
                 manufacturingDescription: it.manufacturingDescription || it.mfgDesc || it.notes || '',
                 packingDescription: it.packingDescription || it.pckDesc || it.packingInstructions || '',
+                needsManufacturing: it.needsManufacturing !== undefined ? it.needsManufacturing : true,
+                mfgStatus: it.mfgStatus || (it.needsManufacturing === false ? 'Not Required' : 'Pending'),
+                pckStatus: it.pckStatus || 'Pending',
               };
             })
           );
@@ -553,6 +577,7 @@ export default function CreateOrderClient() {
                 mode: p.mode || 'UPI',
                 amount: p.amount !== undefined ? String(p.amount) : '',
                 note: p.note || '',
+                paidAt: p.paidAt || undefined,
               }))
             );
             const totalRecv = data.payments.reduce((s: number, p: any) => s + (parseFloat(String(p.amount)) || 0), 0);
@@ -567,6 +592,7 @@ export default function CreateOrderClient() {
                 mode: data.payments[0].mode || data.paymentMode || 'UPI',
                 amount: data.payments[0].amount !== undefined ? String(data.payments[0].amount) : '',
                 note: data.payments[0].note || '',
+                paidAt: data.payments[0].paidAt || undefined,
               },
             ]);
           }
@@ -598,6 +624,29 @@ export default function CreateOrderClient() {
       isMounted = false;
     };
   }, [editId]);
+
+  // Track original category quantities of this order in edit mode
+  useEffect(() => {
+    if (!editId || slotCategories.length === 0 || orderItems.length === 0) return;
+    setOriginalCategoryQuantities((prev) => {
+      if (Object.keys(prev).length > 0) return prev;
+      const map: Record<string, number> = {};
+      slotCategories.forEach((cat) => {
+        const assignedIds = new Set(cat.assignedItemIds || []);
+        const assignedNames = new Set((cat.assignedItemNames || []).map((n) => n.toLowerCase().trim()));
+        let sum = 0;
+        orderItems.forEach((it) => {
+          const itId = it.itemId || '';
+          const itName = (it.itemName || '').toLowerCase().trim();
+          if (assignedIds.has(itId) || assignedNames.has(itName)) {
+            sum += it.quantity || 0;
+          }
+        });
+        map[cat.id] = sum;
+      });
+      return map;
+    });
+  }, [editId, slotCategories, orderItems]);
 
   // Click outside customer dropdown
   useEffect(() => {
@@ -812,11 +861,11 @@ export default function CreateOrderClient() {
   const activeStickers = useMemo(() => utilitiesMaster.filter((u) => u.type === 'sticker' && u.status === 'Active'), [utilitiesMaster]);
 
   const selectedBoxObj = activeBoxes.find((b) => b.name === boxType);
-  const selectedBoxPrice = selectedBoxObj?.price || 0;
+  const selectedBoxPrice = selectedBoxObj?.price ?? loadedCustomisationPrices.boxPrice ?? 0;
   const selectedShrinkObj = activeShrinks.find((s) => s.name === shrinkType);
-  const selectedShrinkPrice = shrinkType === 'None' ? 0 : selectedShrinkObj?.price || 0;
+  const selectedShrinkPrice = shrinkType === 'None' ? 0 : (selectedShrinkObj?.price ?? loadedCustomisationPrices.shrinkPrice ?? 0);
   const selectedStickerObj = activeStickers.find((st) => st.name === stickerType);
-  const selectedStickerPrice = stickerType === 'None' ? 0 : selectedStickerObj?.price || 0;
+  const selectedStickerPrice = stickerType === 'None' ? 0 : (selectedStickerObj?.price ?? loadedCustomisationPrices.stickerPrice ?? 0);
 
   // Filter Customers
   const filteredCustomers = useMemo(() => {
@@ -969,6 +1018,11 @@ export default function CreateOrderClient() {
   // Callback when OTP authorization succeeds for a slot limit override
   const handleSlotOverrideAuthorized = (authData: SlotLimitOverrideData) => {
     setAuthorizedSlotCategoryIds((prev) => new Set([...prev, authData.categoryId]));
+
+    if (!authData.itemId) {
+      toast.success('Capacity Override Approved', `Slot limit override for "${authData.categoryName}" authorized.`);
+      return;
+    }
 
     setOrderItems((prev) => {
       const existing = prev.find((it) => it.itemId === authData.itemId);
@@ -1365,18 +1419,29 @@ export default function CreateOrderClient() {
 
   // Helper to remove any undefined fields before writing to Firestore
   const sanitizeForFirestore = (obj: any): any => {
+    if (obj === undefined) return null;
+    if (obj === null || typeof obj !== 'object') return obj;
+
+    // Preserve Firestore FieldValue sentinels (serverTimestamp, deleteField, etc.)
+    if (obj.constructor && obj.constructor.name === 'FieldValueImpl') return obj;
+    if (obj._methodName !== undefined) return obj;
+
+    // Preserve Dates and Timestamps
+    if (obj instanceof Date) return obj;
+    if (typeof obj.toDate === 'function') return obj;
+
     if (Array.isArray(obj)) {
-      return obj.map(sanitizeForFirestore);
-    } else if (obj !== null && typeof obj === 'object') {
-      const sanitized: any = {};
-      Object.keys(obj).forEach((key) => {
-        if (obj[key] !== undefined) {
-          sanitized[key] = sanitizeForFirestore(obj[key]);
-        }
-      });
-      return sanitized;
+      return obj.filter((val) => val !== undefined).map(sanitizeForFirestore);
     }
-    return obj;
+
+    const clean: Record<string, any> = {};
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val !== undefined) {
+        clean[key] = sanitizeForFirestore(val);
+      }
+    }
+    return clean;
   };
 
   // Submit Order Creation
@@ -1411,10 +1476,33 @@ export default function CreateOrderClient() {
     // Slot Category Capacity Enforcement
     for (const cap of slotCategoryCapacities) {
       if (cap.hasLimit && cap.isExceeded && cap.currentOrderQty > 0) {
+        // In Edit Mode, if the category quantity was NOT increased, do not block
+        const origCatQty = originalCategoryQuantities[cap.id] || 0;
+        const netIncrease = cap.currentOrderQty - origCatQty;
+        if (isEditMode && netIncrease <= 0) {
+          continue;
+        }
+
         if (!authorizedSlotCategoryIds.has(cap.id)) {
+          // Open the override modal with category details so the manager can enter OTP
+          setSlotOverrideModalData({
+            categoryId: cap.id,
+            categoryName: cap.name,
+            itemId: '',
+            itemCode: '',
+            itemName: `${cap.name} (Total ${cap.currentOrderQty} KG)`,
+            unit: 'KG',
+            unitPrice: 0,
+            imageUrl: '',
+            requestedQty: cap.currentOrderQty,
+            slot: orderSlot,
+            date: effectiveTargetDate || 'Selected Date',
+            maxLimit: cap.maxLimit,
+            bookedQty: cap.bookedQty,
+          });
           toast.error(
             'Slot Category Limit Exceeded',
-            `Cannot proceed: "${cap.name}" maximum allowed limit for ${orderSlot} is ${cap.maxLimit} KG. Booked in other orders: ${cap.bookedQty} KG. Available: ${cap.remainingBeforeCurrent} KG, but this order is requesting ${cap.currentOrderQty} KG (${Math.round((cap.totalProjected - cap.maxLimit) * 100) / 100} KG excess). Manager OTP authorization required.`
+            `"${cap.name}" maximum allowed limit for ${orderSlot} is ${cap.maxLimit} KG. Total requested: ${cap.totalProjected} KG. Please get Manager OTP authorization to proceed.`
           );
           return;
         }
@@ -1423,8 +1511,15 @@ export default function CreateOrderClient() {
 
     const recv = effectiveReceivedAmount;
     if (recv > grandTotal && grandTotal > 0) {
-      toast.error('Invalid Payment Amount', `Received amount (₹${recv}) cannot exceed the order total of ₹${grandTotal.toFixed(2)}.`);
-      return;
+      if (isEditMode) {
+        toast.warning(
+          'Total Less Than Received Amount',
+          `The updated order total (₹${grandTotal.toFixed(2)}) is less than the received payment (₹${recv.toFixed(2)}). Please issue a refund or credit note if necessary.`
+        );
+      } else {
+        toast.error('Invalid Payment Amount', `Received amount (₹${recv}) cannot exceed the order total of ₹${grandTotal.toFixed(2)}.`);
+        return;
+      }
     }
 
     if (!mfgDate) {
@@ -1450,11 +1545,11 @@ export default function CreateOrderClient() {
       return !allowedTuesdays.includes(dateStr);
     };
 
-    if (isBlockedTuesdayDate(mfgDate)) {
+    if (isBlockedTuesdayDate(mfgDate) && (!isEditMode || mfgDate !== existingMfgDate)) {
       toast.warning('Tuesday Blocked', 'Manufacturing Date cannot fall on Tuesday (Factory Closed). To allow this date, enable it in Tuesday Overrides.');
       return;
     }
-    if (isBlockedTuesdayDate(expDeliveryDate)) {
+    if (isBlockedTuesdayDate(expDeliveryDate) && (!isEditMode || expDeliveryDate !== existingExpDeliveryDate)) {
       toast.warning('Tuesday Blocked', 'Expected Delivery Date cannot fall on Tuesday (Store Closed). To allow this date, enable it in Tuesday Overrides.');
       return;
     }
@@ -1493,7 +1588,7 @@ export default function CreateOrderClient() {
           mode: s.mode || 'UPI',
           amount: parseFloat(String(s.amount)) || 0,
           note: s.note || (isSplitPayment ? 'Split payment' : 'Advance payment'),
-          paidAt: new Date().toISOString(),
+          paidAt: (s as any).paidAt || new Date().toISOString(),
         }));
 
       const finalPayments = isSplitPayment
@@ -1501,11 +1596,11 @@ export default function CreateOrderClient() {
         : (recv > 0
             ? [
                 {
-                  id: `pay-${Date.now()}`,
+                  id: (existingPayments[0] && existingPayments.length === 1) ? existingPayments[0].id : `pay-${Date.now()}`,
                   mode: paymentMode,
                   amount: recv,
-                  note: 'Initial payment',
-                  paidAt: new Date().toISOString(),
+                  note: (existingPayments[0] && existingPayments.length === 1 && existingPayments[0].note) || (isEditMode ? 'Payment on Order' : 'Initial payment'),
+                  paidAt: (existingPayments[0] && existingPayments.length === 1 && existingPayments[0].paidAt) || new Date().toISOString(),
                 },
               ]
             : []);
@@ -1546,7 +1641,25 @@ export default function CreateOrderClient() {
           isTransportRequired: isTransportRequired,
           transportCharges: transportChargesVal,
           deliveryAddress: isTransportRequired ? deliveryAddress : (selectedCustomer.address || ''),
-          items: validItems,
+          items: validItems.map((item) => ({
+            lineId: item.lineId || `line-${Date.now()}`,
+            itemId: item.itemId || '',
+            itemCode: item.itemCode || '',
+            itemName: item.itemName,
+            category: item.category || 'General',
+            unit: item.unit || 'KG',
+            imageUrl: item.imageUrl || '',
+            unitPrice: item.unitPrice || 0,
+            quantity: item.quantity || 1,
+            lineTotal: item.lineTotal || 0,
+            hasPacket: Boolean(item.hasPacket),
+            packetCharge: item.hasPacket ? (item.packetCharge || 5) : 0,
+            manufacturingDescription: item.manufacturingDescription || '',
+            packingDescription: item.packingDescription || '',
+            needsManufacturing: item.needsManufacturing !== undefined ? item.needsManufacturing : true,
+            mfgStatus: item.mfgStatus || (item.needsManufacturing === false ? 'Not Required' : 'Pending'),
+            pckStatus: item.pckStatus || 'Pending',
+          })),
           totalItems: validItems.length,
           subTotal: subTotal,
           noOfBoxes: savedNoOfBoxes,
@@ -1564,6 +1677,8 @@ export default function CreateOrderClient() {
           paymentStatus: paymentStatus,
           payments: finalPayments.length > 0 ? finalPayments : existingPayments,
           orderStatus: orderStatus,
+          updatedBy: creatorName,
+          updatedById: creatorId,
           updatedAt: serverTimestamp(),
         }));
 
@@ -3016,7 +3131,9 @@ export default function CreateOrderClient() {
 
                 {/* Order Status Select */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Initial Order Status</label>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    {isEditMode ? 'Order Status' : 'Initial Order Status'}
+                  </label>
                   <select
                     value={orderStatus}
                     onChange={(e) => setOrderStatus(e.target.value)}
@@ -3025,6 +3142,13 @@ export default function CreateOrderClient() {
                     <option value="Order Created">Order Created</option>
                     <option value="Confirmed">Confirmed</option>
                     <option value="Pending">Pending</option>
+                    <option value="Moved to Manufacturing">Moved to Manufacturing</option>
+                    <option value="In Production">In Production</option>
+                    <option value="Packed">Packed</option>
+                    <option value="Ready for Delivery">Ready for Delivery</option>
+                    <option value="Delivered">Delivered</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Cancelled">Cancelled</option>
                   </select>
                 </div>
 

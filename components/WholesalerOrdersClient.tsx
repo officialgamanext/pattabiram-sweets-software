@@ -636,8 +636,8 @@ export default function WholesalerOrdersClient() {
         orderStatus: hasMfgItems
           ? editingOrder.orderStatus === 'Moved to Manufacturing' || editingOrder.orderStatus === 'Order Created'
             ? 'Moved to Manufacturing'
-            : editingOrder.orderStatus
-          : 'Order Created',
+            : (editingOrder.orderStatus || 'Order Created')
+          : (editingOrder.orderStatus || 'Order Created'),
         updatedAt: serverTimestamp(),
       });
 

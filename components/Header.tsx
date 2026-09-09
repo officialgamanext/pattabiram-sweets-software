@@ -44,6 +44,7 @@ import {
   CalendarCheck,
   TrendingUp,
   BarChart3,
+  PieChart,
 } from 'lucide-react';
 
 export default function Header() {
@@ -122,6 +123,7 @@ export default function Header() {
       '/pos': 'pos',
       '/pos-prices': 'pos_prices',
       '/orders': 'orders',
+      '/ganesh-laddu-analysis': 'ganesh_laddu_analysis',
       '/walk-in-sales': 'walk_in_sales',
       '/items': 'items',
       '/store': 'store',
@@ -163,6 +165,7 @@ export default function Header() {
     { label: 'Loose Sales', href: '/loose-sales', icon: <Coins size={17} /> },
     { label: 'Loose Analytics', href: '/loose-sales-analytics', icon: <BarChart3 size={17} /> },
     { label: 'Orders', href: '/orders', icon: <ShoppingBag size={17} /> },
+    { label: 'Ganesh Laddu', href: '/ganesh-laddu-analysis', icon: <PieChart size={17} /> },
     { label: 'Credit & Due', href: '/credit', icon: <WalletCards size={17} /> },
     { label: 'Walk-In Sales', href: '/walk-in-sales', icon: <Printer size={17} /> },
     { label: 'Products', href: '/items', icon: <Tag size={17} /> },
@@ -266,6 +269,15 @@ export default function Header() {
       category: 'Main Navigation',
       badgeColor: 'bg-[#02626D]/15 text-[#02626D] border-teal-200',
       tag: 'Core App',
+    },
+    {
+      label: 'Ganesh Laddu Analysis',
+      description: 'Ganesh Laddu (ITM-079) orders breakdown, manufacturing notes split & size counts',
+      href: '/ganesh-laddu-analysis',
+      icon: <PieChart size={22} />,
+      category: 'Main Navigation',
+      badgeColor: 'bg-amber-500/15 text-amber-700 border-amber-200',
+      tag: 'Laddu Matrix',
     },
     {
       label: 'Credit & Due',

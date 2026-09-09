@@ -16,6 +16,7 @@ export const APP_MENUS: MenuItemDefinition[] = [
   { key: 'pos', name: 'Billing & POS', path: '/pos' },
   { key: 'pos_prices', name: 'Billing & POS Prices', path: '/pos-prices' },
   { key: 'orders', name: 'Orders & Billing', path: '/orders' },
+  { key: 'ganesh_laddu_analysis', name: 'Ganesh Laddu Analysis', path: '/ganesh-laddu-analysis' },
   { key: 'wholesaler_orders', name: 'Wholesaler Orders', path: '/wholesaler-orders' },
   { key: 'walk_in_sales', name: 'Walk-In Sales', path: '/walk-in-sales' },
   { key: 'customers', name: 'Customers', path: '/customers' },

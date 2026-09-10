@@ -16,6 +16,7 @@ export interface EmployeeAuthProfile {
   isSuperAdmin?: boolean;
   assignedMfgUnits?: string[];
   assignedPckUnits?: string[];
+  mpin?: string;
   permissions: Record<string, MenuAccessPermission>;
 }
 
@@ -106,6 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           isSuperAdmin: false,
           assignedMfgUnits: mfgUnits,
           assignedPckUnits: pckUnits,
+          mpin: data.mpin || employeeProfile.mpin,
           permissions: mergedPermissions,
         };
 
@@ -196,6 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               isSuperAdmin: false,
               assignedMfgUnits: mfgUnits,
               assignedPckUnits: pckUnits,
+              mpin: matched.mpin,
               permissions: mergedPermissions,
             };
 

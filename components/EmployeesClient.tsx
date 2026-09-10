@@ -40,8 +40,10 @@ import {
   History,
   Sparkles,
   PlusCircle,
+  KeyRound,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
+import { resetEmployeeMpin } from '@/lib/employeeAuth';
 import {
   collection,
   onSnapshot,
@@ -111,6 +113,7 @@ export interface EmployeeRecord {
   photoUrl: string;
   department: string;
   status: 'active' | 'inactive';
+  mpin?: string;
   permissions?: MenuAccessPermission[];
   assignedMfgUnits?: string[];
   assignedPckUnits?: string[];
@@ -528,7 +531,7 @@ export default function EmployeesClient() {
         finalPhotoUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80';
       }
 
-      const empPayload = {
+      const empPayload: any = {
         empId: editingEmp ? editingEmp.empId : `EMP-${1000 + employees.length + 1}`,
         name: formName.trim(),
         mobile: formMobile.trim(),
@@ -545,6 +548,10 @@ export default function EmployeesClient() {
         assignedPckUnits: formAssignedPckUnits,
         permissions: Object.values(formPermissions)
       };
+
+      if (editingEmp?.mpin) {
+        empPayload.mpin = editingEmp.mpin;
+      }
 
       if (editingEmp) {
         await updateDoc(doc(db, 'employees', editingEmp.id), empPayload);
@@ -976,6 +983,12 @@ export default function EmployeesClient() {
                       <span>
                         Pck: {emp.assignedPckUnits?.includes('All') ? 'All Units' : emp.assignedPckUnits && emp.assignedPckUnits.length > 0 ? `${emp.assignedPckUnits.length} Units` : 'None'}
                       </span>
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded border font-semibold flex items-center gap-1 ${
+                      emp.mpin ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'
+                    }`}>
+                      <KeyRound size={10} />
+                      <span>{emp.mpin ? 'MPIN Set' : 'No MPIN'}</span>
                     </span>
                   </div>
 
@@ -1526,6 +1539,48 @@ export default function EmployeesClient() {
                     })}
                   </div>
                 </div>
+
+                {/* Security & MPIN Status */}
+                {editingEmp && (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center flex-shrink-0">
+                        <KeyRound size={16} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-800">
+                          Login MPIN Security Status
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          {editingEmp.mpin
+                            ? `MPIN is configured (${editingEmp.mpin.replace(/./g, '•')}). Employee logs in directly without OTP.`
+                            : 'No MPIN configured. Employee will be prompted to verify OTP and create an MPIN on next login.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {editingEmp.mpin && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (confirm(`Are you sure you want to reset the MPIN for ${editingEmp.name}? They will be required to verify OTP and set a new MPIN on their next login.`)) {
+                            const res = await resetEmployeeMpin(editingEmp.id);
+                            if (res.success) {
+                              setEditingEmp({ ...editingEmp, mpin: '' });
+                              setEmployees(employees.map(e => e.id === editingEmp.id ? { ...e, mpin: '' } : e));
+                              toast.success('MPIN Reset', `MPIN cleared for ${editingEmp.name}.`);
+                            } else {
+                              toast.error('Reset Failed', res.error || 'Failed to reset MPIN.');
+                            }
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold transition-colors cursor-pointer flex-shrink-0"
+                      >
+                        Reset MPIN
+                      </button>
+                    )}
+                  </div>
+                )}
 
               </div>
 

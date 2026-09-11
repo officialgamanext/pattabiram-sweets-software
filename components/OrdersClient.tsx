@@ -286,6 +286,7 @@ export default function OrdersClient() {
   const [searchTerm, setSearchTerm] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
+  const [orderTypeFilter, setOrderTypeFilter] = useState('All');
   const [itemsPerPage, setItemsPerPage] = useState('10');
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
   const [slotCategories, setSlotCategories] = useState<SlotCategory[]>([]);
@@ -1342,13 +1343,34 @@ export default function OrdersClient() {
       }
     }
 
-    // 4. Search Filter
+    // 4. Order Type Filter (Customisation & Transport)
+    if (orderTypeFilter === 'Customisation') {
+      if (!order.isCustomisation) {
+        return false;
+      }
+    } else if (orderTypeFilter === 'Transport') {
+      if (!order.isTransportRequired) {
+        return false;
+      }
+    } else if (orderTypeFilter === 'Both') {
+      if (!order.isCustomisation || !order.isTransportRequired) {
+        return false;
+      }
+    } else if (orderTypeFilter === 'Standard') {
+      if (order.isCustomisation || order.isTransportRequired) {
+        return false;
+      }
+    }
+
+    // 5. Search Filter
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       const codeMatch = (order.code || '').toLowerCase().includes(term);
       const custMatch = (order.customerName || '').toLowerCase().includes(term);
       const mobMatch = (order.customerMobile || '').toLowerCase().includes(term);
-      if (!codeMatch && !custMatch && !mobMatch) {
+      const customMatch = (term === 'custom' || term === 'customisation') && Boolean(order.isCustomisation);
+      const transportMatch = (term === 'transport' || term === 'delivery') && Boolean(order.isTransportRequired);
+      if (!codeMatch && !custMatch && !mobMatch && !customMatch && !transportMatch) {
         return false;
       }
     }
@@ -1364,7 +1386,7 @@ export default function OrdersClient() {
   useEffect(() => {
     setCurrentPage(1);
     setSlotPages({});
-  }, [selectedDate, orderStatusFilter, paymentStatusFilter, searchTerm]);
+  }, [selectedDate, orderStatusFilter, paymentStatusFilter, orderTypeFilter, searchTerm]);
 
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * 24;
@@ -1452,6 +1474,35 @@ export default function OrdersClient() {
     );
   });
 
+  // Calculate Date-filtered counts for Customisation and Transport
+  const customOrdersCount = useMemo(() => {
+    return orders.filter((o) => {
+      if (selectedDate && selectedDate !== 'All') {
+        const orderDate = getOrderDateStr(o);
+        const mfgDate = o.manufacturingDate || '';
+        const delivDate = o.expectedDeliveryDate || '';
+        if (orderDate !== selectedDate && mfgDate !== selectedDate && delivDate !== selectedDate) {
+          return false;
+        }
+      }
+      return Boolean(o.isCustomisation);
+    }).length;
+  }, [orders, selectedDate]);
+
+  const transportOrdersCount = useMemo(() => {
+    return orders.filter((o) => {
+      if (selectedDate && selectedDate !== 'All') {
+        const orderDate = getOrderDateStr(o);
+        const mfgDate = o.manufacturingDate || '';
+        const delivDate = o.expectedDeliveryDate || '';
+        if (orderDate !== selectedDate && mfgDate !== selectedDate && delivDate !== selectedDate) {
+          return false;
+        }
+      }
+      return Boolean(o.isTransportRequired);
+    }).length;
+  }, [orders, selectedDate]);
+
   // Calculate Order Statistics for Summary Bar from filtered orders
   const totalOrdersCount = filteredOrders.length;
   const totalAmountSum = filteredOrders.reduce((acc, o) => acc + (o.totalAmount || 0), 0);
@@ -1471,6 +1522,14 @@ export default function OrdersClient() {
     const s = o.orderStatus || (o as any).status || '';
     return s === 'Delivered';
   }).length;
+
+  const orderTypeOptions: CustomSelectOption[] = [
+    { value: 'All', label: 'All Order Types' },
+    { value: 'Customisation', label: '📦 Customisation Orders' },
+    { value: 'Transport', label: '🚚 Transport Orders' },
+    { value: 'Both', label: '📦+🚚 Custom & Transport' },
+    { value: 'Standard', label: 'Standard Orders' },
+  ];
 
   const orderStatusOptions: CustomSelectOption[] = [
     { value: 'All', label: 'All Order Statuses' },
@@ -1553,8 +1612,21 @@ export default function OrdersClient() {
             </button>
           </div>
 
-          {/* Right: Order Status & Payment Status Filters */}
+          {/* Right: Order Type, Order Status & Payment Status Filters */}
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Order Type Filter (Customisation & Transport) */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold text-slate-400 uppercase hidden xl:inline">Type:</span>
+              <CustomSelect
+                options={orderTypeOptions}
+                value={orderTypeFilter}
+                onChange={setOrderTypeFilter}
+                icon={<Boxes size={13} />}
+                size="sm"
+                buttonClassName="h-8 text-xs font-medium border-slate-300 rounded-lg bg-white shadow-2xs"
+              />
+            </div>
+
             {/* Order Status Filter */}
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] font-bold text-slate-400 uppercase hidden xl:inline">Order Status:</span>
@@ -1594,11 +1666,12 @@ export default function OrdersClient() {
             </div>
 
             {/* Reset Filters Button */}
-            {(selectedDate !== getTodayDateStr() || orderStatusFilter !== 'All' || paymentStatusFilter !== 'All' || searchTerm !== '') && (
+            {(selectedDate !== getTodayDateStr() || orderTypeFilter !== 'All' || orderStatusFilter !== 'All' || paymentStatusFilter !== 'All' || searchTerm !== '') && (
               <button
                 type="button"
                 onClick={() => {
                   setSelectedDate(getTodayDateStr());
+                  setOrderTypeFilter('All');
                   setOrderStatusFilter('All');
                   setPaymentStatusFilter('All');
                   setSearchTerm('');
@@ -1690,8 +1763,8 @@ export default function OrdersClient() {
         </div>
       </div>
 
-      {/* ── 3. Navigation Sub-Tabs (Orders by Slot vs Orders List) ── */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+      {/* ── 3. Navigation Sub-Tabs (Orders by Slot vs Orders List) & Quick Filter Pills ── */}
+      <div className="flex items-center justify-between border-b border-slate-200 pb-2 flex-wrap gap-2">
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => setActiveTab('slot')}
@@ -1713,6 +1786,50 @@ export default function OrdersClient() {
           >
             Orders List ({filteredOrders.length})
           </button>
+        </div>
+
+        {/* Quick Filter Pills for Customisation & Transport Orders */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[11px] font-bold text-slate-400 uppercase hidden sm:inline">Filter:</span>
+          <div className="flex items-center gap-1 bg-[#f1f2f4] p-1 rounded-xl border border-slate-200/80">
+            <button
+              type="button"
+              onClick={() => setOrderTypeFilter('All')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                orderTypeFilter === 'All'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              All Orders
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrderTypeFilter(orderTypeFilter === 'Customisation' ? 'All' : 'Customisation')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                orderTypeFilter === 'Customisation'
+                  ? 'bg-purple-600 text-white shadow-2xs font-bold'
+                  : 'text-purple-800 hover:bg-purple-50'
+              }`}
+              title="Filter only Customisation orders"
+            >
+              <Boxes size={12} />
+              <span>Customisation ({customOrdersCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrderTypeFilter(orderTypeFilter === 'Transport' ? 'All' : 'Transport')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                orderTypeFilter === 'Transport'
+                  ? 'bg-teal-700 text-white shadow-2xs font-bold'
+                  : 'text-teal-800 hover:bg-teal-50'
+              }`}
+              title="Filter only Transport orders"
+            >
+              <Truck size={12} />
+              <span>Transport ({transportOrdersCount})</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1896,6 +2013,26 @@ export default function OrdersClient() {
                                 </div>
                               </div>
 
+                              {(order.isCustomisation || order.isTransportRequired) && (
+                                <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                                  {order.isCustomisation && (
+                                    <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                                      <Boxes size={10} />
+                                      <span>Customisation</span>
+                                      {order.customisationDetails?.noOfBoxes ? (
+                                        <span className="text-purple-900 font-extrabold">({order.customisationDetails.noOfBoxes}B)</span>
+                                      ) : null}
+                                    </span>
+                                  )}
+                                  {order.isTransportRequired && (
+                                    <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1">
+                                      <Truck size={10} />
+                                      <span>Transport</span>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
                               <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-100">
                                 <div className="flex items-center gap-1">
                                   <ShoppingBag size={12} />
@@ -2016,7 +2153,28 @@ export default function OrdersClient() {
                       className="hover:bg-slate-50/60 cursor-pointer transition-colors"
                     >
                       <td className="py-3 px-4 sm:px-6 font-bold text-[#02626D] font-mono">{order.code}</td>
-                      <td className="py-3 px-4 font-semibold text-slate-900">{order.customerName}</td>
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-slate-900">{order.customerName}</div>
+                        {(order.isCustomisation || order.isTransportRequired) && (
+                          <div className="flex items-center gap-1 flex-wrap mt-1">
+                            {order.isCustomisation && (
+                              <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                                <Boxes size={10} />
+                                <span>Customisation</span>
+                                {order.customisationDetails?.noOfBoxes ? (
+                                  <span className="text-purple-900 font-extrabold">({order.customisationDetails.noOfBoxes} {order.customisationDetails.noOfBoxes === 1 ? 'Box' : 'Boxes'})</span>
+                                ) : null}
+                              </span>
+                            )}
+                            {order.isTransportRequired && (
+                              <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1">
+                                <Truck size={10} />
+                                <span>Transport</span>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-slate-600">{order.slot}</td>
                       <td className="py-3 px-4 text-slate-600 font-medium">{order.totalItems || order.items?.length} Items</td>
                       <td className="py-3 px-4 font-bold text-slate-900">₹ {order.totalAmount}</td>

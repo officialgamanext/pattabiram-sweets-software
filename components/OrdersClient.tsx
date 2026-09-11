@@ -36,6 +36,7 @@ import {
   PieChart,
   Layers,
   Boxes,
+  Package,
   Star,
   Minus,
 } from 'lucide-react';
@@ -287,6 +288,22 @@ export default function OrdersClient() {
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
   const [orderTypeFilter, setOrderTypeFilter] = useState('All');
+  const [selectedItemFilter, setSelectedItemFilter] = useState<string>('All');
+  const [isItemFilterDropdownOpen, setIsItemFilterDropdownOpen] = useState(false);
+  const [itemFilterSearchQuery, setItemFilterSearchQuery] = useState('');
+  const itemFilterDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close item filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (itemFilterDropdownRef.current && !itemFilterDropdownRef.current.contains(e.target as Node)) {
+        setIsItemFilterDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const [itemsPerPage, setItemsPerPage] = useState('10');
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
   const [slotCategories, setSlotCategories] = useState<SlotCategory[]>([]);
@@ -896,6 +913,53 @@ export default function OrdersClient() {
     return utilitiesMaster.filter((u) => u.type === 'sticker' && u.status === 'Active');
   }, [utilitiesMaster]);
 
+  // Unique items list for the Item Filter (from itemsMaster + all items in orders)
+  const uniqueItemsList = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; code?: string; category?: string }>();
+
+    (itemsMaster || []).forEach((it) => {
+      if (it.name && it.name.trim()) {
+        const key = it.name.trim().toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, {
+            id: it.id,
+            name: it.name.trim(),
+            code: it.code,
+            category: it.category,
+          });
+        }
+      }
+    });
+
+    (orders || []).forEach((ord) => {
+      (ord.items || []).forEach((it: any) => {
+        const name = (it.itemName || it.name || '').toString().trim();
+        if (name) {
+          const key = name.toLowerCase();
+          if (!map.has(key)) {
+            map.set(key, {
+              id: it.itemId || it.id || key,
+              name: name,
+              code: it.itemCode || it.code,
+              category: it.category,
+            });
+          }
+        }
+      });
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [itemsMaster, orders]);
+
+  // Filtered unique items for the search dropdown
+  const filteredUniqueItemsForDropdown = useMemo(() => {
+    if (!itemFilterSearchQuery.trim()) return uniqueItemsList;
+    const q = itemFilterSearchQuery.toLowerCase().trim();
+    return uniqueItemsList.filter((it) =>
+      it.name.toLowerCase().includes(q) || (it.code && it.code.toLowerCase().includes(q))
+    );
+  }, [uniqueItemsList, itemFilterSearchQuery]);
+
   const [editingOrder, setEditingOrder] = useState<OrderRecord | null>(null);
 
   // Open Full Screen Add Order Modal for a specific Slot
@@ -1362,7 +1426,21 @@ export default function OrdersClient() {
       }
     }
 
-    // 5. Search Filter
+    // 5. Item Filter
+    if (selectedItemFilter && selectedItemFilter !== 'All') {
+      const targetLower = selectedItemFilter.trim().toLowerCase();
+      const hasItem = (order.items || []).some((it: any) => {
+        const name = (it.itemName || it.name || it.item || '').toString().trim().toLowerCase();
+        const id = (it.itemId || it.id || '').toString().trim().toLowerCase();
+        const code = (it.itemCode || it.code || '').toString().trim().toLowerCase();
+        return name === targetLower || id === targetLower || code === targetLower;
+      });
+      if (!hasItem) {
+        return false;
+      }
+    }
+
+    // 6. Search Filter
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       const codeMatch = (order.code || '').toLowerCase().includes(term);
@@ -1386,7 +1464,7 @@ export default function OrdersClient() {
   useEffect(() => {
     setCurrentPage(1);
     setSlotPages({});
-  }, [selectedDate, orderStatusFilter, paymentStatusFilter, orderTypeFilter, searchTerm]);
+  }, [selectedDate, orderStatusFilter, paymentStatusFilter, orderTypeFilter, selectedItemFilter, searchTerm]);
 
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * 24;
@@ -1653,6 +1731,116 @@ export default function OrdersClient() {
               />
             </div>
 
+            {/* Item Filter Dropdown */}
+            <div className="relative" ref={itemFilterDropdownRef}>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-slate-400 uppercase hidden xl:inline">Item:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsItemFilterDropdownOpen((prev) => !prev);
+                    setItemFilterSearchQuery('');
+                  }}
+                  className={`h-8 px-2.5 py-1 text-xs font-medium rounded-lg border flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
+                    selectedItemFilter !== 'All'
+                      ? 'bg-[#02626D] text-white border-[#02626D] font-bold shadow-sm'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                  title="Filter orders by specific item"
+                >
+                  <Package size={13} className={selectedItemFilter !== 'All' ? 'text-white' : 'text-slate-400'} />
+                  <span className="max-w-[110px] sm:max-w-[140px] truncate">
+                    {selectedItemFilter === 'All' ? 'All Items' : selectedItemFilter}
+                  </span>
+                  {selectedItemFilter !== 'All' ? (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedItemFilter('All');
+                      }}
+                      className="ml-0.5 p-0.5 hover:bg-white/20 rounded-full transition-colors"
+                      title="Clear item filter"
+                    >
+                      <X size={12} />
+                    </span>
+                  ) : (
+                    <ChevronDown size={12} className="text-slate-400" />
+                  )}
+                </button>
+              </div>
+
+              {isItemFilterDropdownOpen && (
+                <div className="absolute right-0 sm:left-0 sm:right-auto top-full mt-1 w-64 sm:w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden flex flex-col max-h-80 animate-in fade-in zoom-in-95 duration-100">
+                  {/* Search Input inside Dropdown */}
+                  <div className="p-2 border-b border-slate-100 bg-slate-50">
+                    <div className="relative">
+                      <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search items..."
+                        value={itemFilterSearchQuery}
+                        onChange={(e) => setItemFilterSearchQuery(e.target.value)}
+                        autoFocus
+                        className="w-full pl-7 pr-7 py-1 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:border-[#02626D] text-slate-800"
+                      />
+                      {itemFilterSearchQuery && (
+                        <button
+                          onClick={() => setItemFilterSearchQuery('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X size={11} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Item List */}
+                  <div className="overflow-y-auto flex-1 divide-y divide-slate-50 py-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedItemFilter('All');
+                        setIsItemFilterDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
+                        selectedItemFilter === 'All' ? 'bg-[#02626D]/10 text-[#02626D] font-bold' : 'text-slate-700'
+                      }`}
+                    >
+                      <span>All Items</span>
+                      {selectedItemFilter === 'All' && <Check size={13} className="text-[#02626D]" />}
+                    </button>
+
+                    {filteredUniqueItemsForDropdown.length === 0 ? (
+                      <div className="p-3 text-center text-xs text-slate-400">No items match &quot;{itemFilterSearchQuery}&quot;</div>
+                    ) : (
+                      filteredUniqueItemsForDropdown.map((it) => {
+                        const isSelected = selectedItemFilter.toLowerCase() === it.name.toLowerCase();
+                        return (
+                          <button
+                            key={it.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedItemFilter(it.name);
+                              setIsItemFilterDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
+                              isSelected ? 'bg-[#02626D]/10 text-[#02626D] font-bold' : 'text-slate-700'
+                            }`}
+                          >
+                            <div className="truncate mr-2">
+                              <span className="block truncate">{it.name}</span>
+                              {it.code && <span className="text-[10px] text-slate-400 font-mono">{it.code}</span>}
+                            </div>
+                            {isSelected && <Check size={13} className="text-[#02626D] flex-shrink-0" />}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Search Input */}
             <div className="relative">
               <input
@@ -1666,7 +1854,7 @@ export default function OrdersClient() {
             </div>
 
             {/* Reset Filters Button */}
-            {(selectedDate !== getTodayDateStr() || orderTypeFilter !== 'All' || orderStatusFilter !== 'All' || paymentStatusFilter !== 'All' || searchTerm !== '') && (
+            {(selectedDate !== getTodayDateStr() || orderTypeFilter !== 'All' || orderStatusFilter !== 'All' || paymentStatusFilter !== 'All' || selectedItemFilter !== 'All' || searchTerm !== '') && (
               <button
                 type="button"
                 onClick={() => {
@@ -1674,6 +1862,8 @@ export default function OrdersClient() {
                   setOrderTypeFilter('All');
                   setOrderStatusFilter('All');
                   setPaymentStatusFilter('All');
+                  setSelectedItemFilter('All');
+                  setItemFilterSearchQuery('');
                   setSearchTerm('');
                 }}
                 className="px-2.5 py-1 h-8 rounded-lg text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer"
@@ -1684,6 +1874,29 @@ export default function OrdersClient() {
             )}
           </div>
         </div>
+
+        {/* Active Item Filter Banner */}
+        {selectedItemFilter !== 'All' && (
+          <div className="bg-[#02626D]/5 border border-[#02626D]/20 rounded-xl px-3.5 py-2 flex items-center justify-between gap-2 shadow-2xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="w-2 h-2 rounded-full bg-[#02626D] animate-pulse" />
+              <span className="text-xs text-slate-600">
+                Filtered by item: <strong className="text-[#02626D] font-bold">{selectedItemFilter}</strong>
+              </span>
+              <span className="text-[11px] font-semibold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedItemFilter('All')}
+              className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-white hover:bg-rose-50 px-2.5 py-1 rounded-lg border border-slate-200 hover:border-rose-200 transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+            >
+              <X size={12} />
+              <span>Clear Item Filter</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── 2. TOP METRICS & SUMMARY CARDS BAR ───────────────────────── */}
@@ -2033,6 +2246,38 @@ export default function OrdersClient() {
                                 </div>
                               )}
 
+                              {order.items && order.items.length > 0 && (
+                                <div className="flex flex-wrap gap-1 pt-0.5">
+                                  {order.items.slice(0, 3).map((it: any, iIdx: number) => {
+                                    const itName = (it.itemName || it.name || 'Item').trim();
+                                    const isSelected = selectedItemFilter.toLowerCase() === itName.toLowerCase();
+                                    return (
+                                      <button
+                                        key={iIdx}
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedItemFilter(isSelected ? 'All' : itName);
+                                        }}
+                                        className={`text-[9.5px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer max-w-[110px] truncate ${
+                                          isSelected
+                                            ? 'bg-[#02626D] text-white border-[#02626D] font-bold'
+                                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-[#02626D]/10 hover:text-[#02626D]'
+                                        }`}
+                                        title={`Filter orders with "${itName}"`}
+                                      >
+                                        {itName}
+                                      </button>
+                                    );
+                                  })}
+                                  {order.items.length > 3 && (
+                                    <span className="text-[9px] text-slate-400 self-center">
+                                      +{order.items.length - 3} more
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
                               <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-100">
                                 <div className="flex items-center gap-1">
                                   <ShoppingBag size={12} />
@@ -2176,7 +2421,40 @@ export default function OrdersClient() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-slate-600">{order.slot}</td>
-                      <td className="py-3 px-4 text-slate-600 font-medium">{order.totalItems || order.items?.length} Items</td>
+                      <td className="py-3 px-4 text-slate-600">
+                        <div className="font-medium text-slate-700">{order.totalItems || order.items?.length || 0} Items</div>
+                        {order.items && order.items.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1 max-w-[200px]">
+                            {order.items.slice(0, 3).map((it: any, iIdx: number) => {
+                              const itName = (it.itemName || it.name || 'Item').trim();
+                              const isSelected = selectedItemFilter.toLowerCase() === itName.toLowerCase();
+                              return (
+                                <button
+                                  key={iIdx}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedItemFilter(isSelected ? 'All' : itName);
+                                  }}
+                                  className={`text-[9.5px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer max-w-[100px] truncate ${
+                                    isSelected
+                                      ? 'bg-[#02626D] text-white border-[#02626D] font-bold'
+                                      : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-[#02626D]/10 hover:text-[#02626D]'
+                                  }`}
+                                  title={`Filter by "${itName}"`}
+                                >
+                                  {itName}
+                                </button>
+                              );
+                            })}
+                            {order.items.length > 3 && (
+                              <span className="text-[9.5px] text-slate-400 self-center">
+                                +{order.items.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td className="py-3 px-4 font-bold text-slate-900">₹ {order.totalAmount}</td>
                       <td className="py-3 px-4">
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
@@ -2667,16 +2945,28 @@ export default function OrdersClient() {
                         <th className="py-2.5 px-3 text-right">Total Quantity</th>
                         <th className="py-2.5 px-3 text-right">Total Amount</th>
                         <th className="py-2.5 px-3">Contributing Orders</th>
+                        <th className="py-2.5 px-3 text-center">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
                       {filteredSlotAnalyticsItems.map((item, idx) => (
                         <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
                           <td className="py-2.5 px-3 font-bold text-slate-900">
-                            {item.itemName}
-                            {item.itemCode && (
-                              <span className="ml-1.5 text-[10px] text-slate-400 font-mono">({item.itemCode})</span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedItemFilter(item.itemName);
+                                setIsSlotAnalyticsModalOpen(false);
+                                setActiveTab('list');
+                              }}
+                              className="text-left font-bold text-[#02626D] hover:underline flex items-center gap-1 cursor-pointer"
+                              title={`Click to filter orders containing "${item.itemName}"`}
+                            >
+                              <span>{item.itemName}</span>
+                              {item.itemCode && (
+                                <span className="text-[10px] text-slate-400 font-mono">({item.itemCode})</span>
+                              )}
+                            </button>
                           </td>
                           <td className="py-2.5 px-3">
                             <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
@@ -2697,13 +2987,32 @@ export default function OrdersClient() {
                               {item.orders.map((ord, oIdx) => (
                                 <span
                                   key={oIdx}
-                                  className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200"
-                                  title={`${ord.customerName} - ${ord.quantity} ${item.unit}${ord.notes ? ` (${ord.notes})` : ''}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsSlotAnalyticsModalOpen(false);
+                                    navigateToOrder(ord.orderId);
+                                  }}
+                                  className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 hover:bg-[#02626D]/10 hover:border-[#02626D]/30 transition-colors cursor-pointer"
+                                  title={`Click to view order: ${ord.customerName} - ${ord.quantity} ${item.unit}${ord.notes ? ` (${ord.notes})` : ''}`}
                                 >
                                   <strong className="text-[#02626D] font-mono">{ord.orderCode}</strong> ({ord.quantity} {item.unit})
                                 </span>
                               ))}
                             </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedItemFilter(item.itemName);
+                                setIsSlotAnalyticsModalOpen(false);
+                                setActiveTab('list');
+                              }}
+                              className="px-2.5 py-1 text-[11px] font-bold text-white bg-[#02626D] hover:bg-[#014d56] rounded-lg transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
+                              title={`Filter all orders containing ${item.itemName}`}
+                            >
+                              View Orders ({item.orders.length})
+                            </button>
                           </td>
                         </tr>
                       ))}

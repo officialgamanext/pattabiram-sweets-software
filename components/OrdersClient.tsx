@@ -117,6 +117,9 @@ export interface CustomisationData {
   hasSticker: boolean;
   stickerType: string;
   stickerPrice: number;
+  packingBoxesCount?: number;
+  packingBoxPrice?: number;
+  packingBoxesTotal?: number;
 }
 
 export interface OrderRecord {
@@ -142,6 +145,7 @@ export interface OrderRecord {
   shrinkChargesTotal?: number;
   packetChargesTotal?: number;
   packingCharges?: number;
+  customPackingBoxesTotal?: number;
   globalPackingBoxPrice?: number;
   noOfBoxes?: number;
   additionalCharges?: number;

@@ -702,6 +702,12 @@ export default function OrderDetailClient({ orderId }: Props) {
                       <p className="text-[10px] text-slate-400 font-semibold">Shrink</p>
                       <p className="font-bold text-slate-800">{order.customisationDetails.hasShrink ? `Yes (₹10/box)` : 'No'}</p>
                     </div>
+                    {Boolean(order.customisationDetails.packingBoxesCount) && (
+                      <div>
+                        <p className="text-[10px] text-slate-400 font-semibold">Packing Boxes</p>
+                        <p className="font-bold text-slate-800">{order.customisationDetails.packingBoxesCount} Boxes (₹{order.customisationDetails.packingBoxPrice || 0}/box)</p>
+                      </div>
+                    )}
                     {order.customisationDetails.boxImageUrl && (
                       <div>
                         <p className="text-[10px] text-slate-400 font-semibold mb-1">Box Image</p>
@@ -1056,6 +1062,14 @@ export default function OrderDetailClient({ orderId }: Props) {
                       <div className="flex justify-between items-center text-slate-600">
                         <span>Packet Charges ({order.customisationDetails?.noOfBoxes || 1} boxes × ₹5):</span>
                         <span className="font-semibold text-slate-800">+ {fmtCurrency(order.packetChargesTotal || 0)}</span>
+                      </div>
+                    )}
+                    {((order.customisationDetails?.packingBoxesTotal || order.customPackingBoxesTotal || (order.customisationDetails?.packingBoxesCount ? (order.customisationDetails.packingBoxesCount * (order.customisationDetails.packingBoxPrice || 0)) : 0)) > 0) && (
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span>Packing Boxes ({order.customisationDetails?.packingBoxesCount || 0} × ₹{order.customisationDetails?.packingBoxPrice || 0}):</span>
+                        <span className="font-semibold text-slate-800">
+                          + {fmtCurrency(order.customisationDetails?.packingBoxesTotal || order.customPackingBoxesTotal || ((order.customisationDetails?.packingBoxesCount || 0) * (order.customisationDetails?.packingBoxPrice || 0)))}
+                        </span>
                       </div>
                     )}
                   </>

@@ -14,6 +14,7 @@ import {
   X,
   Calendar,
   UserCheck,
+  Package,
   PackageCheck,
   AlertCircle,
   Loader2,
@@ -141,7 +142,7 @@ export interface UtilityOption {
   status: 'Active' | 'Inactive';
 }
 
-// ── MEMOIZED HIGH-PERFORMANCE PRODUCT TILE COMPONENT ────────────────────────
+// ── MEMOIZED HIGH-PERFORMANCE PRODUCT TILE COMPONENT (E-COMMERCE STYLE) ──────
 interface ProductCatalogTileProps {
   prod: ItemMasterOption;
   addedItem?: OrderItemLine;
@@ -171,160 +172,148 @@ const ProductCatalogTile = React.memo(function ProductCatalogTile({
 
   return (
     <div
-      className={`group relative rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between transition-all duration-150 select-none ${
+      onClick={() => {
+        if (!addedItem) {
+          onToggle(prod);
+        }
+      }}
+      className={`group relative rounded-xl p-2 flex flex-col justify-between transition-all duration-150 select-none ${
+        !addedItem ? 'cursor-pointer hover:scale-[1.01] active:scale-[0.99]' : ''
+      } ${
         isAdded
-          ? 'bg-[#02626D]/[0.03] border-2 border-[#02626D] shadow-md ring-2 ring-[#02626D]/15'
-          : 'bg-white border border-slate-200/90 hover:border-slate-300 hover:shadow-md'
+          ? 'bg-[#02626D]/[0.03] border-2 border-[#02626D] shadow-sm ring-1 ring-[#02626D]/20'
+          : 'bg-white border border-slate-200/90 hover:border-[#02626D]/50 hover:shadow-md'
       }`}
     >
-      {/* Top Bar: Image + Title + Badges */}
       <div>
-        <div className="flex items-start justify-between gap-2.5">
-          <div className="relative w-14 h-14 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden flex-shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-            <Image
-              src={prod.imageUrl || '/app-icon.png'}
-              alt={prod.name}
-              fill
-              className="object-contain p-1"
-            />
-          </div>
+        {/* Top Product Image Container */}
+        <div className="relative w-full aspect-square rounded-lg bg-slate-50 border border-slate-100/90 overflow-hidden flex items-center justify-center group-hover:scale-[1.02] transition-transform shadow-2xs">
+          <Image
+            src={prod.imageUrl || '/app-icon.png'}
+            alt={prod.name}
+            fill
+            className="object-contain p-1"
+          />
 
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {prod.isFavorite && (
-              <span className="p-1 rounded-md bg-amber-50 text-amber-500 shadow-2xs" title="Favourite Product">
-                <Star size={14} className="fill-amber-400 text-amber-400" />
-              </span>
-            )}
-            {isAdded ? (
-              <button
-                type="button"
-                onClick={() => onToggle(prod)}
-                className="w-7.5 h-7.5 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-                title="Remove product"
-              >
-                <Trash2 size={14} />
-              </button>
-            ) : null}
-          </div>
+          {prod.isFavorite && (
+            <span
+              onClick={(e) => e.stopPropagation()}
+              className="absolute top-1 right-1 p-0.5 rounded-md bg-white/95 backdrop-blur-xs text-amber-500 shadow-2xs"
+              title="Favourite Product"
+            >
+              <Star size={11} className="fill-amber-400 text-amber-400" />
+            </span>
+          )}
+
+          {isAdded && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle(prod);
+              }}
+              className="absolute top-1 left-1 w-5.5 h-5.5 rounded-md bg-red-500/90 hover:bg-red-600 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-90"
+              title="Remove product"
+            >
+              <Trash2 size={11} />
+            </button>
+          )}
         </div>
 
-        {/* Title & Code/Category */}
-        <div className="mt-2.5 min-w-0">
+        {/* Product Name Below Image */}
+        <div className="mt-1.5 min-w-0">
           <h4
-            className={`text-xs sm:text-sm font-bold leading-snug truncate ${
-              isAdded ? 'text-[#02626D]' : 'text-slate-900 group-hover:text-[#02626D]'
+            className={`text-xs font-bold leading-tight line-clamp-1 ${
+              isAdded ? 'text-[#02626D]' : 'text-slate-800 group-hover:text-[#02626D]'
             }`}
             title={prod.name}
           >
             {prod.name}
           </h4>
-          <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5 font-medium">
-            <span className="font-mono">{prod.code}</span>
-            <span>•</span>
-            <span className="truncate">{prod.category}</span>
-          </div>
+          <p className="text-[9.5px] text-slate-400 font-mono truncate mt-0.5">
+            {prod.code} • {prod.category}
+          </p>
+        </div>
+
+        {/* Product Price Below Name */}
+        <div className="mt-0.5 flex items-baseline gap-1">
+          <span className="text-xs sm:text-sm font-extrabold text-[#02626D]">₹{prod.price}</span>
+          <span className="text-[9.5px] text-slate-400 font-normal">/{prod.unit}</span>
         </div>
       </div>
 
-      {/* Bottom Action Area */}
-      {!addedItem ? (
-        /* UNSELECTED STATE: Clean Price & + Add Button */
-        <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between gap-1">
-          <div>
-            <span className="text-xs sm:text-sm font-extrabold text-[#02626D]">₹{prod.price}</span>
-            <span className="text-[10.5px] text-slate-400 font-normal"> /{prod.unit}</span>
+      {/* ACTIVE STATE: Stepper & Line Total & Packet Toggle (Add button removed for unselected state) */}
+      {addedItem && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="mt-1.5 pt-1 border-t border-slate-200/80 space-y-1"
+        >
+          <div className="flex items-center justify-between gap-1 bg-white p-0.5 rounded-lg border border-slate-300 shadow-2xs">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onQuantityChange(prod.id, -1);
+              }}
+              className="w-5.5 h-5.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-extrabold text-xs transition-colors cursor-pointer active:scale-90"
+              title="Decrease"
+            >
+              -
+            </button>
+            <input
+              type="number"
+              step="any"
+              min="0"
+              value={addedItem.quantity === 0 ? '' : addedItem.quantity}
+              onChange={(e) => onFieldChange(prod.id, 'quantity', e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="w-10 h-5.5 text-center font-extrabold text-xs text-[#02626D] bg-transparent focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onQuantityChange(prod.id, 1);
+              }}
+              className="w-5.5 h-5.5 rounded bg-[#02626D] hover:bg-[#014d56] text-white flex items-center justify-center font-extrabold text-xs transition-colors cursor-pointer shadow-2xs active:scale-90"
+              title="Increase"
+            >
+              +
+            </button>
           </div>
 
+          <div className="flex items-center justify-between text-[10px]">
+            <span className="text-slate-400 font-medium">Total:</span>
+            <span className="font-extrabold text-slate-900">
+              ₹ {addedItem.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 1 })}
+            </span>
+          </div>
+
+          {/* Packet Toggle on Tile */}
           <button
             type="button"
-            onClick={() => onToggle(prod)}
-            className="h-8 px-3.5 rounded-xl bg-slate-100 hover:bg-[#02626D] hover:text-white text-slate-700 font-bold text-xs transition-all shadow-2xs cursor-pointer flex items-center gap-1 active:scale-95"
+            onClick={(e) => {
+              e.stopPropagation();
+              onFieldChange(prod.id, 'hasPacket', !addedItem.hasPacket);
+            }}
+            className={`w-full py-0.5 px-1.5 rounded-lg text-[9px] font-bold flex items-center justify-between transition-all cursor-pointer ${
+              addedItem.hasPacket
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+            title={addedItem.hasPacket ? 'Packet packing enabled' : 'Packet packing disabled'}
           >
-            <Plus size={14} />
-            <span>Add</span>
+            <span className="truncate">
+              {isCustomisation && numericNoOfBoxes > 0 && packetCostPerBox > 0
+                ? `Packet (+₹${numericNoOfBoxes * packetCostPerBox})`
+                : `Packet: ${addedItem.hasPacket ? 'Yes' : 'No'}`}
+            </span>
+            {addedItem.hasPacket ? (
+              <Check size={9} className="shrink-0 text-emerald-700" />
+            ) : (
+              <X size={9} className="shrink-0 text-slate-400" />
+            )}
           </button>
-        </div>
-      ) : (
-        /* SELECTED / ACTIVE STATE: Full options inside this tile */
-        <div className="mt-3 pt-2.5 border-t border-slate-200/80 space-y-2.5">
-          {/* Stepper + Price & Line Total */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 bg-white p-0.5 rounded-xl border border-slate-300 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => onQuantityChange(prod.id, -1)}
-                className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-extrabold text-sm transition-colors cursor-pointer active:scale-90"
-                title="Decrease"
-              >
-                -
-              </button>
-              <input
-                type="number"
-                step="any"
-                min="0"
-                value={addedItem.quantity === 0 ? '' : addedItem.quantity}
-                onChange={(e) => onFieldChange(prod.id, 'quantity', e.target.value)}
-                className="w-12 h-7 text-center font-extrabold text-xs text-[#02626D] bg-transparent focus:outline-none"
-              />
-              <span className="text-[10.5px] font-bold text-slate-400 pr-1.5">{prod.unit}</span>
-              <button
-                type="button"
-                onClick={() => onQuantityChange(prod.id, 1)}
-                className="w-7 h-7 rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white flex items-center justify-center font-extrabold text-sm transition-colors cursor-pointer shadow-2xs active:scale-90"
-                title="Increase"
-              >
-                +
-              </button>
-            </div>
-
-            <div className="text-right">
-              <span className="text-[9.5px] text-slate-400 block font-medium uppercase tracking-tight">Total</span>
-              <span className="text-xs sm:text-sm font-bold text-slate-900">
-                ₹ {addedItem.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-          </div>
-
-          {/* Customisation Packet Toggle */}
-          {isCustomisation && (
-            <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200 text-[11px]">
-              <span className="font-semibold text-slate-700">
-                Packet (+₹{numericNoOfBoxes * packetCostPerBox})
-              </span>
-              <button
-                type="button"
-                onClick={() => onFieldChange(prod.id, 'hasPacket', !addedItem.hasPacket)}
-                className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                  addedItem.hasPacket
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {addedItem.hasPacket ? <Check size={11} /> : <X size={11} />}
-                <span>{addedItem.hasPacket ? 'Yes' : 'No'}</span>
-              </button>
-            </div>
-          )}
-
-          {/* Manufacturing & Packing Notes */}
-          <div className="grid grid-cols-2 gap-2 pt-0.5">
-            <input
-              type="text"
-              placeholder="Mfg notes..."
-              value={addedItem.manufacturingDescription || ''}
-              onChange={(e) => onFieldChange(prod.id, 'mfgDesc', e.target.value)}
-              className="w-full h-7 px-2 text-[10.5px] bg-white border border-slate-200 rounded-lg focus:border-[#02626D] focus:outline-none text-slate-700"
-              title="Manufacturing instructions"
-            />
-            <input
-              type="text"
-              placeholder="Packing notes..."
-              value={addedItem.packingDescription || ''}
-              onChange={(e) => onFieldChange(prod.id, 'pckDesc', e.target.value)}
-              className="w-full h-7 px-2 text-[10.5px] bg-white border border-slate-200 rounded-lg focus:border-[#02626D] focus:outline-none text-slate-700"
-              title="Packing instructions"
-            />
-          </div>
         </div>
       )}
     </div>
@@ -402,6 +391,10 @@ export default function CreateOrderClient() {
   const [isCustomisation, setIsCustomisation] = useState(false);
   const [noOfBoxes, setNoOfBoxes] = useState<string | number>('');
   const numericNoOfBoxes = noOfBoxes === '' ? 0 : Math.max(0, parseInt(String(noOfBoxes), 10) || 0);
+
+  // Packing Boxes Count in Customisation (multiplies by globalPackingBoxPrice)
+  const [packingBoxesCount, setPackingBoxesCount] = useState<string | number>('');
+  const numericPackingBoxesCount = packingBoxesCount === '' ? 0 : Math.max(0, parseInt(String(packingBoxesCount), 10) || 0);
 
   const [boxType, setBoxType] = useState('HandleBox');
   const [boxImageUrl, setBoxImageUrl] = useState('');
@@ -503,6 +496,11 @@ export default function CreateOrderClient() {
               ? data.customisationDetails.noOfBoxes
               : (data.noOfBoxes !== undefined ? data.noOfBoxes : '')
           );
+          if (data.customisationDetails.packingBoxesCount !== undefined) {
+            setPackingBoxesCount(data.customisationDetails.packingBoxesCount);
+          } else if (data.packingBoxesCount !== undefined) {
+            setPackingBoxesCount(data.packingBoxesCount);
+          }
           if (data.customisationDetails.boxType) setBoxType(data.customisationDetails.boxType);
           if (data.customisationDetails.boxImageUrl) setBoxImageUrl(data.customisationDetails.boxImageUrl);
           if (data.customisationDetails.shrinkType) setShrinkType(data.customisationDetails.shrinkType);
@@ -517,6 +515,9 @@ export default function CreateOrderClient() {
           });
         } else {
           setNoOfBoxes(data.noOfBoxes !== undefined ? data.noOfBoxes : '');
+          if (data.packingBoxesCount !== undefined) {
+            setPackingBoxesCount(data.packingBoxesCount);
+          }
           if (data.boxType) setBoxType(data.boxType);
           if (data.boxImageUrl) setBoxImageUrl(data.boxImageUrl);
           setShrinkType('None');
@@ -1314,6 +1315,20 @@ export default function CreateOrderClient() {
     setOrderItems((prev) => prev.filter((it) => it.itemId !== itemId));
   }, []);
 
+  const handleToggleItemPacket = useCallback((itemId: string) => {
+    setOrderItems((prev) =>
+      prev.map((item) => {
+        if (item.itemId !== itemId) return item;
+        const nextPacket = !item.hasPacket;
+        return {
+          ...item,
+          hasPacket: nextPacket,
+          packetCharge: nextPacket ? 5 : 0,
+        };
+      })
+    );
+  }, []);
+
   // Box Image File Upload
   const handleBoxImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1334,6 +1349,7 @@ export default function CreateOrderClient() {
     : 0;
 
   const boxChargesTotal = isCustomisation ? Math.max(0, numericNoOfBoxes) * selectedBoxPrice : 0;
+  const customPackingBoxesTotal = isCustomisation ? Math.max(0, numericPackingBoxesCount) * (globalSettings.globalPackingBoxPrice || 0) : 0;
   const stickerChargesTotal = isCustomisation && stickerType !== 'None' ? Math.max(0, numericNoOfBoxes) * selectedStickerPrice : 0;
   const shrinkChargesTotal = isCustomisation && shrinkType !== 'None' ? Math.max(0, numericNoOfBoxes) * selectedShrinkPrice : 0;
 
@@ -1343,7 +1359,7 @@ export default function CreateOrderClient() {
   const discountVal = parseFloat(String(discountAmount)) || 0;
 
   const grandTotal = isCustomisation
-    ? Math.max(0, subTotal + boxChargesTotal + stickerChargesTotal + shrinkChargesTotal + packetChargesTotal + transportChargesVal + addCharges - discountVal)
+    ? Math.max(0, subTotal + boxChargesTotal + customPackingBoxesTotal + stickerChargesTotal + shrinkChargesTotal + packetChargesTotal + transportChargesVal + addCharges - discountVal)
     : Math.max(0, subTotal + pCharges + addCharges + transportChargesVal - discountVal);
 
   // Compute total received from splits
@@ -1627,6 +1643,9 @@ export default function CreateOrderClient() {
           customisationDetails: isCustomisation
             ? {
                 noOfBoxes: savedNoOfBoxes,
+                packingBoxesCount: numericPackingBoxesCount,
+                packingBoxPrice: globalSettings.globalPackingBoxPrice || 0,
+                packingBoxesTotal: customPackingBoxesTotal,
                 boxType: selectedBoxObj?.name || boxType,
                 boxPrice: selectedBoxPrice,
                 boxImageUrl: finalBoxImageUrl,
@@ -1663,12 +1682,14 @@ export default function CreateOrderClient() {
           totalItems: validItems.length,
           subTotal: subTotal,
           noOfBoxes: savedNoOfBoxes,
-          globalPackingBoxPrice: !isCustomisation ? (globalSettings.globalPackingBoxPrice || 0) : 0,
+          packingBoxesCount: isCustomisation ? numericPackingBoxesCount : savedNoOfBoxes,
+          globalPackingBoxPrice: globalSettings.globalPackingBoxPrice || 0,
           boxChargesTotal: isCustomisation ? boxChargesTotal : 0,
+          customPackingBoxesTotal: isCustomisation ? customPackingBoxesTotal : 0,
           stickerChargesTotal: isCustomisation ? stickerChargesTotal : 0,
           shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
           packetChargesTotal: packetChargesTotal,
-          packingCharges: !isCustomisation ? pCharges : 0,
+          packingCharges: isCustomisation ? customPackingBoxesTotal : pCharges,
           additionalCharges: addCharges,
           discountAmount: discountVal,
           totalAmount: grandTotal,
@@ -1704,6 +1725,9 @@ export default function CreateOrderClient() {
         customisationDetails: isCustomisation
           ? {
               noOfBoxes: savedNoOfBoxes,
+              packingBoxesCount: numericPackingBoxesCount,
+              packingBoxPrice: globalSettings.globalPackingBoxPrice || 0,
+              packingBoxesTotal: customPackingBoxesTotal,
               boxType: selectedBoxObj?.name || boxType,
               boxPrice: selectedBoxPrice,
               boxImageUrl: finalBoxImageUrl,
@@ -1722,12 +1746,14 @@ export default function CreateOrderClient() {
         totalItems: validItems.length,
         subTotal: subTotal,
         noOfBoxes: savedNoOfBoxes,
-        globalPackingBoxPrice: !isCustomisation ? (globalSettings.globalPackingBoxPrice || 0) : 0,
+        packingBoxesCount: isCustomisation ? numericPackingBoxesCount : savedNoOfBoxes,
+        globalPackingBoxPrice: globalSettings.globalPackingBoxPrice || 0,
         boxChargesTotal: isCustomisation ? boxChargesTotal : 0,
+        customPackingBoxesTotal: isCustomisation ? customPackingBoxesTotal : 0,
         stickerChargesTotal: isCustomisation ? stickerChargesTotal : 0,
         shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
         packetChargesTotal: packetChargesTotal,
-        packingCharges: !isCustomisation ? pCharges : 0,
+        packingCharges: isCustomisation ? customPackingBoxesTotal : pCharges,
         additionalCharges: addCharges,
         discountAmount: discountVal,
         totalAmount: grandTotal,
@@ -1827,33 +1853,35 @@ export default function CreateOrderClient() {
         </div>
       </div>
 
-      {/* ── MAIN CONTENT WORKSPACE ─────────────────────────────────────────── */}
-      <div className="w-full px-3 sm:px-6 pt-4">
-        <form noValidate onSubmit={handleCreateOrderSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
+      {/* ── MAIN CONTENT WORKSPACE (3-COLUMN LAYOUT) ───────────────────────── */}
+      <div className="w-full px-2.5 sm:px-4 lg:px-6 pt-3 pb-8">
+        <form noValidate onSubmit={handleCreateOrderSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 lg:gap-4.5 items-start">
           
-          {/* LEFT 8/9 COLUMNS: ORDER DETAILS, CUSTOMER, CUSTOMISATION & PRODUCT CATALOG */}
-          <div className="lg:col-span-8 xl:col-span-8 2xl:col-span-9 space-y-4">
-            
-            {/* 1. Time Slot, Schedule Dates & Customer Information Card */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center">
-                    <Clock size={15} />
-                  </div>
-                  <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
-                    1. Delivery Schedule &amp; Customer Information
-                  </h3>
+          {/* ── 1. LEFT COLUMN: TIME SLOTS, DELIVERY DATE & TIME, MANUFACTURING DATE ── */}
+          <div className="lg:col-span-3 xl:col-span-2 space-y-3.5 lg:sticky lg:top-16">
+            <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-3.5">
+              {/* Header */}
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center shrink-0">
+                  <Clock size={15} />
                 </div>
-                <span className="text-[11px] font-semibold text-slate-400">Step 1 of 3</span>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Schedule &amp; Slots
+                  </h3>
+                  <p className="text-[10px] text-slate-400">Timings &amp; batch dates</p>
+                </div>
               </div>
 
-              {/* Slot Selector Pills */}
+              {/* Delivery Slots */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Select Delivery Slot
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>Delivery Slot</span>
+                  <span className="text-[9.5px] font-mono font-bold text-[#02626D] bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                    Selected
+                  </span>
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="space-y-1.5">
                   {ALL_SLOTS.map((slot) => {
                     const isSelected = orderSlot === slot;
                     return (
@@ -1861,609 +1889,138 @@ export default function CreateOrderClient() {
                         key={slot}
                         type="button"
                         onClick={() => handleSelectSlot(slot)}
-                        className={`h-9 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer select-none ${
+                        className={`w-full h-8.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer select-none ${
                           isSelected
                             ? 'bg-[#02626D] text-white shadow-xs ring-2 ring-[#02626D]/30'
                             : 'bg-[#f7f7f8] hover:bg-slate-100 text-slate-700 border border-slate-200/80'
                         }`}
                       >
-                        <Clock size={12} className={isSelected ? 'text-white' : 'text-slate-400'} />
-                        <span className="truncate">{slot}</span>
+                        <span className="flex items-center gap-1.5 truncate">
+                          <Clock size={12} className={isSelected ? 'text-white' : 'text-slate-400'} />
+                          <span className="truncate text-[11.5px]">{slot}</span>
+                        </span>
+                        {isSelected && <Check size={12} className="text-white shrink-0" />}
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Dates, Delivery Time (1-hr interval) & Customer Information Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 pt-1 items-start">
-                {/* Mfg Date */}
-                <div className="md:col-span-3">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Manufacturing Date <span className="text-rose-500">*</span>
-                  </label>
-                  <CustomDatePicker
-                    value={mfgDate}
-                    onChange={(val) => setMfgDate(val)}
-                    placeholder="Select Mfg Date"
-                    blockTuesdays={true}
-                    allowedTuesdays={allowedTuesdays}
-                    className="w-full"
-                  />
-                  {allowedTuesdays.includes(mfgDate) ? (
-                    <span className="text-[10px] text-emerald-600 font-bold mt-0.5 block flex items-center gap-1">
-                      ✓ Special Tuesday Enabled (Open)
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Factory closed on Tuesdays</span>
-                  )}
-                </div>
-
-                {/* Exp Delivery Date */}
-                <div className="md:col-span-3">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Expected Delivery Date <span className="text-rose-500">*</span>
-                  </label>
-                  <CustomDatePicker
-                    value={expDeliveryDate}
-                    onChange={(val) => setExpDeliveryDate(val)}
-                    placeholder="Select Delivery Date"
-                    blockTuesdays={true}
-                    allowedTuesdays={allowedTuesdays}
-                    className="w-full"
-                  />
-                  {allowedTuesdays.includes(expDeliveryDate) ? (
-                    <span className="text-[10px] text-emerald-600 font-bold mt-0.5 block flex items-center gap-1">
-                      ✓ Special Tuesday Enabled (Open)
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Store closed on Tuesdays</span>
-                  )}
-                </div>
-
-                {/* Specific Delivery Time (1-hr difference) */}
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Delivery Time <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={deliveryTime}
-                    onChange={(e) => setDeliveryTime(e.target.value)}
-                    className="w-full h-8.5 px-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] shadow-2xs"
-                  >
-                    {DELIVERY_TIME_OPTIONS.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">1-hr time slot</span>
-                </div>
-
-                {/* Customer Information (Placed right beside delivery dates/time) */}
-                <div className="md:col-span-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                      <span>Customer</span>
-                      <span className="text-rose-500 font-bold">*</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddCustomerModalOpen(true)}
-                      className="text-[11px] font-bold text-[#02626D] hover:underline flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <Plus size={12} />
-                      <span>New</span>
-                    </button>
-                  </div>
-
-                  {/* Selected Customer View or Search Box */}
-                  {selectedCustomer ? (
-                    <div className="p-2 rounded-xl bg-teal-50/70 border border-teal-200/90 flex items-center justify-between gap-2 shadow-2xs">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-7 h-7 rounded-lg bg-[#02626D] text-white font-black text-xs flex items-center justify-center flex-shrink-0">
-                          {selectedCustomer.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1">
-                            <span className="font-extrabold text-xs text-slate-900 truncate max-w-[110px]">{selectedCustomer.name}</span>
-                            <span className="text-[8.5px] font-bold px-1 py-0.2 rounded bg-[#02626D] text-white uppercase">
-                              {selectedCustomer.type}
-                            </span>
-                          </div>
-                          <p className="text-[10.5px] text-slate-600 truncate">{selectedCustomer.mobile || 'No mobile'}</p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedCustomer(null);
-                          setCustomerSearchTerm('');
-                        }}
-                        className="text-[10.5px] font-bold text-slate-500 hover:text-red-600 px-2 py-0.5 rounded-lg border border-slate-300 hover:border-red-200 bg-white transition-colors cursor-pointer flex-shrink-0"
-                      >
-                        Change
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="relative" ref={customerSearchRef}>
-                      <div className="relative">
-                        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                        <input
-                          id="customer-search-input"
-                          type="text"
-                          placeholder="Search customer..."
-                          value={customerSearchTerm}
-                          onChange={(e) => {
-                            setCustomerSearchTerm(e.target.value);
-                            setIsCustomerDropdownOpen(true);
-                          }}
-                          onFocus={() => setIsCustomerDropdownOpen(true)}
-                          className="w-full pl-8 pr-3 h-8.5 text-xs border border-slate-300 rounded-xl bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] font-medium shadow-2xs"
-                        />
-                      </div>
-
-                      {/* Customer Dropdown Results */}
-                      {isCustomerDropdownOpen && (
-                        <div className="absolute left-0 right-0 top-full mt-1.5 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-30 divide-y divide-slate-100 no-scrollbar">
-                          {filteredCustomers.length === 0 ? (
-                            <div className="p-3 text-center text-xs text-slate-400">
-                              No customer found.{' '}
-                              <button
-                                type="button"
-                                onClick={() => setIsAddCustomerModalOpen(true)}
-                                className="text-[#02626D] font-bold underline ml-1"
-                              >
-                                Add New
-                              </button>
-                            </div>
-                          ) : (
-                            filteredCustomers.map((cust) => (
-                              <div
-                                key={cust.id}
-                                onClick={() => {
-                                  setSelectedCustomer(cust);
-                                  setIsCustomerDropdownOpen(false);
-                                }}
-                                className="p-2.5 hover:bg-slate-50 flex items-center justify-between cursor-pointer transition-colors"
-                              >
-                                <div>
-                                  <p className="text-xs font-bold text-slate-900">{cust.name}</p>
-                                  <p className="text-[10px] text-slate-400">{cust.mobile} • {cust.code}</p>
-                                </div>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                                  {cust.type}
-                                </span>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* 2 & 3: PACKAGING & TRANSPORT SECTIONS SIDE-BY-SIDE IN 2 COLUMNS */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-              
-              {/* 2. Packaging & Customisation Section */}
-              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center flex-shrink-0">
-                        <PackageCheck size={15} />
-                      </div>
-                      <div>
-                        <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
-                          2. Packaging &amp; Customisation
-                        </h3>
-                        <p className="text-[10.5px] text-slate-400">
-                          {isCustomisation ? 'Custom sweet boxes & branding' : 'Standard packaging with global rates'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Toggle Switch */}
-                    <label className="flex items-center gap-2.5 cursor-pointer select-none group flex-shrink-0">
-                      <span className={`text-xs font-bold transition-colors ${
-                        isCustomisation ? 'text-[#02626D]' : 'text-slate-500 group-hover:text-slate-700'
-                      }`}>
-                        {isCustomisation ? 'Customised' : 'Standard'}
-                      </span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={isCustomisation}
-                        onClick={() => setIsCustomisation(!isCustomisation)}
-                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:ring-offset-1 ${
-                          isCustomisation ? 'bg-[#02626D]' : 'bg-slate-300'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
-                            isCustomisation ? 'translate-x-5' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
-                    </label>
-                  </div>
-
-                  {/* Standard Packaging UI (When isCustomisation is OFF) */}
-                  {!isCustomisation && (
-                    <div className="space-y-3 pt-3 animate-in fade-in duration-150">
-                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-slate-800">Box Rate</span>
-                            <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-[#02626D]/10 text-[#02626D] border border-teal-200">
-                              ₹{globalSettings.globalPackingBoxPrice} / box
-                            </span>
-                          </div>
-                          <p className="text-[10.5px] text-slate-500">
-                            Default global utility sweet box rate.
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Boxes:</label>
-                          <input
-                            type="number"
-                            step="any"
-                            min="0"
-                            placeholder="0"
-                            value={noOfBoxes}
-                            onChange={(e) => setNoOfBoxes(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
-                            className="w-20 h-8 px-2.5 border border-slate-300 rounded-xl text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D] text-center"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-teal-50/50 border border-teal-200/60 text-xs">
-                        <span className="font-semibold text-teal-900">
-                          Packing Charges ({numericNoOfBoxes} × ₹{globalSettings.globalPackingBoxPrice}):
-                        </span>
-                        <span className="font-extrabold text-[#02626D]">
-                          ₹ {pCharges.toFixed(2)}
-                        </span>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Additional Charges (₹, Optional)
-                        </label>
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          placeholder="0.00"
-                          value={additionalCharges}
-                          onChange={(e) => setAdditionalCharges(e.target.value)}
-                          className="w-full h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Customised Order UI (When isCustomisation is ON) */}
-                  {isCustomisation && (
-                    <div className="space-y-3 pt-3 animate-in fade-in duration-150">
-                      {/* Prominent Custom Box Rate & Count Banner */}
-                      <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200/90 flex items-center justify-between gap-2">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-amber-950">Box Rate</span>
-                            <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-amber-200 text-amber-950 border border-amber-300">
-                              ₹{selectedBoxPrice} / box
-                            </span>
-                          </div>
-                          <p className="text-[10.5px] text-amber-800/80 font-medium">
-                            Model: <strong className="text-amber-950">{boxType}</strong> {stickerType !== 'None' ? `• Sticker: +₹${selectedStickerPrice}` : ''} {shrinkType !== 'None' ? `• Shrink: +₹${selectedShrinkPrice}` : ''}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <label className="text-xs font-bold text-amber-950 whitespace-nowrap">Boxes:</label>
-                          <input
-                            type="number"
-                            step="any"
-                            min="0"
-                            placeholder="0"
-                            value={noOfBoxes}
-                            onChange={(e) => setNoOfBoxes(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
-                            className="w-20 h-8 px-2.5 border border-amber-300 rounded-xl text-xs font-bold text-amber-950 bg-white focus:outline-none focus:border-amber-600 text-center"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Box Model
-                          </label>
-                          <select
-                            value={boxType}
-                            onChange={(e) => setBoxType(e.target.value)}
-                            className="w-full h-8.5 px-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
-                          >
-                            {activeBoxes.map((b) => (
-                              <option key={b.id} value={b.name}>
-                                {b.name} (₹{b.price}/box)
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">Shrink Wrap</label>
-                          <select
-                            value={shrinkType}
-                            onChange={(e) => setShrinkType(e.target.value)}
-                            className="w-full h-8.5 px-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
-                          >
-                            <option value="None">None (₹0)</option>
-                            {activeShrinks.map((s) => (
-                              <option key={s.id} value={s.name}>
-                                {s.name} (+₹{s.price}/box)
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">Branding Sticker</label>
-                          <select
-                            value={stickerType}
-                            onChange={(e) => setStickerType(e.target.value)}
-                            className="w-full h-8.5 px-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
-                          >
-                            <option value="None">None (₹0)</option>
-                            {activeStickers.map((st) => (
-                              <option key={st.id} value={st.name}>
-                                {st.name} (+₹{st.price}/box)
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Additional Charges (₹, Optional)
-                          </label>
-                          <input
-                            type="number"
-                            step="any"
-                            min="0"
-                            placeholder="0.00"
-                            value={additionalCharges}
-                            onChange={(e) => setAdditionalCharges(e.target.value)}
-                            className="w-full h-8.5 px-3 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Box Reference Image (Optional)
-                        </label>
-                        <div className="flex items-center gap-2.5">
-                          <div className="relative w-11 h-11 rounded-xl bg-slate-50 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                            {boxImageUrl ? (
-                              <Image src={boxImageUrl} alt="Box Preview" fill className="object-contain p-1" />
-                            ) : (
-                              <Upload size={15} className="text-slate-400" />
-                            )}
-                          </div>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleBoxImageUpload}
-                            className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-[#02626D] hover:file:bg-teal-100 cursor-pointer"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Custom Box Charges Summary Badge */}
-                      <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/80 text-xs">
-                        <div className="flex items-center justify-between text-amber-950 font-bold">
-                          <span>Custom Packaging Total ({numericNoOfBoxes} boxes):</span>
-                          <span className="font-extrabold text-amber-900">
-                            ₹ {(boxChargesTotal + stickerChargesTotal + shrinkChargesTotal).toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-2 text-[10px] text-amber-900/80 font-medium">
-                          <span>Box Rate: ₹{selectedBoxPrice}/box</span>
-                          {stickerType !== 'None' && <span>• Sticker: +₹{selectedStickerPrice}/box</span>}
-                          {shrinkType !== 'None' && <span>• Shrink: +₹{selectedShrinkPrice}/box</span>}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+              {/* Expected Delivery Date */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Expected Delivery Date <span className="text-rose-500">*</span>
+                </label>
+                <CustomDatePicker
+                  value={expDeliveryDate}
+                  onChange={(val) => setExpDeliveryDate(val)}
+                  placeholder="Select Delivery Date"
+                  blockTuesdays={true}
+                  allowedTuesdays={allowedTuesdays}
+                  className="w-full"
+                />
+                {allowedTuesdays.includes(expDeliveryDate) ? (
+                  <span className="text-[9.5px] text-emerald-600 font-bold mt-0.5 block flex items-center gap-1">
+                    ✓ Special Tuesday Enabled
+                  </span>
+                ) : (
+                  <span className="text-[9.5px] text-slate-400 mt-0.5 block">Store closed on Tuesdays</span>
+                )}
               </div>
 
-              {/* 3. Transport & Delivery Details Section */}
-              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center flex-shrink-0">
-                        <Truck size={15} />
-                      </div>
-                      <div>
-                        <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
-                          3. Transport &amp; Delivery
-                        </h3>
-                        <p className="text-[10.5px] text-slate-400">Freight charges &amp; destination delivery address</p>
-                      </div>
-                    </div>
-
-                    {/* Toggle Switch */}
-                    <label className="flex items-center gap-2.5 cursor-pointer select-none group flex-shrink-0">
-                      <span className={`text-xs font-bold transition-colors ${
-                        isTransportRequired ? 'text-emerald-700' : 'text-slate-500 group-hover:text-slate-700'
-                      }`}>
-                        {isTransportRequired ? 'Required' : 'No Transport'}
-                      </span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={isTransportRequired}
-                        onClick={() => setIsTransportRequired(!isTransportRequired)}
-                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-1 ${
-                          isTransportRequired ? 'bg-emerald-600' : 'bg-slate-300'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
-                            isTransportRequired ? 'translate-x-5' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
-                    </label>
-                  </div>
-
-                  {isTransportRequired ? (
-                    <div className="space-y-3 pt-3 animate-in fade-in duration-150">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Transport Charges (₹) <span className="text-rose-500">*</span>
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            step="any"
-                            min="0"
-                            placeholder="0.00"
-                            value={transportCharges}
-                            onChange={(e) => setTransportCharges(e.target.value)}
-                            className="w-full h-8.5 pl-8 pr-3 border border-slate-300 rounded-xl text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D]"
-                          />
-                          <IndianRupee size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                          <span>Delivery / Transport Address <span className="text-rose-500">*</span></span>
-                          {selectedCustomer?.address && deliveryAddress !== selectedCustomer.address && (
-                            <button
-                              type="button"
-                              onClick={() => setDeliveryAddress(selectedCustomer.address || '')}
-                              className="text-[10.5px] font-semibold text-[#02626D] hover:underline cursor-pointer"
-                            >
-                              Use Customer Address
-                            </button>
-                          )}
-                        </label>
-                        <textarea
-                          rows={3}
-                          placeholder="Enter destination delivery address for logistics/transport..."
-                          value={deliveryAddress}
-                          onChange={(e) => setDeliveryAddress(e.target.value)}
-                          className="w-full p-2.5 text-xs font-medium border border-slate-300 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="pt-6 pb-4 text-center text-slate-400 bg-slate-50/60 rounded-xl border border-dashed border-slate-200 mt-3">
-                      <Truck size={24} className="mx-auto text-slate-300 mb-1" />
-                      <p className="text-xs font-bold text-slate-600">Pickup Order (No Freight)</p>
-                      <p className="text-[10.5px] text-slate-400 mt-0.5">Toggle switch above if delivery transport is needed.</p>
-                    </div>
-                  )}
-                </div>
+              {/* Specific Delivery Time (1-hr interval) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Delivery Time <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={deliveryTime}
+                  onChange={(e) => setDeliveryTime(e.target.value)}
+                  className="w-full h-8.5 px-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] shadow-2xs cursor-pointer"
+                >
+                  {DELIVERY_TIME_OPTIONS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[9.5px] text-slate-400 mt-0.5 block">1-hr time slot</span>
               </div>
 
-            </div>
+              {/* Manufacturing Date */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Manufacturing Date <span className="text-rose-500">*</span>
+                </label>
+                <CustomDatePicker
+                  value={mfgDate}
+                  onChange={(val) => setMfgDate(val)}
+                  placeholder="Select Mfg Date"
+                  blockTuesdays={true}
+                  allowedTuesdays={allowedTuesdays}
+                  className="w-full"
+                />
+                {allowedTuesdays.includes(mfgDate) ? (
+                  <span className="text-[9.5px] text-emerald-600 font-bold mt-0.5 block flex items-center gap-1">
+                    ✓ Special Tuesday Enabled
+                  </span>
+                ) : (
+                  <span className="text-[9.5px] text-slate-400 mt-0.5 block">Factory closed on Tuesdays</span>
+                )}
+              </div>
 
-            {/* 4. Products Selector Section with Spacious, Premium Product Tiles Grid */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4">
-              
-              {/* Live Slot Category Capacity Tracker */}
+              {/* Compact Capacity Limit Tracker if active slot categories */}
               {slotCategoryCapacities.length > 0 && (
-                <div className="p-3.5 bg-gradient-to-r from-slate-50 to-indigo-50/40 rounded-2xl border border-indigo-100/80 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                      <Layers size={14} className="text-indigo-600" />
-                      <span>Slot Category Capacity Limits ({orderSlot} • {effectiveTargetDate || 'Selected Date'})</span>
-                    </div>
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                    <span className="flex items-center gap-1">
+                      <Layers size={12} className="text-[#02626D]" />
+                      <span>Capacity</span>
+                    </span>
                     <Link
                       href="/slot-categories"
                       target="_blank"
-                      className="text-[10.5px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                      className="text-[10px] text-[#02626D] hover:underline"
                     >
-                      <span>Manage Categories</span>
+                      Manage
                     </Link>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5 no-scrollbar">
                     {slotCategoryCapacities.map((cap) => (
                       <div
                         key={cap.id}
-                        className={`p-2.5 bg-white rounded-xl border transition-all ${
+                        className={`p-2 rounded-xl border text-[10.5px] ${
                           cap.isExceeded
-                            ? 'border-rose-400 bg-rose-50/40 shadow-xs ring-1 ring-rose-300'
-                            : 'border-slate-200 shadow-2xs'
+                            ? 'border-rose-300 bg-rose-50/50 text-rose-900'
+                            : 'border-slate-200 bg-slate-50/60 text-slate-800'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-1 text-[11px]">
-                          <span
-                            className="font-bold truncate max-w-[120px]"
-                            style={{ color: cap.color }}
-                            title={cap.name}
-                          >
+                        <div className="flex items-center justify-between font-bold">
+                          <span className="truncate max-w-[90px]" style={{ color: cap.color }}>
                             {cap.name}
                           </span>
                           {cap.hasLimit ? (
-                            <span
-                              className={`text-[9.5px] font-black px-1.5 py-0.2 rounded-md ${
-                                cap.isExceeded
-                                  ? 'bg-rose-100 text-rose-800'
-                                  : cap.remainingAfterCurrent <= cap.maxLimit * 0.2
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-emerald-100 text-emerald-800'
-                              }`}
-                            >
+                            <span className={cap.isExceeded ? 'text-rose-600' : 'text-slate-600'}>
                               {cap.remainingAfterCurrent < 0
-                                ? `${Math.abs(cap.remainingAfterCurrent)} KG Excess!`
-                                : `${cap.remainingAfterCurrent} KG Left`}
+                                ? `${Math.abs(cap.remainingAfterCurrent)}KG Over!`
+                                : `${cap.remainingAfterCurrent}KG Left`}
                             </span>
                           ) : (
-                            <span className="text-[10px] text-slate-400 font-medium">No Limit</span>
+                            <span className="text-slate-400 text-[10px]">No Limit</span>
                           )}
                         </div>
-
                         {cap.hasLimit && (
-                          <div className="space-y-1 mt-1.5">
-                            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all duration-300 ${
-                                  cap.isExceeded
-                                    ? 'bg-rose-500'
-                                    : cap.percentUsed >= 80
-                                    ? 'bg-amber-500'
-                                    : 'bg-[#02626D]'
-                                }`}
-                                style={{ width: `${Math.min(100, cap.percentUsed)}%` }}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between text-[9.5px] text-slate-400 font-medium">
-                              <span>
-                                Booked: {cap.bookedQty} KG{' '}
-                                {cap.currentOrderQty > 0 && (
-                                  <strong className="text-indigo-600 font-bold">
-                                    (+{cap.currentOrderQty})
-                                  </strong>
-                                )}
-                              </span>
-                              <span>Max: {cap.maxLimit} KG</span>
-                            </div>
+                          <div className="w-full bg-slate-200 rounded-full h-1 mt-1 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                cap.isExceeded
+                                  ? 'bg-rose-500'
+                                  : cap.percentUsed >= 80
+                                  ? 'bg-amber-500'
+                                  : 'bg-[#02626D]'
+                              }`}
+                              style={{ width: `${Math.min(100, cap.percentUsed)}%` }}
+                            />
                           </div>
                         )}
                       </div>
@@ -2471,85 +2028,86 @@ export default function CreateOrderClient() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
 
-              {/* Header & Filter Controls */}
-              <div className="space-y-3 pb-3.5 border-b border-slate-200">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* ── 2. MIDDLE COLUMN: ITEMS LIST (5 IN A ROW E-COMMERCE PRODUCT TILES) ── */}
+          <div className="lg:col-span-5 xl:col-span-7 space-y-3.5">
+            <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-3">
+              {/* Catalog Header with Search & Count */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center shrink-0">
+                    <ShoppingBag size={15} />
+                  </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
-                        4. Select Products Catalog
+                        Products Catalog
                       </h3>
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#02626D]/10 text-[#02626D]">
-                        {filteredProductTiles.length} products
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#02626D]/10 text-[#02626D]">
+                        {filteredProductTiles.length} items
                       </span>
-                      {orderItems.length > 0 && (
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          {orderItems.length} selected
-                        </span>
-                      )}
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Tap product tile to select and customize quantity, packet, and notes directly on the tile.
-                    </p>
-                  </div>
-
-                  {/* Search Input */}
-                  <div className="relative w-full sm:w-64 flex-shrink-0">
-                    <input
-                      type="text"
-                      placeholder="Search sweet name or code..."
-                      value={productGridSearch}
-                      onChange={(e) => setProductGridSearch(e.target.value)}
-                      className="w-full pl-8 pr-7 h-8.5 text-xs border border-slate-300 rounded-xl bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] font-medium"
-                    />
-                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    {productGridSearch && (
-                      <button
-                        type="button"
-                        onClick={() => setProductGridSearch('')}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      >
-                        <X size={12} />
-                      </button>
-                    )}
+                    <p className="text-[10.5px] text-slate-400">Click Add to select item for this order</p>
                   </div>
                 </div>
 
-                {/* Category Pills & Favourites Toggle */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setProductGridOnlyFavorites(!productGridOnlyFavorites)}
-                    className={`h-7.5 px-3 rounded-xl font-bold flex items-center gap-1.5 flex-shrink-0 transition-all cursor-pointer ${
-                      productGridOnlyFavorites
-                        ? 'bg-amber-500 text-white shadow-2xs'
-                        : 'bg-amber-50 text-amber-900 border border-amber-200/80 hover:bg-amber-100'
-                    }`}
-                  >
-                    <Star size={12} className={productGridOnlyFavorites ? 'fill-white text-white' : 'fill-amber-400 text-amber-500'} />
-                    <span>Favourites ({itemsMaster.filter((i) => i.isFavorite).length})</span>
-                  </button>
-
-                  {productCategories.map((cat) => (
+                {/* Search Input */}
+                <div className="relative w-full sm:w-64 flex-shrink-0">
+                  <input
+                    type="text"
+                    placeholder="Search sweet name or code..."
+                    value={productGridSearch}
+                    onChange={(e) => setProductGridSearch(e.target.value)}
+                    className="w-full pl-8 pr-7 h-8.5 text-xs border border-slate-300 rounded-xl bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] font-medium"
+                  />
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  {productGridSearch && (
                     <button
-                      key={cat}
                       type="button"
-                      onClick={() => setProductGridCategory(cat)}
-                      className={`h-7.5 px-3 rounded-xl font-bold flex-shrink-0 transition-all cursor-pointer ${
-                        productGridCategory === cat
-                          ? 'bg-[#02626D] text-white shadow-2xs'
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                      }`}
+                      onClick={() => setProductGridSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                     >
-                      {cat}
+                      <X size={12} />
                     </button>
-                  ))}
+                  )}
                 </div>
               </div>
 
-              {/* Spacious Responsive Products Grid (1 col on small phones, 2 on tablet, 3 on desktop) */}
-              <div className="p-0.5">
+              {/* Category Pills & Favourites Toggle */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+                <button
+                  type="button"
+                  onClick={() => setProductGridOnlyFavorites(!productGridOnlyFavorites)}
+                  className={`h-7 px-2.5 rounded-xl font-bold flex items-center gap-1 flex-shrink-0 transition-all cursor-pointer text-[11px] ${
+                    productGridOnlyFavorites
+                      ? 'bg-amber-500 text-white shadow-2xs'
+                      : 'bg-amber-50 text-amber-900 border border-amber-200/80 hover:bg-amber-100'
+                  }`}
+                >
+                  <Star size={11} className={productGridOnlyFavorites ? 'fill-white text-white' : 'fill-amber-400 text-amber-500'} />
+                  <span>Favourites ({itemsMaster.filter((i) => i.isFavorite).length})</span>
+                </button>
+
+                {productCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setProductGridCategory(cat)}
+                    className={`h-7 px-2.5 rounded-xl font-bold flex-shrink-0 transition-all cursor-pointer text-[11px] ${
+                      productGridCategory === cat
+                        ? 'bg-[#02626D] text-white shadow-2xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              {/* 5 ITEMS IN A ROW GRID */}
+              <div className="pt-1">
                 {filteredProductTiles.length === 0 ? (
                   <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                     <ShoppingBag size={28} className="mx-auto text-slate-300 mb-1.5" />
@@ -2558,7 +2116,7 @@ export default function CreateOrderClient() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-5 gap-2.5 sm:gap-3">
                       {paginatedProductTiles.map((prod) => {
                         const addedItem = orderItems.find((it) => it.itemId === prod.id);
 
@@ -2578,7 +2136,7 @@ export default function CreateOrderClient() {
                       })}
                     </div>
 
-                    {/* Show More / Pagination Controls (24 items per batch) */}
+                    {/* Show More / Pagination Controls */}
                     {filteredProductTiles.length > 24 && (
                       <div className="pt-3 pb-1 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
                         <p className="text-xs text-slate-500 font-medium">
@@ -2619,140 +2177,583 @@ export default function CreateOrderClient() {
                   </div>
                 )}
               </div>
-
             </div>
-
           </div>
 
-          {/* RIGHT 4/3 COLUMNS: STICKY ORDER SUMMARY & CHECKOUT PANEL */}
-          <div className="lg:col-span-4 xl:col-span-4 2xl:col-span-3 space-y-4">
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4 lg:sticky lg:top-16">
-              
-              <div className="border-b border-slate-100 pb-3">
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  Order Summary
-                </h3>
-                <p className="text-[11px] text-slate-400">Live bill calculation &amp; checkout</p>
-              </div>
+          {/* ── 3. RIGHT COLUMN: CUSTOMER, ITEMS, CUSTOMISATION, TRANSPORT, TOTAL COUNT ── */}
+          <div className="lg:col-span-4 xl:col-span-3 space-y-3.5 lg:sticky lg:top-16 max-h-[calc(100vh-5rem)] overflow-y-auto pr-0.5 no-scrollbar">
 
-              {/* Summary Header Badges */}
-              <div className="space-y-1.5 text-xs text-slate-600">
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-500">Delivery Slot:</span>
-                  <span className="font-bold text-slate-900">{orderSlot}</span>
-                </div>
-
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-500">Packaging Mode:</span>
-                  <span className={`font-bold ${isCustomisation ? 'text-amber-700' : 'text-teal-700'}`}>
-                    {isCustomisation ? 'Customised' : 'Standard'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Selected Items List with Quantity Controls */}
-              <div className="space-y-2 border-t border-b border-slate-100 py-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                    Selected Items ({orderItems.length})
-                  </span>
-                  {orderItems.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setOrderItems([])}
-                      className="text-[10px] font-bold text-red-500 hover:text-red-700 hover:underline cursor-pointer"
-                    >
-                      Clear All
-                    </button>
-                  )}
-                </div>
-
-                {orderItems.length === 0 ? (
-                  <div className="py-4 text-center text-slate-400 bg-[#f7f7f8] rounded-xl border border-dashed border-slate-200">
-                    <ShoppingBag size={20} className="mx-auto mb-1 text-slate-300" />
-                    <p className="text-[11px] font-medium">No products added</p>
-                    <p className="text-[10px] text-slate-400">Click items from catalog to add</p>
+            {/* 3.1 Customer Selection */}
+            <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-6 h-6 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center shrink-0">
+                    <UserCheck size={13} />
                   </div>
-                ) : (
-                  <div className="max-h-64 overflow-y-auto space-y-2 pr-0.5 no-scrollbar divide-y divide-slate-100">
-                    {orderItems.map((item) => (
-                      <div key={item.lineId || item.itemId} className="pt-2 first:pt-0 space-y-1">
-                        <div className="flex items-start justify-between gap-1.5">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold text-slate-900 truncate" title={item.itemName}>
-                              {item.itemName}
-                            </p>
-                            <p className="text-[10px] text-slate-500">
-                              ₹{item.unitPrice} / {item.unit}
-                            </p>
-                          </div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Customer Selection <span className="text-rose-500">*</span>
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAddCustomerModalOpen(true)}
+                  className="text-[11px] font-bold text-[#02626D] hover:underline flex items-center gap-0.5 cursor-pointer"
+                >
+                  <Plus size={12} />
+                  <span>New</span>
+                </button>
+              </div>
+
+              {selectedCustomer ? (
+                <div className="p-2.5 rounded-xl bg-teal-50/70 border border-teal-200/90 flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-[#02626D] text-white font-black text-xs flex items-center justify-center flex-shrink-0">
+                      {selectedCustomer.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1">
+                        <span className="font-extrabold text-xs text-slate-900 truncate max-w-[130px]">{selectedCustomer.name}</span>
+                        <span className="text-[8.5px] font-bold px-1.5 py-0.2 rounded bg-[#02626D] text-white uppercase">
+                          {selectedCustomer.type}
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] text-slate-600 truncate">{selectedCustomer.mobile || 'No mobile'}</p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustomer(null);
+                      setCustomerSearchTerm('');
+                    }}
+                    className="text-[10.5px] font-bold text-slate-500 hover:text-red-600 px-2 py-1 rounded-lg border border-slate-300 hover:border-red-200 bg-white transition-colors cursor-pointer flex-shrink-0"
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <div className="relative" ref={customerSearchRef}>
+                  <div className="relative">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <input
+                      id="customer-search-input"
+                      type="text"
+                      placeholder="Search customer name or mobile..."
+                      value={customerSearchTerm}
+                      onChange={(e) => {
+                        setCustomerSearchTerm(e.target.value);
+                        setIsCustomerDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsCustomerDropdownOpen(true)}
+                      className="w-full pl-8 pr-3 h-8.5 text-xs border border-slate-300 rounded-xl bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] font-medium shadow-2xs"
+                    />
+                  </div>
+
+                  {/* Customer Dropdown Results */}
+                  {isCustomerDropdownOpen && (
+                    <div className="absolute left-0 right-0 top-full mt-1.5 max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-30 divide-y divide-slate-100 no-scrollbar">
+                      {filteredCustomers.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-slate-400">
+                          No customer found.{' '}
                           <button
                             type="button"
-                            onClick={() => handleSummaryRemoveItem(item.itemId)}
-                            className="text-slate-400 hover:text-red-500 p-0.5 rounded transition-colors cursor-pointer flex-shrink-0"
-                            title="Remove item"
+                            onClick={() => setIsAddCustomerModalOpen(true)}
+                            className="text-[#02626D] font-bold underline ml-1"
                           >
-                            <Trash2 size={13} />
+                            Add New
                           </button>
                         </div>
-
-                        {/* Inline Quantity Modifier */}
-                        <div className="flex items-center justify-between gap-2 pt-0.5">
-                          <div className="flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden shadow-2xs">
-                            <button
-                              type="button"
-                              onClick={() => handleSummaryQuantityChange(item.itemId, (item.quantity || 1) - (item.unit?.toUpperCase() === 'KG' ? 0.5 : 1))}
-                              className="w-6 h-6 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors cursor-pointer"
-                              title="Decrease quantity"
-                            >
-                              <Minus size={11} />
-                            </button>
-                            <input
-                              type="number"
-                              step="any"
-                              min="0"
-                              value={item.quantity === 0 ? '' : item.quantity}
-                              onChange={(e) => handleSummaryQuantityChange(item.itemId, parseFloat(e.target.value) || 0)}
-                              className="w-12 h-6 text-center text-xs font-bold text-slate-900 bg-transparent border-x border-slate-200 focus:outline-none"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleSummaryQuantityChange(item.itemId, (item.quantity || 0) + (item.unit?.toUpperCase() === 'KG' ? 0.5 : 1))}
-                              className="w-6 h-6 flex items-center justify-center text-[#02626D] hover:bg-teal-50 active:bg-teal-100 transition-colors cursor-pointer"
-                              title="Increase quantity"
-                            >
-                              <Plus size={11} />
-                            </button>
+                      ) : (
+                        filteredCustomers.map((cust) => (
+                          <div
+                            key={cust.id}
+                            onClick={() => {
+                              setSelectedCustomer(cust);
+                              setIsCustomerDropdownOpen(false);
+                            }}
+                            className="p-2.5 hover:bg-slate-50 flex items-center justify-between cursor-pointer transition-colors"
+                          >
+                            <div>
+                              <p className="text-xs font-bold text-slate-900">{cust.name}</p>
+                              <p className="text-[10px] text-slate-400">{cust.mobile} • {cust.code}</p>
+                            </div>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                              {cust.type}
+                            </span>
                           </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
-                          <span className="text-xs font-black text-slate-900">
-                            ₹ {item.lineTotal.toFixed(2)}
-                          </span>
-                        </div>
-
-                        {/* Optional Packing note badge */}
-                        {(item.packingDescription || item.manufacturingDescription || item.hasPacket) && (
-                          <div className="flex items-center gap-1.5 text-[9.5px] text-slate-500 pt-0.5 flex-wrap">
-                            {item.hasPacket && (
-                              <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
-                                Packet (+₹5)
-                              </span>
-                            )}
-                            {item.packingDescription && (
-                              <span className="truncate max-w-[160px] italic">
-                                {item.packingDescription}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+            {/* 3.2 Selected Items (Cart) */}
+            <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-6 h-6 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center shrink-0">
+                    <ShoppingBag size={13} />
                   </div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Selected Items ({orderItems.length})
+                  </h3>
+                </div>
+                {orderItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setOrderItems([])}
+                    className="text-[10px] font-bold text-red-500 hover:text-red-700 hover:underline cursor-pointer"
+                  >
+                    Clear All
+                  </button>
                 )}
               </div>
 
+              {orderItems.length === 0 ? (
+                <div className="py-5 text-center text-slate-400 bg-[#f7f7f8] rounded-xl border border-dashed border-slate-200">
+                  <ShoppingBag size={20} className="mx-auto mb-1 text-slate-300" />
+                  <p className="text-[11px] font-medium">No products added yet</p>
+                  <p className="text-[10px] text-slate-400">Tap Add on products catalog to select</p>
+                </div>
+              ) : (
+                <div className="max-h-56 overflow-y-auto space-y-2 pr-0.5 no-scrollbar divide-y divide-slate-100">
+                  {orderItems.map((item) => (
+                    <div key={item.lineId || item.itemId} className="pt-2 first:pt-0 space-y-1">
+                      <div className="flex items-start justify-between gap-1.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-bold text-slate-900 truncate" title={item.itemName}>
+                              {item.itemName}
+                            </span>
+                            {/* Packet toggle beside item name */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleItemPacket(item.itemId)}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold border transition-all cursor-pointer shrink-0 ${
+                                item.hasPacket
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-2xs'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                              }`}
+                              title={item.hasPacket ? 'Packet packing enabled. Click to disable.' : 'Click to enable packet packing'}
+                            >
+                              <div
+                                className={`w-3 h-3 rounded-xs flex items-center justify-center border transition-colors ${
+                                  item.hasPacket ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 bg-white'
+                                }`}
+                              >
+                                {item.hasPacket && <Check size={8} strokeWidth={3} />}
+                              </div>
+                              <span>
+                                Packet{isCustomisation && numericNoOfBoxes > 0 && packetCostPerBox > 0 ? ` (+₹${numericNoOfBoxes * packetCostPerBox})` : ''}
+                              </span>
+                              <span
+                                className={`text-[8px] px-1 py-0.2 rounded font-extrabold ${
+                                  item.hasPacket ? 'bg-emerald-200/80 text-emerald-900' : 'bg-slate-200 text-slate-500'
+                                }`}
+                              >
+                                {item.hasPacket ? 'ON' : 'OFF'}
+                              </span>
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            ₹{item.unitPrice} / {item.unit}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSummaryRemoveItem(item.itemId)}
+                          className="text-slate-400 hover:text-red-500 p-0.5 rounded transition-colors cursor-pointer flex-shrink-0"
+                          title="Remove item"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+
+                      {/* Quantity Stepper + Line Total */}
+                      <div className="flex items-center justify-between gap-2 pt-0.5">
+                        <div className="flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => handleSummaryQuantityChange(item.itemId, (item.quantity || 1) - (item.unit?.toUpperCase() === 'KG' ? 0.5 : 1))}
+                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors cursor-pointer"
+                            title="Decrease quantity"
+                          >
+                            <Minus size={11} />
+                          </button>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={item.quantity === 0 ? '' : item.quantity}
+                            onChange={(e) => handleSummaryQuantityChange(item.itemId, parseFloat(e.target.value) || 0)}
+                            className="w-12 h-6 text-center text-xs font-bold text-slate-900 bg-transparent border-x border-slate-200 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSummaryQuantityChange(item.itemId, (item.quantity || 0) + (item.unit?.toUpperCase() === 'KG' ? 0.5 : 1))}
+                            className="w-6 h-6 flex items-center justify-center text-[#02626D] hover:bg-teal-50 active:bg-teal-100 transition-colors cursor-pointer"
+                            title="Increase quantity"
+                          >
+                            <Plus size={11} />
+                          </button>
+                        </div>
+
+                        <span className="text-xs font-black text-slate-900">
+                          ₹ {item.lineTotal.toFixed(2)}
+                        </span>
+                      </div>
+
+                      {item.packingDescription && (
+                        <div className="pt-0.5">
+                          <span className="text-[9.5px] text-slate-400 italic truncate block" title={item.packingDescription}>
+                            {item.packingDescription}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 3.3 Packaging & Customisation */}
+            <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-6 h-6 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                    <PackageCheck size={13} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                      Customisation
+                    </h3>
+                    <p className="text-[10px] text-slate-400">
+                      {isCustomisation ? 'Custom sweet boxes & branding' : 'Standard packaging with global rates'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Mode Switch */}
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <span className={`text-[11px] font-bold transition-colors ${
+                    isCustomisation ? 'text-[#02626D]' : 'text-slate-500'
+                  }`}>
+                    {isCustomisation ? 'Custom' : 'Standard'}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isCustomisation}
+                    onClick={() => setIsCustomisation(!isCustomisation)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer ${
+                      isCustomisation ? 'bg-[#02626D]' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
+                        isCustomisation ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </label>
+              </div>
+
+              {/* STANDARD MODE */}
+              {!isCustomisation && (
+                <div className="space-y-2.5 animate-in fade-in duration-150 text-xs">
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-800">Box Rate</span>
+                        <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-md bg-[#02626D]/10 text-[#02626D] border border-teal-200">
+                          ₹{globalSettings.globalPackingBoxPrice} / box
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">Default global box rate</p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Boxes:</label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder="0"
+                        value={noOfBoxes}
+                        onChange={(e) => setNoOfBoxes(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        className="w-16 h-7.5 px-2 border border-slate-300 rounded-lg text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D] text-center"
+                      />
+                    </div>
+                  </div>
+
+                  {numericNoOfBoxes > 0 && (
+                    <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-teal-50/50 border border-teal-200/60 text-xs">
+                      <span className="font-semibold text-teal-900">
+                        Packing ({numericNoOfBoxes} × ₹{globalSettings.globalPackingBoxPrice}):
+                      </span>
+                      <span className="font-extrabold text-[#02626D]">
+                        ₹ {pCharges.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Additional Charges (₹, Optional)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="0.00"
+                      value={additionalCharges}
+                      onChange={(e) => setAdditionalCharges(e.target.value)}
+                      className="w-full h-8 px-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* CUSTOMISED MODE */}
+              {isCustomisation && (
+                <div className="space-y-2.5 animate-in fade-in duration-150 text-xs">
+                  {/* Custom Box Model & Count */}
+                  <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/90 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-xs font-bold text-amber-950">Custom Box Model</span>
+                        <p className="text-[10px] text-amber-800 font-medium">Rate: ₹{selectedBoxPrice}/box</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <label className="text-xs font-bold text-amber-950 whitespace-nowrap">Boxes:</label>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder="0"
+                          value={noOfBoxes}
+                          onChange={(e) => setNoOfBoxes(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
+                          className="w-16 h-7.5 px-2 border border-amber-300 rounded-lg text-xs font-bold text-amber-950 bg-white focus:outline-none focus:border-amber-600 text-center"
+                        />
+                      </div>
+                    </div>
+
+                    <select
+                      value={boxType}
+                      onChange={(e) => setBoxType(e.target.value)}
+                      className="w-full h-8 px-2 border border-amber-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-amber-600"
+                    >
+                      {activeBoxes.map((b) => (
+                        <option key={b.id} value={b.name}>
+                          {b.name} (₹{b.price}/box)
+                        </option>
+                      ))}
+                    </select>
+
+                    {numericNoOfBoxes > 0 && (
+                      <div className="flex items-center justify-between text-[11px] font-bold text-amber-950 pt-1 border-t border-amber-200/60">
+                        <span>Custom Box Charges:</span>
+                        <span>₹ {boxChargesTotal.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── NEW: PACKING BOXES COUNT OPTION ── */}
+                  <div className="p-2.5 rounded-xl bg-slate-50/90 border border-slate-200 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-800">
+                        Packing Boxes Count
+                      </label>
+                      <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-teal-50 text-[#02626D] border border-teal-200">
+                        ₹{globalSettings.globalPackingBoxPrice} / box
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder="0"
+                        value={packingBoxesCount}
+                        onChange={(e) => setPackingBoxesCount(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        className="w-full h-8 px-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 bg-white focus:outline-none focus:border-[#02626D]"
+                      />
+                      {numericPackingBoxesCount > 0 && (
+                        <div className="text-right shrink-0">
+                          <span className="text-[9.5px] text-slate-400 block font-medium">Charges</span>
+                          <span className="text-xs font-black text-[#02626D]">
+                            ₹ {customPackingBoxesTotal.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      Multiplied with Global Packing Box Price from Utilities ({numericPackingBoxesCount} × ₹{globalSettings.globalPackingBoxPrice}).
+                    </p>
+                  </div>
+
+                  {/* Shrink Wrap & Branding Sticker */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Shrink Wrap</label>
+                      <select
+                        value={shrinkType}
+                        onChange={(e) => setShrinkType(e.target.value)}
+                        className="w-full h-8 px-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
+                      >
+                        <option value="None">None (₹0)</option>
+                        {activeShrinks.map((s) => (
+                          <option key={s.id} value={s.name}>
+                            {s.name} (+₹{s.price})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Branding Sticker</label>
+                      <select
+                        value={stickerType}
+                        onChange={(e) => setStickerType(e.target.value)}
+                        className="w-full h-8 px-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
+                      >
+                        <option value="None">None (₹0)</option>
+                        {activeStickers.map((st) => (
+                          <option key={st.id} value={st.name}>
+                            {st.name} (+₹{st.price})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Box Reference Image */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Box Image (Optional)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative w-10 h-10 rounded-lg bg-slate-50 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                        {boxImageUrl ? (
+                          <Image src={boxImageUrl} alt="Box Preview" fill className="object-contain p-0.5" />
+                        ) : (
+                          <Upload size={14} className="text-slate-400" />
+                        )}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleBoxImageUpload}
+                        className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-teal-50 file:text-[#02626D] hover:file:bg-teal-100 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Additional Charges */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Additional Charges (₹, Optional)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="0.00"
+                      value={additionalCharges}
+                      onChange={(e) => setAdditionalCharges(e.target.value)}
+                      className="w-full h-8 px-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#02626D]"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3.4 Transport */}
+            <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                    <Truck size={13} />
+                  </div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Transport
+                  </h3>
+                </div>
+
+                <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isTransportRequired}
+                    onChange={(e) => setIsTransportRequired(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-[#02626D] focus:ring-[#02626D] cursor-pointer"
+                  />
+                  <span>Required</span>
+                </label>
+              </div>
+
+              {isTransportRequired ? (
+                <div className="space-y-2 pt-1 animate-in fade-in duration-150 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Transport Charges (₹) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder="0.00"
+                        value={transportCharges}
+                        onChange={(e) => setTransportCharges(e.target.value)}
+                        className="w-full h-8 pl-7 pr-3 border border-slate-300 rounded-xl text-xs font-bold text-[#02626D] bg-white focus:outline-none focus:border-[#02626D]"
+                      />
+                      <IndianRupee size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>Delivery Address <span className="text-rose-500">*</span></span>
+                      {selectedCustomer?.address && deliveryAddress !== selectedCustomer.address && (
+                        <button
+                          type="button"
+                          onClick={() => setDeliveryAddress(selectedCustomer.address || '')}
+                          className="text-[10px] font-semibold text-[#02626D] hover:underline cursor-pointer"
+                        >
+                          Use Customer Address
+                        </button>
+                      )}
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Destination delivery address..."
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      className="w-full p-2 text-xs font-medium border border-slate-300 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400">Pickup order (no transport freight applied).</p>
+              )}
+            </div>
+
+            {/* 3.5 Total Count & Billing Summary */}
+            <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-3">
+              <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Total Count &amp; Bill
+                </h3>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                  {orderItems.length} {orderItems.length === 1 ? 'item' : 'items'}
+                </span>
+              </div>
+
               {/* Pricing Breakdown */}
-              <div className="space-y-2 text-xs text-slate-600">
+              <div className="space-y-1.5 text-xs text-slate-600">
                 <div className="flex justify-between py-0.5">
                   <span className="text-slate-500">Items Subtotal:</span>
                   <span className="font-bold text-slate-900">₹ {subTotal.toFixed(2)}</span>
@@ -2760,19 +2761,28 @@ export default function CreateOrderClient() {
 
                 {isCustomisation ? (
                   <>
-                    <div className="flex justify-between py-0.5 text-amber-900">
-                      <span>Box Charges ({numericNoOfBoxes} × ₹{selectedBoxPrice}):</span>
-                      <span className="font-bold">+ ₹ {boxChargesTotal.toFixed(2)}</span>
-                    </div>
+                    {boxChargesTotal > 0 && (
+                      <div className="flex justify-between py-0.5 text-amber-900">
+                        <span>Custom Boxes ({numericNoOfBoxes} × ₹{selectedBoxPrice}):</span>
+                        <span className="font-bold">+ ₹ {boxChargesTotal.toFixed(2)}</span>
+                      </div>
+                    )}
 
-                    {stickerType !== 'None' && (
+                    {customPackingBoxesTotal > 0 && (
+                      <div className="flex justify-between py-0.5 text-teal-800">
+                        <span>Packing Boxes ({numericPackingBoxesCount} × ₹{globalSettings.globalPackingBoxPrice}):</span>
+                        <span className="font-bold">+ ₹ {customPackingBoxesTotal.toFixed(2)}</span>
+                      </div>
+                    )}
+
+                    {stickerType !== 'None' && stickerChargesTotal > 0 && (
                       <div className="flex justify-between py-0.5 text-amber-900">
                         <span>Sticker ({numericNoOfBoxes} × ₹{selectedStickerPrice}):</span>
                         <span className="font-bold">+ ₹ {stickerChargesTotal.toFixed(2)}</span>
                       </div>
                     )}
 
-                    {shrinkType !== 'None' && (
+                    {shrinkType !== 'None' && shrinkChargesTotal > 0 && (
                       <div className="flex justify-between py-0.5 text-amber-900">
                         <span>Shrink Wrap ({numericNoOfBoxes} × ₹{selectedShrinkPrice}):</span>
                         <span className="font-bold">+ ₹ {shrinkChargesTotal.toFixed(2)}</span>
@@ -2819,21 +2829,23 @@ export default function CreateOrderClient() {
                 )}
 
                 {/* Discount */}
-                <div className="pt-2 border-t border-slate-100">
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Discount (₹)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    placeholder="0"
-                    value={discountAmount}
-                    onChange={(e) => setDiscountAmount(e.target.value)}
-                    className="w-full h-8 px-3 text-xs border border-slate-300 rounded-xl bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] font-bold text-slate-800"
-                  />
+                <div className="pt-1.5 border-t border-slate-100">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-bold text-slate-600 whitespace-nowrap">Discount (₹):</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="0"
+                      value={discountAmount}
+                      onChange={(e) => setDiscountAmount(e.target.value)}
+                      className="w-28 h-7 px-2 text-xs border border-slate-300 rounded-lg bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] font-bold text-slate-800 text-right"
+                    />
+                  </div>
                 </div>
 
                 {/* Grand Total */}
-                <div className="pt-3 border-t-2 border-slate-200 flex justify-between items-baseline">
+                <div className="pt-2.5 border-t-2 border-slate-200 flex justify-between items-baseline">
                   <span className="text-sm font-extrabold text-slate-900">Grand Total:</span>
                   <span className="text-xl font-black text-[#02626D]">
                     ₹ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -2842,11 +2854,10 @@ export default function CreateOrderClient() {
               </div>
 
               {/* Payment Section (Single or Split) */}
-              <div className="pt-3 border-t border-slate-100 space-y-3">
-                {/* Payment Method Type Switcher */}
+              <div className="pt-2 border-t border-slate-100 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700">Payment Collection</label>
-                  <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[11px] font-bold">
+                  <label className="text-xs font-bold text-slate-700">Payment Mode</label>
+                  <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[10.5px] font-bold">
                     <button
                       type="button"
                       onClick={() => {
@@ -2855,13 +2866,13 @@ export default function CreateOrderClient() {
                           setReceivedAmount(String(splitTotalReceived || splitPayments[0].amount));
                         }
                       }}
-                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
                         !isSplitPayment
                           ? 'bg-[#02626D] text-white shadow-2xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      Single Mode
+                      Single
                     </button>
                     <button
                       type="button"
@@ -2878,38 +2889,37 @@ export default function CreateOrderClient() {
                           ]);
                         }
                       }}
-                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${
+                      className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
                         isSplitPayment
                           ? 'bg-[#02626D] text-white shadow-2xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      <span>Split Payment</span>
-                      <span className="text-[9px] bg-amber-400 text-amber-950 px-1 py-0.2 rounded font-extrabold">NEW</span>
+                      <span>Split</span>
                     </button>
                   </div>
                 </div>
 
                 {!isSplitPayment ? (
                   /* Single Payment Mode */
-                  <div className="space-y-3 bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/80">
+                  <div className="space-y-2 bg-slate-50/80 p-2.5 rounded-xl border border-slate-200/80 text-xs">
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-[11px] font-bold text-slate-700">Received Amount (₹)</label>
-                        <div className="flex items-center gap-1 text-[10px]">
+                        <label className="text-[11px] font-bold text-slate-700">Received (₹)</label>
+                        <div className="flex items-center gap-1 text-[9.5px]">
                           <button
                             type="button"
                             onClick={() => setReceivedAmount(grandTotal > 0 ? String(grandTotal) : '')}
                             className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold hover:bg-emerald-200 cursor-pointer"
                           >
-                            100% Full
+                            Full
                           </button>
                           <button
                             type="button"
                             onClick={() => setReceivedAmount(grandTotal > 0 ? String(Math.round(grandTotal / 2)) : '')}
                             className="px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 font-bold hover:bg-sky-200 cursor-pointer"
                           >
-                            50% Half
+                            Half
                           </button>
                           <button
                             type="button"
@@ -2927,20 +2937,19 @@ export default function CreateOrderClient() {
                         placeholder="0.00"
                         value={receivedAmount}
                         onChange={(e) => setReceivedAmount(e.target.value)}
-                        className="w-full h-8.5 px-3 text-xs font-black text-slate-900 border border-slate-300 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
+                        className="w-full h-8 px-2.5 text-xs font-black text-slate-900 border border-slate-300 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
                       />
                     </div>
 
-                    {/* Payment Mode Pills */}
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Payment Method</label>
-                      <div className="grid grid-cols-4 gap-1.5">
+                      <label className="block text-[10.5px] font-bold text-slate-600 mb-1">Method</label>
+                      <div className="grid grid-cols-3 gap-1">
                         {['UPI', 'Cash', 'Card', 'Credit', 'Bank Transfer', 'Cheque'].map((mode) => (
                           <button
                             key={mode}
                             type="button"
                             onClick={() => setPaymentMode(mode)}
-                            className={`h-7 rounded-lg text-[11px] font-bold transition-all cursor-pointer truncate px-1 ${
+                            className={`h-6.5 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer truncate px-1 ${
                               paymentMode === mode
                                 ? 'bg-[#02626D] text-white shadow-2xs'
                                 : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
@@ -2954,13 +2963,13 @@ export default function CreateOrderClient() {
                   </div>
                 ) : (
                   /* Split Payment Mode */
-                  <div className="space-y-2.5 bg-[#f0f9fa] p-2.5 rounded-xl border border-[#b2e3e8]">
+                  <div className="space-y-2 bg-[#f0f9fa] p-2.5 rounded-xl border border-[#b2e3e8] text-xs">
                     <div className="flex items-center justify-between text-[11px] font-bold text-[#02626D]">
-                      <span>Split Payment Splits</span>
+                      <span>Splits</span>
                       <span>Total: ₹ {splitTotalReceived.toFixed(2)}</span>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {splitPayments.map((split, index) => {
                         const currentSplitsTotalExceptThis = splitPayments.reduce(
                           (sum, s, i) => (i === index ? sum : sum + (parseFloat(String(s.amount)) || 0)),
@@ -2971,10 +2980,9 @@ export default function CreateOrderClient() {
                         return (
                           <div
                             key={split.id || index}
-                            className="bg-white p-2 rounded-lg border border-slate-200 shadow-2xs space-y-1.5"
+                            className="bg-white p-2 rounded-lg border border-slate-200 shadow-2xs space-y-1"
                           >
                             <div className="flex items-center gap-1.5">
-                              {/* Method Select */}
                               <select
                                 value={split.mode}
                                 onChange={(e) => {
@@ -2983,7 +2991,7 @@ export default function CreateOrderClient() {
                                     prev.map((s, i) => (i === index ? { ...s, mode: newMode } : s))
                                   );
                                 }}
-                                className="h-7.5 px-2 text-[11px] font-bold text-slate-800 border border-slate-300 rounded-lg bg-slate-50 focus:outline-none focus:border-[#02626D]"
+                                className="h-7 px-1.5 text-[10.5px] font-bold text-slate-800 border border-slate-300 rounded-lg bg-slate-50 focus:outline-none focus:border-[#02626D]"
                               >
                                 <option value="UPI">UPI</option>
                                 <option value="Cash">Cash</option>
@@ -2993,29 +3001,24 @@ export default function CreateOrderClient() {
                                 <option value="Credit">Credit</option>
                               </select>
 
-                              {/* Amount Input */}
-                              <div className="relative flex-1">
-                                <input
-                                  type="number"
-                                  step="any"
-                                  min="0"
-                                  placeholder="0.00"
-                                  value={split.amount}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setSplitPayments((prev) =>
-                                      prev.map((s, i) => (i === index ? { ...s, amount: val } : s))
-                                    );
-                                  }}
-                                  className="w-full h-7.5 pl-2 pr-2 text-xs font-black text-slate-900 border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-[#02626D]"
-                                />
-                              </div>
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                placeholder="0.00"
+                                value={split.amount}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setSplitPayments((prev) =>
+                                    prev.map((s, i) => (i === index ? { ...s, amount: val } : s))
+                                  );
+                                }}
+                                className="flex-1 h-7 px-2 text-xs font-black text-slate-900 border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-[#02626D]"
+                              />
 
-                              {/* Quick Fill Balance */}
                               {remainingToFill > 0 && (
                                 <button
                                   type="button"
-                                  title={`Fill remaining ₹${remainingToFill.toFixed(2)}`}
                                   onClick={() => {
                                     setSplitPayments((prev) =>
                                       prev.map((s, i) =>
@@ -3023,45 +3026,29 @@ export default function CreateOrderClient() {
                                       )
                                     );
                                   }}
-                                  className="h-7.5 px-1.5 text-[10px] font-bold bg-teal-50 text-[#02626D] hover:bg-teal-100 border border-teal-200 rounded-lg cursor-pointer shrink-0"
+                                  className="h-7 px-1.5 text-[9.5px] font-bold bg-teal-50 text-[#02626D] hover:bg-teal-100 border border-teal-200 rounded-lg cursor-pointer shrink-0"
                                 >
                                   Fill Bal
                                 </button>
                               )}
 
-                              {/* Remove Button */}
                               {splitPayments.length > 1 && (
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setSplitPayments((prev) => prev.filter((_, i) => i !== index));
                                   }}
-                                  className="h-7.5 w-7 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer shrink-0"
+                                  className="h-7 w-6 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer shrink-0"
                                 >
-                                  <Trash2 size={13} />
+                                  <Trash2 size={12} />
                                 </button>
                               )}
                             </div>
-
-                            {/* Note Input */}
-                            <input
-                              type="text"
-                              placeholder="Note / Ref # / Transaction ID (optional)"
-                              value={split.note || ''}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setSplitPayments((prev) =>
-                                  prev.map((s, i) => (i === index ? { ...s, note: val } : s))
-                                );
-                              }}
-                              className="w-full h-6 px-2 text-[10px] text-slate-600 border border-slate-200 rounded-md bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#02626D]"
-                            />
                           </div>
                         );
                       })}
                     </div>
 
-                    {/* Add Split Row Button */}
                     <button
                       type="button"
                       onClick={() => {
@@ -3076,17 +3063,17 @@ export default function CreateOrderClient() {
                           },
                         ]);
                       }}
-                      className="w-full h-7 rounded-lg border border-dashed border-[#02626D]/40 hover:border-[#02626D] bg-white text-[#02626D] text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-all hover:bg-teal-50"
+                      className="w-full h-6.5 rounded-lg border border-dashed border-[#02626D]/40 hover:border-[#02626D] bg-white text-[#02626D] text-[10.5px] font-bold flex items-center justify-center gap-1 cursor-pointer"
                     >
-                      <Plus size={12} />
-                      <span>Add Another Payment Method</span>
+                      <Plus size={11} />
+                      <span>Add Method</span>
                     </button>
                   </div>
                 )}
 
-                {/* Live Payment Status & Due Summary */}
+                {/* Payment Status & Balance Due */}
                 <div
-                  className={`p-2.5 rounded-xl border flex flex-col gap-1 transition-all ${
+                  className={`p-2 rounded-xl border flex flex-col gap-0.5 text-xs ${
                     paymentStatus === 'Completed'
                       ? 'bg-emerald-50 text-emerald-950 border-emerald-200'
                       : paymentStatus === 'Partial'
@@ -3094,10 +3081,10 @@ export default function CreateOrderClient() {
                       : 'bg-slate-100 text-slate-800 border-slate-200'
                   }`}
                 >
-                  <div className="flex items-center justify-between text-xs font-bold">
-                    <span className="flex items-center gap-1.5">
+                  <div className="flex items-center justify-between font-bold">
+                    <span className="flex items-center gap-1">
                       <span
-                        className={`w-2 h-2 rounded-full ${
+                        className={`w-1.5 h-1.5 rounded-full ${
                           paymentStatus === 'Completed'
                             ? 'bg-emerald-500'
                             : paymentStatus === 'Partial'
@@ -3105,33 +3092,27 @@ export default function CreateOrderClient() {
                             : 'bg-slate-400'
                         }`}
                       />
-                      <span>Payment Status:</span>
+                      <span>Status:</span>
                     </span>
-                    <span className="uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded text-[10px] bg-white/80 border border-current/20">
+                    <span className="uppercase tracking-wider font-extrabold text-[9.5px]">
                       {paymentStatus}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-current/10 font-semibold">
+                  <div className="flex items-center justify-between text-[10.5px] pt-1 border-t border-current/10 font-semibold">
+                    <span>Received: <strong>₹ {effectiveReceivedAmount.toFixed(2)}</strong></span>
                     <span>
-                      Received: <strong className="font-extrabold">₹ {effectiveReceivedAmount.toFixed(2)}</strong>
-                    </span>
-                    <span>
-                      Remaining Due:{' '}
-                      <strong
-                        className={`font-extrabold ${
-                          grandTotal - effectiveReceivedAmount > 0 ? 'text-rose-600' : 'text-emerald-700'
-                        }`}
-                      >
+                      Due:{' '}
+                      <strong className={grandTotal - effectiveReceivedAmount > 0 ? 'text-rose-600 font-extrabold' : 'text-emerald-700'}>
                         ₹ {Math.max(0, grandTotal - effectiveReceivedAmount).toFixed(2)}
                       </strong>
                     </span>
                   </div>
                 </div>
 
-                {/* Order Status Select */}
+                {/* Order Status */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600 mb-1">
                     {isEditMode ? 'Order Status' : 'Initial Order Status'}
                   </label>
                   <select
@@ -3153,20 +3134,20 @@ export default function CreateOrderClient() {
                 </div>
 
                 {/* Submit Action Buttons */}
-                <div className="pt-2 space-y-2">
+                <div className="pt-1.5 space-y-1.5">
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full h-10 rounded-xl bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                    className="w-full h-9.5 rounded-xl bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
                   >
                     {isSubmitting ? (
                       <>
-                        <Loader2 size={15} className="animate-spin" />
+                        <Loader2 size={14} className="animate-spin" />
                         <span>{isEditMode ? 'Updating Order...' : 'Creating Order...'}</span>
                       </>
                     ) : (
                       <>
-                        <Check size={15} />
+                        <Check size={14} />
                         <span>{isEditMode ? 'Update Order' : 'Create Order'}</span>
                       </>
                     )}
@@ -3174,14 +3155,14 @@ export default function CreateOrderClient() {
 
                   <Link
                     href={isEditMode ? `/orders/${editId}` : '/orders'}
-                    className="w-full h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors flex items-center justify-center cursor-pointer"
+                    className="w-full h-8.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors flex items-center justify-center cursor-pointer"
                   >
                     Cancel
                   </Link>
                 </div>
               </div>
-
             </div>
+
           </div>
 
         </form>

@@ -45,7 +45,21 @@ export default function CustomDatePicker({
   size = 'md',
 }: CustomDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpwards, setOpenUpwards] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      if (spaceBelow < 360 && spaceAbove > spaceBelow) {
+        setOpenUpwards(true);
+      } else {
+        setOpenUpwards(false);
+      }
+    }
+  }, [isOpen]);
 
   // Fallback to real-time hook if allowedTuesdays is not explicitly passed
   const { allowedDates: hookAllowedDates } = useAllowedTuesdays();
@@ -249,7 +263,11 @@ export default function CustomDatePicker({
 
       {/* Floating Custom Calendar Popover */}
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1.5 w-72 bg-white border border-slate-200/90 rounded-2xl shadow-xl z-50 p-4 animate-in fade-in zoom-in-95 duration-100 font-sans">
+        <div
+          className={`absolute left-0 ${
+            openUpwards ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+          } w-72 bg-white border border-slate-200/90 rounded-2xl shadow-2xl z-[100] p-4 animate-in fade-in zoom-in-95 duration-100 font-sans`}
+        >
           
           {/* Calendar Header (Month/Year & Prev/Next Nav) */}
           <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">

@@ -1771,7 +1771,7 @@ export default function CreateOrderClient() {
         <form noValidate onSubmit={handleCreateOrderSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 lg:gap-4.5 items-start">
           
           {/* ── 1. LEFT COLUMN: TIME SLOTS, DELIVERY DATE & TIME, MANUFACTURING DATE ── */}
-          <div className="lg:col-span-3 xl:col-span-2 space-y-3.5 lg:sticky lg:top-16">
+          <div className="lg:col-span-3 xl:col-span-2 space-y-3.5 lg:sticky lg:top-16 relative z-20">
             <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-3.5">
               {/* Header */}
               <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
@@ -1783,39 +1783,6 @@ export default function CreateOrderClient() {
                     Schedule &amp; Slots
                   </h3>
                   <p className="text-[10px] text-slate-400">Timings &amp; batch dates</p>
-                </div>
-              </div>
-
-              {/* Delivery Slots */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                  <span>Delivery Slot</span>
-                  <span className="text-[9.5px] font-mono font-bold text-[#02626D] bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
-                    Selected
-                  </span>
-                </label>
-                <div className="space-y-1.5">
-                  {ALL_SLOTS.map((slot) => {
-                    const isSelected = orderSlot === slot;
-                    return (
-                      <button
-                        key={slot}
-                        type="button"
-                        onClick={() => handleSelectSlot(slot)}
-                        className={`w-full h-8.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer select-none ${
-                          isSelected
-                            ? 'bg-[#02626D] text-white shadow-xs ring-2 ring-[#02626D]/30'
-                            : 'bg-[#f7f7f8] hover:bg-slate-100 text-slate-700 border border-slate-200/80'
-                        }`}
-                      >
-                        <span className="flex items-center gap-1.5 truncate">
-                          <Clock size={12} className={isSelected ? 'text-white' : 'text-slate-400'} />
-                          <span className="truncate text-[11.5px]">{slot}</span>
-                        </span>
-                        {isSelected && <Check size={12} className="text-white shrink-0" />}
-                      </button>
-                    );
-                  })}
                 </div>
               </div>
 
@@ -1880,6 +1847,39 @@ export default function CreateOrderClient() {
                 ) : (
                   <span className="text-[9.5px] text-slate-400 mt-0.5 block">Factory closed on Tuesdays</span>
                 )}
+              </div>
+
+              {/* Delivery Slots */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>Delivery Slot</span>
+                  <span className="text-[9.5px] font-mono font-bold text-[#02626D] bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                    Selected
+                  </span>
+                </label>
+                <div className="space-y-1.5">
+                  {ALL_SLOTS.map((slot) => {
+                    const isSelected = orderSlot === slot;
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() => handleSelectSlot(slot)}
+                        className={`w-full h-8.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer select-none ${
+                          isSelected
+                            ? 'bg-[#02626D] text-white shadow-xs ring-2 ring-[#02626D]/30'
+                            : 'bg-[#f7f7f8] hover:bg-slate-100 text-slate-700 border border-slate-200/80'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5 truncate">
+                          <Clock size={12} className={isSelected ? 'text-white' : 'text-slate-400'} />
+                          <span className="truncate text-[11.5px]">{slot}</span>
+                        </span>
+                        {isSelected && <Check size={12} className="text-white shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Compact Capacity Limit Tracker if active slot categories */}

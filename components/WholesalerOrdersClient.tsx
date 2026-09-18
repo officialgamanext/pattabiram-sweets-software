@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Users,
   Plus,
@@ -27,6 +28,9 @@ import {
   Pencil,
   Trash2,
   AlertTriangle,
+  ShoppingBag,
+  Minus,
+  Sparkles,
 } from 'lucide-react';
 import Pagination from '@/components/Pagination';
 import CustomDatePicker from '@/components/CustomDatePicker';
@@ -71,6 +75,9 @@ export interface WholesalerOrderLineItem {
   itemId: string;
   name: string;
   itemName?: string;
+  code?: string;
+  category?: string;
+  imageUrl?: string;
   unit: string;
   standardPrice: number;
   assignedPrice: number;
@@ -125,6 +132,9 @@ export default function WholesalerOrdersClient() {
   const [selectedWholesaler, setSelectedWholesaler] = useState<WholesalerItem | null>(null);
   const [orderItems, setOrderItems] = useState<WholesalerOrderLineItem[]>([]);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [addSearchQuery, setAddSearchQuery] = useState('');
+  const [addCategoryFilter, setAddCategoryFilter] = useState('All');
+  const [addShowOnlySelected, setAddShowOnlySelected] = useState(false);
 
   // View Order Modal State
   const [viewingOrder, setViewingOrder] = useState<WholesalerOrderRecord | null>(null);
@@ -135,6 +145,9 @@ export default function WholesalerOrdersClient() {
   const [editWholesaler, setEditWholesaler] = useState<WholesalerItem | null>(null);
   const [editOrderItems, setEditOrderItems] = useState<WholesalerOrderLineItem[]>([]);
   const [isUpdatingOrder, setIsUpdatingOrder] = useState(false);
+  const [editSearchQuery, setEditSearchQuery] = useState('');
+  const [editCategoryFilter, setEditCategoryFilter] = useState('All');
+  const [editShowOnlySelected, setEditShowOnlySelected] = useState(false);
 
   // Delete Order State
   const [deletingOrder, setDeletingOrder] = useState<WholesalerOrderRecord | null>(null);
@@ -263,6 +276,9 @@ export default function WholesalerOrdersClient() {
           itemId: item.id,
           name: item.name,
           itemName: item.name,
+          code: item.code,
+          category: item.category,
+          imageUrl: item.imageUrl,
           unit: item.unit,
           standardPrice: item.price,
           assignedPrice: customRate,
@@ -284,11 +300,11 @@ export default function WholesalerOrdersClient() {
     setOrderItems((prev) =>
       prev.map((line) => {
         if (line.itemId === itemId) {
-          const newQty = Math.max(0, qty);
+          const newQty = Math.max(0, Math.round(qty * 100) / 100);
           return {
             ...line,
             quantity: newQty,
-            totalAmount: Math.round(line.assignedPrice * newQty),
+            totalAmount: Math.round(line.assignedPrice * newQty * 100) / 100,
           };
         }
         return line;
@@ -311,9 +327,46 @@ export default function WholesalerOrdersClient() {
     );
   };
 
+  // All distinct item categories
+  const allCategories = useMemo(() => {
+    const cats = new Set<string>();
+    items.forEach((it) => {
+      if (it.category) cats.add(it.category);
+    });
+    return ['All', ...Array.from(cats)];
+  }, [items]);
+
+  // Filtered Add Items based on Search & Category
+  const filteredAddItems = useMemo(() => {
+    return orderItems.filter((item) => {
+      if (addShowOnlySelected && (!item.quantity || item.quantity <= 0)) {
+        return false;
+      }
+      if (addCategoryFilter !== 'All' && item.category !== addCategoryFilter) {
+        return false;
+      }
+      if (addSearchQuery.trim()) {
+        const q = addSearchQuery.toLowerCase().trim();
+        const matchName = item.name?.toLowerCase().includes(q);
+        const matchCode = item.code?.toLowerCase().includes(q);
+        const matchCat = item.category?.toLowerCase().includes(q);
+        if (!matchName && !matchCode && !matchCat) return false;
+      }
+      return true;
+    });
+  }, [orderItems, addShowOnlySelected, addCategoryFilter, addSearchQuery]);
+
+  const addSelectedLines = useMemo(() => {
+    return orderItems.filter((it) => (it.quantity || 0) > 0);
+  }, [orderItems]);
+
+  const addTotalWeight = useMemo(() => {
+    return Math.round(addSelectedLines.reduce((acc, it) => acc + (it.quantity || 0), 0) * 100) / 100;
+  }, [addSelectedLines]);
+
   // Modal Order Summary Calculation
   const modalSubtotal = useMemo(() => {
-    return orderItems.reduce((sum, item) => sum + item.totalAmount, 0);
+    return Math.round(orderItems.reduce((sum, item) => sum + item.totalAmount, 0) * 100) / 100;
   }, [orderItems]);
 
   const modalTax = 0; // Prices are inclusive of GST
@@ -547,11 +600,14 @@ export default function WholesalerOrdersClient() {
         itemId: item.id,
         name: item.name,
         itemName: item.name,
+        code: item.code,
+        category: item.category,
+        imageUrl: item.imageUrl,
         unit: item.unit,
         standardPrice: item.price,
         assignedPrice: customRate,
         quantity: qty,
-        totalAmount: Math.round(customRate * qty),
+        totalAmount: Math.round(customRate * qty * 100) / 100,
         needsManufacturing: needsMfg,
         mfgStatus: existing?.mfgStatus || (needsMfg ? 'Pending' : 'Not Required'),
         pckStatus: existing?.pckStatus || 'Pending',
@@ -559,6 +615,9 @@ export default function WholesalerOrdersClient() {
     });
 
     setEditOrderItems(lines);
+    setEditSearchQuery('');
+    setEditCategoryFilter('All');
+    setEditShowOnlySelected(false);
   };
 
   // Quantity Change Handler in Edit Modal
@@ -566,11 +625,11 @@ export default function WholesalerOrdersClient() {
     setEditOrderItems((prev) =>
       prev.map((line) => {
         if (line.itemId === itemId) {
-          const newQty = Math.max(0, qty);
+          const newQty = Math.max(0, Math.round(qty * 100) / 100);
           return {
             ...line,
             quantity: newQty,
-            totalAmount: Math.round(line.assignedPrice * newQty),
+            totalAmount: Math.round(line.assignedPrice * newQty * 100) / 100,
           };
         }
         return line;
@@ -592,6 +651,34 @@ export default function WholesalerOrdersClient() {
       })
     );
   };
+
+  // Filtered Edit Items based on Search & Category
+  const filteredEditItems = useMemo(() => {
+    return editOrderItems.filter((item) => {
+      if (editShowOnlySelected && (!item.quantity || item.quantity <= 0)) {
+        return false;
+      }
+      if (editCategoryFilter !== 'All' && item.category !== editCategoryFilter) {
+        return false;
+      }
+      if (editSearchQuery.trim()) {
+        const q = editSearchQuery.toLowerCase().trim();
+        const matchName = item.name?.toLowerCase().includes(q);
+        const matchCode = item.code?.toLowerCase().includes(q);
+        const matchCat = item.category?.toLowerCase().includes(q);
+        if (!matchName && !matchCode && !matchCat) return false;
+      }
+      return true;
+    });
+  }, [editOrderItems, editShowOnlySelected, editCategoryFilter, editSearchQuery]);
+
+  const editSelectedLines = useMemo(() => {
+    return editOrderItems.filter((it) => (it.quantity || 0) > 0);
+  }, [editOrderItems]);
+
+  const editTotalWeight = useMemo(() => {
+    return Math.round(editSelectedLines.reduce((acc, it) => acc + (it.quantity || 0), 0) * 100) / 100;
+  }, [editSelectedLines]);
 
   // Save Edit Order
   const handleSaveEditOrder = async (e: React.FormEvent) => {
@@ -894,173 +981,487 @@ export default function WholesalerOrdersClient() {
         />
       </div>
 
-      {/* ── MODAL: Create New Wholesaler B2B Order ────────────────────────────── */}
+      {/* ── MODAL: Create New Wholesaler B2B Order (Full Screen) ─────────────── */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
-                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Users size={18} className="text-indigo-600" />
-                  Create Wholesaler B2B Order
-                </h3>
-                <button
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
+        <div className="fixed inset-0 z-50 bg-[#f8fafc] flex flex-col overflow-hidden animate-in fade-in duration-150 font-sans">
+          <div className="w-full h-full flex flex-col overflow-hidden">
+            
+            {/* Header */}
+            <div className="bg-white border-b border-slate-200/80 px-4 sm:px-6 py-3.5 flex items-center justify-between shrink-0 shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 text-[#02626D] flex items-center justify-center border border-teal-100 shadow-2xs shrink-0">
+                  <Building2 size={18} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                      Create Wholesaler B2B Order
+                    </h3>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#02626D] bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-full">
+                      B2B Portal
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {selectedWholesaler
+                      ? `Ordering for: ${selectedWholesaler.name || selectedWholesaler.businessName} • Price List: ${selectedWholesaler.priceListName || 'Standard Rates'}`
+                      : 'Select a wholesaler to apply assigned custom price lists and configure manufacturing dispatch.'}
+                  </p>
+                </div>
               </div>
 
-              {/* 1. Wholesaler Selection & Order Date */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <div className="sm:col-span-2 space-y-2">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Select Wholesaler <span className="text-rose-500">*</span>:
-                  </label>
-                  <select
-                    value={selectedWholesaler?.id || ''}
-                    onChange={(e) => handleSelectWholesaler(e.target.value)}
-                    className="w-full h-9 px-3 bg-white text-xs rounded-lg border border-slate-300 text-slate-800 font-semibold focus:outline-none focus:border-indigo-600"
-                  >
-                    <option value="">-- Choose Wholesaler --</option>
-                    {wholesalers.map((ws) => {
-                      const phone =
-                        ws.personalMobile || ws.businessMobile || ws.mobile || '';
-                      const title = ws.name || ws.businessName || 'Wholesaler';
-                      return (
-                        <option key={ws.id} value={ws.id}>
-                          {title} {phone ? `(${phone})` : ''} {ws.priceListName ? `— Assigned: ${ws.priceListName}` : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddModalOpen(false);
+                  setSelectedWholesaler(null);
+                  setOrderItems([]);
+                  setAddSearchQuery('');
+                  setAddCategoryFilter('All');
+                  setAddShowOnlySelected(false);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
+            {/* Modal Body - 2 Columns */}
+            <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-0">
+              
+              {/* Left Column: Wholesaler & Date + Item Catalog with Search */}
+              <div className="lg:col-span-8 overflow-y-auto p-3 sm:p-4 space-y-3.5 border-b lg:border-b-0 lg:border-r border-slate-200/90 no-scrollbar">
+                
+                {/* 1. Wholesaler Selection & Order Date Card */}
+                <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-3">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <div className="flex-1">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Select Wholesaler <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={selectedWholesaler?.id || ''}
+                        onChange={(e) => handleSelectWholesaler(e.target.value)}
+                        className="w-full h-10 px-3 bg-white text-xs font-semibold rounded-xl border border-slate-300 text-slate-800 focus:outline-none focus:border-[#02626D] focus:ring-2 focus:ring-[#02626D]/15 cursor-pointer shadow-2xs"
+                      >
+                        <option value="">-- Choose Registered Wholesaler --</option>
+                        {wholesalers.map((ws) => {
+                          const phone = ws.personalMobile || ws.businessMobile || ws.mobile || '';
+                          const title = ws.name || ws.businessName || 'Wholesaler';
+                          return (
+                            <option key={ws.id} value={ws.id}>
+                              {title} {phone ? `(${phone})` : ''} {ws.priceListName ? `— [${ws.priceListName}]` : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div className="w-full sm:w-48 shrink-0">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Order Date <span className="text-rose-500">*</span>
+                      </label>
+                      <CustomDatePicker
+                        value={orderDate}
+                        onChange={setOrderDate}
+                        allowAll={false}
+                        size="sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Wholesaler Details Card when selected */}
                   {selectedWholesaler && (
-                    <div className="flex items-center justify-between text-xs pt-1 text-slate-600">
-                      <span>Assigned Price List:</span>
-                      <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                        {selectedWholesaler.priceListName || 'Standard Rates'}
-                      </span>
+                    <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-teal-50/70 border border-teal-100 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-[#02626D]/15 text-[#02626D] flex items-center justify-center shrink-0">
+                          <Building2 size={14} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-900 truncate">
+                            {selectedWholesaler.name || selectedWholesaler.businessName}
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-mono">
+                            {selectedWholesaler.personalMobile || selectedWholesaler.businessMobile || selectedWholesaler.mobile || 'No Contact Number'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] text-slate-500 font-semibold">Assigned Price List:</span>
+                        <span className="font-bold text-[11px] text-[#02626D] bg-white px-2 py-0.5 rounded-md border border-teal-200 shadow-2xs">
+                          {selectedWholesaler.priceListName || 'Standard Rates'}
+                        </span>
+                      </div>
                     </div>
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-2">
-                    Order Date <span className="text-rose-500">*</span>:
-                  </label>
-                  <CustomDatePicker
-                    value={orderDate}
-                    onChange={setOrderDate}
-                    allowAll={false}
-                    size="sm"
-                  />
-                </div>
+                {/* 2. Product Items Catalog with Search Bar */}
+                {selectedWholesaler ? (
+                  <div className="space-y-3">
+                    {/* Search & Category Filter Toolbar */}
+                    <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs space-y-2.5">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                        {/* Search Input */}
+                        <div className="relative flex-1">
+                          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Search products by name, code, or category..."
+                            value={addSearchQuery}
+                            onChange={(e) => setAddSearchQuery(e.target.value)}
+                            className="w-full h-9 pl-9 pr-8 text-xs text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#02626D] focus:ring-2 focus:ring-[#02626D]/15 placeholder:text-slate-400 transition-all shadow-2xs"
+                          />
+                          {addSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setAddSearchQuery('')}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                            >
+                              <X size={13} />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Selected Only Pill */}
+                        <button
+                          type="button"
+                          onClick={() => setAddShowOnlySelected((prev) => !prev)}
+                          className={`h-9 px-3 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                            addShowOnlySelected
+                              ? 'bg-[#02626D] text-white border-[#02626D] shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <Check size={12} />
+                          <span>Selected Only ({addSelectedLines.length})</span>
+                        </button>
+                      </div>
+
+                      {/* Category Filter Pills */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
+                        {allCategories.map((cat) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setAddCategoryFilter(cat)}
+                            className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                              addCategoryFilter === cat
+                                ? 'bg-[#02626D] text-white shadow-2xs font-bold'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Product Cards Grid */}
+                    {filteredAddItems.length === 0 ? (
+                      <div className="py-12 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">
+                        <Package size={28} className="mx-auto mb-1.5 text-slate-300" />
+                        <p className="text-xs font-medium">No products found</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Try changing your search query or category filter</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                        {filteredAddItems.map((line) => {
+                          const isAdded = (line.quantity || 0) > 0;
+                          const isMfg = line.needsManufacturing !== false;
+                          const hasCustomPrice = line.assignedPrice !== line.standardPrice;
+
+                          return (
+                            <div
+                              key={line.itemId}
+                              className={`rounded-xl p-3 border transition-all duration-150 flex flex-col justify-between gap-2.5 ${
+                                isAdded
+                                  ? 'bg-white border-[#02626D] shadow-xs ring-1 ring-[#02626D]/20'
+                                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
+                              }`}
+                            >
+                              {/* Top Details: Image + Title + Code + Rate */}
+                              <div className="flex items-start gap-2.5">
+                                <div className="relative w-12 h-12 rounded-lg bg-slate-50 border border-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
+                                  {line.imageUrl ? (
+                                    <Image
+                                      src={line.imageUrl}
+                                      alt={line.name}
+                                      fill
+                                      className="object-contain p-1"
+                                    />
+                                  ) : (
+                                    <Package size={20} className="text-slate-400" />
+                                  )}
+                                </div>
+
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="text-xs font-bold text-slate-900 truncate" title={line.name}>
+                                    {line.name}
+                                  </h4>
+                                  <p className="text-[10px] text-slate-400 font-mono truncate mt-0.5">
+                                    {line.code || 'ITEM'} • {line.category || 'General'}
+                                  </p>
+
+                                  {/* Price Display */}
+                                  <div className="flex items-baseline gap-1.5 mt-1 flex-wrap">
+                                    <span className="text-xs font-black text-[#02626D]">
+                                      ₹{line.assignedPrice}
+                                      <span className="text-[9.5px] font-normal text-slate-400 ml-0.5">/{line.unit}</span>
+                                    </span>
+
+                                    {hasCustomPrice && (
+                                      <span className="text-[9.5px] text-slate-400 line-through">
+                                        ₹{line.standardPrice}
+                                      </span>
+                                    )}
+
+                                    {hasCustomPrice && (
+                                      <span className="text-[8.5px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1 rounded">
+                                        B2B Rate
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Bottom Controls: Mfg Toggle + Quantity Stepper */}
+                              <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                                {/* Manufacturing Toggle */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleAddMfg(line.itemId)}
+                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer shrink-0 ${
+                                    isMfg
+                                      ? 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100 shadow-2xs'
+                                      : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                                  }`}
+                                  title={isMfg ? 'Will move to Manufacturing Kitchen' : 'In stock / Direct dispatch'}
+                                >
+                                  <Factory size={11} className={isMfg ? 'text-teal-700' : 'text-slate-400'} />
+                                  <span>{isMfg ? 'To Mfg' : 'In Stock'}</span>
+                                </button>
+
+                                {/* Quantity Stepper */}
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden shadow-2xs">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleQuantityChange(line.itemId, (line.quantity || 0) - (line.unit?.toUpperCase() === 'KG' ? 0.5 : 1))}
+                                      className="w-6 h-6 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors cursor-pointer"
+                                      title="Decrease"
+                                    >
+                                      <Minus size={10} />
+                                    </button>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="any"
+                                      value={line.quantity === 0 ? '' : line.quantity}
+                                      onChange={(e) => handleQuantityChange(line.itemId, parseFloat(e.target.value) || 0)}
+                                      placeholder="0"
+                                      className="w-12 h-6 text-center text-xs font-bold text-slate-900 bg-transparent border-x border-slate-200 focus:outline-none"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleQuantityChange(line.itemId, (line.quantity || 0) + (line.unit?.toUpperCase() === 'KG' ? 0.5 : 1))}
+                                      className="w-6 h-6 flex items-center justify-center text-[#02626D] hover:bg-teal-50 active:bg-teal-100 transition-colors cursor-pointer"
+                                      title="Increase"
+                                    >
+                                      <Plus size={10} />
+                                    </button>
+                                  </div>
+
+                                  <span className="text-[11px] font-black text-slate-900 min-w-[50px] text-right">
+                                    ₹{line.totalAmount.toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="py-20 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">
+                    <Building2 size={36} className="mx-auto mb-2 text-slate-300" />
+                    <h4 className="text-sm font-bold text-slate-700">Please Select a Wholesaler</h4>
+                    <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                      Choose a registered wholesaler above to automatically load their customized B2B price list rates and start building the order.
+                    </p>
+                  </div>
+                )}
               </div>
 
-              {/* 2. Product Items Table with Assigned Rates & Mfg Toggle */}
-              {selectedWholesaler ? (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-xs font-bold text-slate-700">
-                      Itemized Order Quantities &amp; Rates:
-                    </label>
-                    <span className="text-[11px] text-slate-400">
-                      Toggle <span className="font-bold text-teal-700">Mfg</span> on items to send directly to kitchen
+              {/* Right Column: Order Summary & Cart */}
+              <div className="lg:col-span-4 overflow-y-auto p-4 md:p-5 bg-white flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  {/* Summary Header */}
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center">
+                        <ShoppingBag size={13} />
+                      </div>
+                      <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                        Order Cart
+                      </h3>
+                    </div>
+                    <span className="text-[11px] font-bold text-[#02626D] bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-full">
+                      {addSelectedLines.length} Items
                     </span>
                   </div>
 
-                  <div className="max-h-[280px] overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
-                    {orderItems.map((line) => {
-                      const hasQty = (line.quantity || 0) > 0;
-                      const isMfg = line.needsManufacturing !== false;
+                  {/* Wholesaler & Date Overview */}
+                  {selectedWholesaler ? (
+                    <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-xl space-y-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 font-medium">Wholesaler:</span>
+                        <span className="font-bold text-slate-900 truncate max-w-[150px]">
+                          {selectedWholesaler.name || selectedWholesaler.businessName}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 font-medium">Order Date:</span>
+                        <span className="font-bold text-slate-700">{orderDate}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200/60">
+                        <span className="text-slate-500 font-medium">Rate List:</span>
+                        <span className="font-bold text-[#02626D]">
+                          {selectedWholesaler.priceListName || 'Standard Rates'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
 
-                      return (
-                        <div key={line.itemId} className="p-3 flex items-center justify-between gap-3 text-xs">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-slate-900 truncate">{line.name}</p>
-                            <p className="text-[11px] text-slate-500 font-mono">
-                              Assigned Rate: <span className="font-bold text-slate-800">₹{line.assignedPrice}</span> / {line.unit}
-                              {line.assignedPrice !== line.standardPrice && (
-                                <span className="text-[10px] text-indigo-600 ml-1 font-semibold">
-                                  (Custom override from standard ₹{line.standardPrice})
-                                </span>
-                              )}
-                            </p>
-                          </div>
+                  {/* Selected Items Cart List */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                      <span>Selected Products</span>
+                      <span className="text-slate-400 font-normal">
+                        {addTotalWeight} units total
+                      </span>
+                    </div>
 
-                          {/* Move to Mfg Selector Button */}
-                          <div className="flex items-center gap-2">
-                            {hasQty && (
+                    {addSelectedLines.length === 0 ? (
+                      <div className="py-8 text-center text-slate-400 bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
+                        <ShoppingBag size={20} className="mx-auto mb-1 text-slate-300" />
+                        <p className="text-[11px] font-medium">Cart is empty</p>
+                        <p className="text-[10px] text-slate-400">Add item quantities on the left</p>
+                      </div>
+                    ) : (
+                      <div className="max-h-[320px] overflow-y-auto space-y-2 pr-0.5 no-scrollbar divide-y divide-slate-100">
+                        {addSelectedLines.map((item) => (
+                          <div key={item.itemId} className="pt-2 first:pt-0 space-y-1">
+                            <div className="flex items-start justify-between gap-1.5">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-slate-900 truncate" title={item.name}>
+                                  {item.name}
+                                </p>
+                                <p className="text-[10px] text-slate-500">
+                                  ₹{item.assignedPrice} / {item.unit}
+                                </p>
+                              </div>
+
                               <button
                                 type="button"
-                                onClick={() => handleToggleAddMfg(line.itemId)}
-                                className={`h-7 px-2.5 rounded-lg text-[10px] font-bold border flex items-center gap-1 cursor-pointer transition-colors ${
-                                  isMfg
-                                    ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
-                                    : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-                                }`}
-                                title={isMfg ? 'Will move to Manufacturing' : 'In stock / Direct (Skip Mfg)'}
+                                onClick={() => handleQuantityChange(item.itemId, 0)}
+                                className="text-slate-400 hover:text-red-500 p-0.5 rounded transition-colors cursor-pointer shrink-0"
+                                title="Remove item"
                               >
-                                <Factory size={11} className={isMfg ? 'text-teal-600' : 'text-slate-400'} />
-                                <span>{isMfg ? 'To Mfg' : 'In Stock'}</span>
+                                <Trash2 size={13} />
                               </button>
-                            )}
+                            </div>
 
-                            {/* Quantity Input */}
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.5"
-                              value={line.quantity || ''}
-                              onChange={(e) => handleQuantityChange(line.itemId, parseFloat(e.target.value) || 0)}
-                              placeholder="Qty..."
-                              className="w-20 h-8 px-2 bg-[#f7f7f8] focus:bg-white text-xs font-bold font-mono rounded-lg border border-slate-300 text-center"
-                            />
-                            <span className="w-16 text-right font-mono font-bold text-slate-900">
-                              ₹{line.totalAmount}
-                            </span>
+                            <div className="flex items-center justify-between pt-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded border ${
+                                  item.needsManufacturing !== false
+                                    ? 'bg-teal-50 text-teal-800 border-teal-200'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                                }`}>
+                                  {item.needsManufacturing !== false ? 'To Mfg' : 'In Stock'}
+                                </span>
+
+                                <span className="text-xs font-bold text-slate-800">
+                                  {item.quantity} {item.unit}
+                                </span>
+                              </div>
+
+                              <span className="text-xs font-black text-slate-900">
+                                ₹{item.totalAmount.toFixed(2)}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
-              ) : (
-                <div className="p-12 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-xl">
-                  Please select a Wholesaler to load their assigned custom Price List rates.
+
+                {/* Bottom Section: Order Totals & Submit */}
+                <div className="space-y-3 pt-3 border-t border-slate-100">
+                  <div className="space-y-1.5 text-xs font-semibold">
+                    <div className="flex justify-between text-slate-500">
+                      <span>Total Selected Lines:</span>
+                      <span className="font-bold text-slate-800">{addSelectedLines.length}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Total Order Units:</span>
+                      <span className="font-bold text-slate-800">{addTotalWeight}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500 text-[11px]">
+                      <span>GST:</span>
+                      <span className="text-slate-400">Included in prices</span>
+                    </div>
+                    <div className="flex items-baseline justify-between pt-2 border-t border-slate-200">
+                      <span className="text-sm font-bold text-slate-900">Grand Total:</span>
+                      <span className="text-xl font-black text-[#02626D]">
+                        ₹ {modalTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleSaveOrder}
+                      disabled={isSavingOrder || !selectedWholesaler || addSelectedLines.length === 0}
+                      className="w-full h-10 rounded-xl bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                    >
+                      {isSavingOrder ? (
+                        <>
+                          <Loader2 size={15} className="animate-spin" />
+                          <span>Saving B2B Order...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={15} />
+                          <span>Save &amp; Place B2B Order</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddModalOpen(false);
+                        setSelectedWholesaler(null);
+                        setOrderItems([]);
+                        setAddSearchQuery('');
+                        setAddCategoryFilter('All');
+                        setAddShowOnlySelected(false);
+                      }}
+                      className="w-full h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors flex items-center justify-center cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-              )}
-            </div>
 
-            {/* Modal Footer with Order Totals & Submit */}
-            <div className="border-t border-slate-200 pt-3 flex items-center justify-between gap-3">
-              <div className="text-xs font-mono">
-                <span className="text-slate-500">Subtotal: ₹{modalSubtotal} (GST Inclusive) | </span>
-                <span className="text-sm font-bold text-slate-900">Total: ₹{modalTotal}</span>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="h-8 px-3 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSaveOrder}
-                  disabled={isSavingOrder || !selectedWholesaler}
-                  className="h-8 px-4 text-xs font-semibold rounded-lg bg-[#02626D] hover:bg-[#014d56] disabled:bg-slate-300 text-white shadow-2xs cursor-pointer flex items-center gap-1.5"
-                >
-                  {isSavingOrder ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                  <span>Save B2B Order</span>
-                </button>
-              </div>
             </div>
+
           </div>
         </div>
       )}
@@ -1281,153 +1682,428 @@ export default function WholesalerOrdersClient() {
         </div>
       )}
 
-      {/* ── MODAL: Edit Wholesaler B2B Order ──────────────────────────────────── */}
+      {/* ── MODAL: Edit Wholesaler B2B Order (Full Screen) ─────────────────── */}
       {editingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <Pencil size={18} />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-slate-900">
+        <div className="fixed inset-0 z-50 bg-[#f8fafc] flex flex-col overflow-hidden animate-in fade-in duration-150 font-sans">
+          <div className="w-full h-full flex flex-col overflow-hidden">
+            
+            {/* Header */}
+            <div className="bg-white border-b border-slate-200/80 px-4 sm:px-6 py-3.5 flex items-center justify-between shrink-0 shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 shadow-2xs shrink-0">
+                  <Pencil size={18} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900">
                       Edit Wholesaler B2B Order
                     </h3>
-                    <p className="text-xs text-slate-400 font-mono">{editingOrder.orderId}</p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setEditingOrder(null)}
-                  className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer rounded-lg hover:bg-slate-100"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Wholesaler Details & Order Date */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <div className="sm:col-span-2 space-y-1">
-                  <label className="block text-xs font-bold text-slate-700">Wholesaler:</label>
-                  <p className="text-xs font-bold text-slate-900">{editingOrder.wholesalerName}</p>
-                  <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono">
-                    <span>{editingOrder.wholesalerMobile || 'No Phone'}</span>
-                    <span>•</span>
-                    <span className="text-indigo-700 font-semibold bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100">
-                      {editingOrder.priceListName || 'Standard Rates'}
+                    <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
+                      {editingOrder.orderId}
                     </span>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-2">Order Date:</label>
-                  <CustomDatePicker
-                    value={editOrderDate}
-                    onChange={setEditOrderDate}
-                    allowAll={false}
-                    size="sm"
-                  />
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {editingOrder.wholesalerName} • Price List: {editingOrder.priceListName || 'Standard Rates'}
+                  </p>
                 </div>
               </div>
 
-              {/* Product Items Table with Assigned Rates & Mfg Toggle */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Itemized Order Quantities &amp; Rates:
-                  </label>
-                  <span className="text-[11px] text-slate-400">
-                    Toggle <span className="font-bold text-teal-700">Mfg</span> for kitchen production
-                  </span>
-                </div>
+              <button
+                type="button"
+                onClick={() => setEditingOrder(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-                <div className="max-h-[280px] overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
-                  {editOrderItems.map((line) => {
-                    const hasQty = (line.quantity || 0) > 0;
-                    const isMfg = line.needsManufacturing !== false;
-
-                    return (
-                      <div key={line.itemId} className="p-3 flex items-center justify-between gap-3 text-xs">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-900 truncate">{line.name}</p>
-                          <p className="text-[11px] text-slate-500 font-mono">
-                            Assigned Rate: <span className="font-bold text-slate-800">₹{line.assignedPrice}</span> / {line.unit}
-                            {line.assignedPrice !== line.standardPrice && (
-                              <span className="text-[10px] text-indigo-600 ml-1 font-semibold">
-                                (Custom override from standard ₹{line.standardPrice})
-                              </span>
-                            )}
-                          </p>
-                        </div>
-
-                        {/* Move to Mfg Selector Button */}
-                        <div className="flex items-center gap-2">
-                          {hasQty && (
-                            <button
-                              type="button"
-                              onClick={() => handleToggleEditMfg(line.itemId)}
-                              className={`h-7 px-2.5 rounded-lg text-[10px] font-bold border flex items-center gap-1 cursor-pointer transition-colors ${
-                                isMfg
-                                  ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
-                                  : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-                              }`}
-                              title={isMfg ? 'Will move to Manufacturing' : 'In stock / Direct (Skip Mfg)'}
-                            >
-                              <Factory size={11} className={isMfg ? 'text-teal-600' : 'text-slate-400'} />
-                              <span>{isMfg ? 'To Mfg' : 'In Stock'}</span>
-                            </button>
-                          )}
-
-                          {/* Quantity Input */}
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            value={line.quantity || ''}
-                            onChange={(e) => handleEditQuantityChange(line.itemId, parseFloat(e.target.value) || 0)}
-                            placeholder="Qty..."
-                            className="w-20 h-8 px-2 bg-[#f7f7f8] focus:bg-white text-xs font-bold font-mono rounded-lg border border-slate-300 text-center"
-                          />
-                          <span className="w-16 text-right font-mono font-bold text-slate-900">
-                            ₹{line.totalAmount}
-                          </span>
-                        </div>
+            {/* Modal Body - 2 Columns */}
+            <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-0">
+              
+              {/* Left Column: Wholesaler & Date + Item Catalog with Search */}
+              <div className="lg:col-span-8 overflow-y-auto p-3 sm:p-4 space-y-3.5 border-b lg:border-b-0 lg:border-r border-slate-200/90 no-scrollbar">
+                
+                {/* 1. Wholesaler Overview & Order Date Card */}
+                <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-3">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                    <div className="flex-1 space-y-1">
+                      <label className="block text-xs font-bold text-slate-700">Wholesaler Details:</label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-slate-900">{editingOrder.wholesalerName}</span>
+                        <span className="text-xs font-semibold text-slate-500 font-mono">
+                          ({editingOrder.wholesalerMobile || 'No Phone'})
+                        </span>
                       </div>
-                    );
-                  })}
+                      <div className="flex items-center gap-2 text-xs pt-0.5">
+                        <span className="text-slate-500 text-[11px]">Price List:</span>
+                        <span className="font-bold text-[11px] text-[#02626D] bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-md">
+                          {editingOrder.priceListName || 'Standard Rates'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="w-full sm:w-48 shrink-0">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Order Date <span className="text-rose-500">*</span>
+                      </label>
+                      <CustomDatePicker
+                        value={editOrderDate}
+                        onChange={setEditOrderDate}
+                        allowAll={false}
+                        size="sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Product Items Catalog with Search Bar */}
+                <div className="space-y-3">
+                  {/* Search & Category Filter Toolbar */}
+                  <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs space-y-2.5">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                      {/* Search Input */}
+                      <div className="relative flex-1">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search products by name, code, or category..."
+                          value={editSearchQuery}
+                          onChange={(e) => setEditSearchQuery(e.target.value)}
+                          className="w-full h-9 pl-9 pr-8 text-xs text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#02626D] focus:ring-2 focus:ring-[#02626D]/15 placeholder:text-slate-400 transition-all shadow-2xs"
+                        />
+                        {editSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setEditSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Selected Only Pill */}
+                      <button
+                        type="button"
+                        onClick={() => setEditShowOnlySelected((prev) => !prev)}
+                        className={`h-9 px-3 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                          editShowOnlySelected
+                            ? 'bg-[#02626D] text-white border-[#02626D] shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Check size={12} />
+                        <span>Selected Only ({editSelectedLines.length})</span>
+                      </button>
+                    </div>
+
+                    {/* Category Filter Pills */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
+                      {allCategories.map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setEditCategoryFilter(cat)}
+                          className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                            editCategoryFilter === cat
+                              ? 'bg-[#02626D] text-white shadow-2xs font-bold'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Product Cards Grid */}
+                  {filteredEditItems.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">
+                      <Package size={28} className="mx-auto mb-1.5 text-slate-300" />
+                      <p className="text-xs font-medium">No products found</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Try changing your search query or category filter</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                      {filteredEditItems.map((line) => {
+                        const isAdded = (line.quantity || 0) > 0;
+                        const isMfg = line.needsManufacturing !== false;
+                        const hasCustomPrice = line.assignedPrice !== line.standardPrice;
+
+                        return (
+                          <div
+                            key={line.itemId}
+                            className={`rounded-xl p-3 border transition-all duration-150 flex flex-col justify-between gap-2.5 ${
+                              isAdded
+                                ? 'bg-white border-[#02626D] shadow-xs ring-1 ring-[#02626D]/20'
+                                : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
+                            }`}
+                          >
+                            {/* Top Details: Image + Title + Code + Rate */}
+                            <div className="flex items-start gap-2.5">
+                              <div className="relative w-12 h-12 rounded-lg bg-slate-50 border border-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
+                                {line.imageUrl ? (
+                                  <Image
+                                    src={line.imageUrl}
+                                    alt={line.name}
+                                    fill
+                                    className="object-contain p-1"
+                                  />
+                                ) : (
+                                  <Package size={20} className="text-slate-400" />
+                                )}
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <h4 className="text-xs font-bold text-slate-900 truncate" title={line.name}>
+                                  {line.name}
+                                </h4>
+                                <p className="text-[10px] text-slate-400 font-mono truncate mt-0.5">
+                                  {line.code || 'ITEM'} • {line.category || 'General'}
+                                </p>
+
+                                {/* Price Display */}
+                                <div className="flex items-baseline gap-1.5 mt-1 flex-wrap">
+                                  <span className="text-xs font-black text-[#02626D]">
+                                    ₹{line.assignedPrice}
+                                    <span className="text-[9.5px] font-normal text-slate-400 ml-0.5">/{line.unit}</span>
+                                  </span>
+
+                                  {hasCustomPrice && (
+                                    <span className="text-[9.5px] text-slate-400 line-through">
+                                      ₹{line.standardPrice}
+                                    </span>
+                                  )}
+
+                                  {hasCustomPrice && (
+                                    <span className="text-[8.5px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1 rounded">
+                                      B2B Rate
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Bottom Controls: Mfg Toggle + Quantity Stepper */}
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                              {/* Manufacturing Toggle */}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleEditMfg(line.itemId)}
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer shrink-0 ${
+                                  isMfg
+                                    ? 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100 shadow-2xs'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                                }`}
+                                title={isMfg ? 'Will move to Manufacturing Kitchen' : 'In stock / Direct dispatch'}
+                              >
+                                <Factory size={11} className={isMfg ? 'text-teal-700' : 'text-slate-400'} />
+                                <span>{isMfg ? 'To Mfg' : 'In Stock'}</span>
+                              </button>
+
+                              {/* Quantity Stepper */}
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden shadow-2xs">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditQuantityChange(line.itemId, (line.quantity || 0) - (line.unit?.toUpperCase() === 'KG' ? 0.5 : 1))}
+                                    className="w-6 h-6 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors cursor-pointer"
+                                    title="Decrease"
+                                  >
+                                    <Minus size={10} />
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    value={line.quantity === 0 ? '' : line.quantity}
+                                    onChange={(e) => handleEditQuantityChange(line.itemId, parseFloat(e.target.value) || 0)}
+                                    placeholder="0"
+                                    className="w-12 h-6 text-center text-xs font-bold text-slate-900 bg-transparent border-x border-slate-200 focus:outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditQuantityChange(line.itemId, (line.quantity || 0) + (line.unit?.toUpperCase() === 'KG' ? 0.5 : 1))}
+                                    className="w-6 h-6 flex items-center justify-center text-[#02626D] hover:bg-teal-50 active:bg-teal-100 transition-colors cursor-pointer"
+                                    title="Increase"
+                                  >
+                                    <Plus size={10} />
+                                  </button>
+                                </div>
+
+                                <span className="text-[11px] font-black text-slate-900 min-w-[50px] text-right">
+                                  ₹{line.totalAmount.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
 
-            {/* Modal Footer with Order Totals & Submit */}
-            <div className="border-t border-slate-200 pt-3 flex items-center justify-between gap-3">
-              <div className="text-xs font-mono">
-                <span className="text-slate-500">Subtotal: ₹{editModalSubtotal} (GST Inclusive) | </span>
-                <span className="text-sm font-bold text-slate-900">Total: ₹{editModalTotal}</span>
+              {/* Right Column: Order Summary & Cart */}
+              <div className="lg:col-span-4 overflow-y-auto p-4 md:p-5 bg-white flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  {/* Summary Header */}
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <ShoppingBag size={13} />
+                      </div>
+                      <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                        Order Cart
+                      </h3>
+                    </div>
+                    <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
+                      {editSelectedLines.length} Items
+                    </span>
+                  </div>
+
+                  {/* Wholesaler & Date Overview */}
+                  <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-xl space-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 font-medium">Wholesaler:</span>
+                      <span className="font-bold text-slate-900 truncate max-w-[150px]">
+                        {editingOrder.wholesalerName}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500 font-medium">Order Date:</span>
+                      <span className="font-bold text-slate-700">{editOrderDate}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200/60">
+                      <span className="text-slate-500 font-medium">Rate List:</span>
+                      <span className="font-bold text-[#02626D]">
+                        {editingOrder.priceListName || 'Standard Rates'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Selected Items Cart List */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                      <span>Selected Products</span>
+                      <span className="text-slate-400 font-normal">
+                        {editTotalWeight} units total
+                      </span>
+                    </div>
+
+                    {editSelectedLines.length === 0 ? (
+                      <div className="py-8 text-center text-slate-400 bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
+                        <ShoppingBag size={20} className="mx-auto mb-1 text-slate-300" />
+                        <p className="text-[11px] font-medium">Cart is empty</p>
+                        <p className="text-[10px] text-slate-400">Add item quantities on the left</p>
+                      </div>
+                    ) : (
+                      <div className="max-h-[320px] overflow-y-auto space-y-2 pr-0.5 no-scrollbar divide-y divide-slate-100">
+                        {editSelectedLines.map((item) => (
+                          <div key={item.itemId} className="pt-2 first:pt-0 space-y-1">
+                            <div className="flex items-start justify-between gap-1.5">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-slate-900 truncate" title={item.name}>
+                                  {item.name}
+                                </p>
+                                <p className="text-[10px] text-slate-500">
+                                  ₹{item.assignedPrice} / {item.unit}
+                                </p>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleEditQuantityChange(item.itemId, 0)}
+                                className="text-slate-400 hover:text-red-500 p-0.5 rounded transition-colors cursor-pointer shrink-0"
+                                title="Remove item"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded border ${
+                                  item.needsManufacturing !== false
+                                    ? 'bg-teal-50 text-teal-800 border-teal-200'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                                }`}>
+                                  {item.needsManufacturing !== false ? 'To Mfg' : 'In Stock'}
+                                </span>
+
+                                <span className="text-xs font-bold text-slate-800">
+                                  {item.quantity} {item.unit}
+                                </span>
+                              </div>
+
+                              <span className="text-xs font-black text-slate-900">
+                                ₹{item.totalAmount.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bottom Section: Order Totals & Submit */}
+                <div className="space-y-3 pt-3 border-t border-slate-100">
+                  <div className="space-y-1.5 text-xs font-semibold">
+                    <div className="flex justify-between text-slate-500">
+                      <span>Total Selected Lines:</span>
+                      <span className="font-bold text-slate-800">{editSelectedLines.length}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Total Order Units:</span>
+                      <span className="font-bold text-slate-800">{editTotalWeight}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500 text-[11px]">
+                      <span>GST:</span>
+                      <span className="text-slate-400">Included in prices</span>
+                    </div>
+                    <div className="flex items-baseline justify-between pt-2 border-t border-slate-200">
+                      <span className="text-sm font-bold text-slate-900">Grand Total:</span>
+                      <span className="text-xl font-black text-[#02626D]">
+                        ₹ {editModalTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleSaveEditOrder}
+                      disabled={isUpdatingOrder || editSelectedLines.length === 0}
+                      className="w-full h-10 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                    >
+                      {isUpdatingOrder ? (
+                        <>
+                          <Loader2 size={15} className="animate-spin" />
+                          <span>Updating B2B Order...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={15} />
+                          <span>Update B2B Order</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setEditingOrder(null)}
+                      className="w-full h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors flex items-center justify-center cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingOrder(null)}
-                  className="h-8 px-3 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSaveEditOrder}
-                  disabled={isUpdatingOrder}
-                  className="h-8 px-4 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-2xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {isUpdatingOrder ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                  <span>Update B2B Order</span>
-                </button>
-              </div>
             </div>
+
           </div>
         </div>
       )}

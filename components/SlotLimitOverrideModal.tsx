@@ -28,6 +28,8 @@ export interface SlotLimitOverrideData {
   date: string;
   maxLimit: number;
   bookedQty: number;
+  manufacturingDescription?: string;
+  packingDescription?: string;
 }
 
 interface SlotLimitOverrideModalProps {

@@ -289,6 +289,26 @@ const ProductCatalogTile = React.memo(function ProductCatalogTile({
               <X size={9} className="shrink-0 text-slate-400" />
             )}
           </button>
+
+          {/* Notes display on tile */}
+          {(addedItem.manufacturingDescription || addedItem.packingDescription) && (
+            <div
+              onClick={() => onOpenQtyModal(prod, true)}
+              className="pt-0.5 space-y-0.5 cursor-pointer"
+              title="Click to edit notes & quantity"
+            >
+              {addedItem.manufacturingDescription && (
+                <div className="text-[8.5px] font-medium text-amber-800 bg-amber-50/80 border border-amber-200/70 rounded px-1 py-0.2 truncate">
+                  <span className="font-bold">Mfg:</span> {addedItem.manufacturingDescription}
+                </div>
+              )}
+              {addedItem.packingDescription && (
+                <div className="text-[8.5px] font-medium text-blue-800 bg-blue-50/80 border border-blue-200/70 rounded px-1 py-0.2 truncate">
+                  <span className="font-bold">Pck:</span> {addedItem.packingDescription}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -405,6 +425,8 @@ export default function CreateOrderClient() {
     isEdit?: boolean;
   } | null>(null);
   const [modalQuantityInput, setModalQuantityInput] = useState<string>('');
+  const [modalMfgNote, setModalMfgNote] = useState<string>('');
+  const [modalPckNote, setModalPckNote] = useState<string>('');
 
   // Slot Categories & Live Capacity Tracking
   const [slotCategories, setSlotCategories] = useState<SlotCategory[]>([]);
@@ -1017,6 +1039,8 @@ export default function CreateOrderClient() {
                 ...it,
                 quantity: authData.requestedQty,
                 lineTotal: Math.round(authData.requestedQty * it.unitPrice * 100) / 100,
+                manufacturingDescription: authData.manufacturingDescription !== undefined ? authData.manufacturingDescription : it.manufacturingDescription,
+                packingDescription: authData.packingDescription !== undefined ? authData.packingDescription : it.packingDescription,
               }
             : it
         );
@@ -1037,8 +1061,8 @@ export default function CreateOrderClient() {
             lineTotal: Math.round(authData.requestedQty * authData.unitPrice * 100) / 100,
             hasPacket: false,
             packetCharge: 0,
-            manufacturingDescription: '',
-            packingDescription: '',
+            manufacturingDescription: authData.manufacturingDescription || '',
+            packingDescription: authData.packingDescription || '',
           },
         ];
       }
@@ -1055,6 +1079,8 @@ export default function CreateOrderClient() {
     });
     // By default for new items, do NOT pre-fill any number like 1!
     setModalQuantityInput(isEdit && existing?.quantity ? String(existing.quantity) : '');
+    setModalMfgNote(existing?.manufacturingDescription || '');
+    setModalPckNote(existing?.packingDescription || '');
   }, [orderItems]);
 
   const handleSaveModalQuantity = useCallback(() => {
@@ -1072,6 +1098,8 @@ export default function CreateOrderClient() {
     if (check.isExceeded && check.cat) {
       setQtyModalProduct(null);
       setModalQuantityInput('');
+      setModalMfgNote('');
+      setModalPckNote('');
       setSlotOverrideModalData({
         categoryId: check.cat.id,
         categoryName: check.cat.name,
@@ -1086,6 +1114,8 @@ export default function CreateOrderClient() {
         date: effectiveTargetDate || 'Selected Date',
         maxLimit: check.maxLimit,
         bookedQty: check.bookedQty,
+        manufacturingDescription: modalMfgNote.trim(),
+        packingDescription: modalPckNote.trim(),
       });
       return;
     }
@@ -1100,6 +1130,8 @@ export default function CreateOrderClient() {
             ...it,
             quantity: qtyVal,
             lineTotal: Math.round(qtyVal * it.unitPrice * 100) / 100,
+            manufacturingDescription: modalMfgNote.trim(),
+            packingDescription: modalPckNote.trim(),
           };
         })
       );
@@ -1119,8 +1151,8 @@ export default function CreateOrderClient() {
         lineTotal: Math.round(qtyVal * prod.price * 100) / 100,
         hasPacket: false,
         packetCharge: 0,
-        manufacturingDescription: '',
-        packingDescription: '',
+        manufacturingDescription: modalMfgNote.trim(),
+        packingDescription: modalPckNote.trim(),
       };
       setOrderItems((prev) => [...prev, newLine]);
       toast.success('Item Added', `Added ${qtyVal} ${prod.unit} of ${prod.name}.`);
@@ -1128,7 +1160,23 @@ export default function CreateOrderClient() {
 
     setQtyModalProduct(null);
     setModalQuantityInput('');
-  }, [qtyModalProduct, modalQuantityInput, checkSlotExceeded, orderItems, orderSlot, effectiveTargetDate]);
+    setModalMfgNote('');
+    setModalPckNote('');
+  }, [qtyModalProduct, modalQuantityInput, modalMfgNote, modalPckNote, checkSlotExceeded, orderItems, orderSlot, effectiveTargetDate]);
+
+  // Inline Note Changer for Cart Items
+  const handleItemNoteChange = useCallback((itemId: string, type: 'mfg' | 'pck', val: string) => {
+    setOrderItems((prev) =>
+      prev.map((it) => {
+        if (it.itemId !== itemId) return it;
+        return {
+          ...it,
+          manufacturingDescription: type === 'mfg' ? val : it.manufacturingDescription,
+          packingDescription: type === 'pck' ? val : it.packingDescription,
+        };
+      })
+    );
+  }, []);
 
   // Summary Quantity Modifier
   const handleSummaryQuantityChange = useCallback((itemId: string, newQty: number) => {
@@ -2271,13 +2319,29 @@ export default function CreateOrderClient() {
                         </span>
                       </div>
 
-                      {item.packingDescription && (
-                        <div className="pt-0.5">
-                          <span className="text-[9.5px] text-slate-400 italic truncate block" title={item.packingDescription}>
-                            {item.packingDescription}
-                          </span>
+                      {/* Manufacturing & Packing Notes Inline Inputs */}
+                      <div className="grid grid-cols-2 gap-1.5 pt-1">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Mfg note..."
+                            value={item.manufacturingDescription || ''}
+                            onChange={(e) => handleItemNoteChange(item.itemId, 'mfg', e.target.value)}
+                            className="w-full h-6 px-1.5 text-[10px] text-slate-700 bg-slate-50/80 border border-slate-200 rounded-md focus:bg-white focus:border-[#02626D] focus:outline-none transition-all placeholder:text-slate-400"
+                            title="Manufacturing Note (Kitchen instructions)"
+                          />
                         </div>
-                      )}
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Packing note..."
+                            value={item.packingDescription || ''}
+                            onChange={(e) => handleItemNoteChange(item.itemId, 'pck', e.target.value)}
+                            className="w-full h-6 px-1.5 text-[10px] text-slate-700 bg-slate-50/80 border border-slate-200 rounded-md focus:bg-white focus:border-[#02626D] focus:outline-none transition-all placeholder:text-slate-400"
+                            title="Packing Note (Packaging instructions)"
+                          />
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -3140,6 +3204,8 @@ export default function CreateOrderClient() {
                 onClick={() => {
                   setQtyModalProduct(null);
                   setModalQuantityInput('');
+                  setModalMfgNote('');
+                  setModalPckNote('');
                 }}
                 className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
               >
@@ -3197,6 +3263,43 @@ export default function CreateOrderClient() {
                 </div>
               </div>
 
+              {/* Manufacturing & Packing Notes */}
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <FileText size={12} className="text-[#02626D]" />
+                      <span>Manufacturing Note (Kitchen)</span>
+                    </span>
+                    <span className="text-[10px] font-normal text-slate-400">Optional</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Less sugar, soft fry, extra crispy, special shape..."
+                    value={modalMfgNote}
+                    onChange={(e) => setModalMfgNote(e.target.value)}
+                    className="w-full h-9 px-3 text-xs text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#02626D] focus:ring-2 focus:ring-[#02626D]/15 placeholder:text-slate-300 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Package size={12} className="text-[#02626D]" />
+                      <span>Packing Note (Packaging)</span>
+                    </span>
+                    <span className="text-[10px] font-normal text-slate-400">Optional</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 500g boxes, gift packaging, separate bags..."
+                    value={modalPckNote}
+                    onChange={(e) => setModalPckNote(e.target.value)}
+                    className="w-full h-9 px-3 text-xs text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#02626D] focus:ring-2 focus:ring-[#02626D]/15 placeholder:text-slate-300 transition-all"
+                  />
+                </div>
+              </div>
+
               {/* Live Subtotal Preview */}
               {parseFloat(modalQuantityInput) > 0 && (
                 <div className="p-3 bg-teal-50/70 border border-teal-200 rounded-xl flex items-center justify-between text-xs animate-in fade-in">
@@ -3214,6 +3317,8 @@ export default function CreateOrderClient() {
                   onClick={() => {
                     setQtyModalProduct(null);
                     setModalQuantityInput('');
+                    setModalMfgNote('');
+                    setModalPckNote('');
                   }}
                   className="px-4 h-9 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
                 >

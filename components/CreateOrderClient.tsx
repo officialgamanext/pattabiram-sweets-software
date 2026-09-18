@@ -32,6 +32,7 @@ import {
   Truck,
   MapPin,
   Minus,
+  Pencil,
   Layers,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
@@ -149,13 +150,9 @@ interface ProductCatalogTileProps {
   isCustomisation: boolean;
   numericNoOfBoxes: number;
   packetCostPerBox: number;
-  onToggle: (prod: ItemMasterOption) => void;
-  onQuantityChange: (prodId: string, delta: number) => void;
-  onFieldChange: (
-    prodId: string,
-    field: 'quantity' | 'unitPrice' | 'mfgDesc' | 'pckDesc' | 'hasPacket',
-    val: any
-  ) => void;
+  onOpenQtyModal: (prod: ItemMasterOption, isEdit: boolean) => void;
+  onRemoveItem: (prodId: string) => void;
+  onTogglePacket: (prodId: string) => void;
 }
 
 const ProductCatalogTile = React.memo(function ProductCatalogTile({
@@ -164,9 +161,9 @@ const ProductCatalogTile = React.memo(function ProductCatalogTile({
   isCustomisation,
   numericNoOfBoxes,
   packetCostPerBox,
-  onToggle,
-  onQuantityChange,
-  onFieldChange,
+  onOpenQtyModal,
+  onRemoveItem,
+  onTogglePacket,
 }: ProductCatalogTileProps) {
   const isAdded = Boolean(addedItem);
 
@@ -174,7 +171,7 @@ const ProductCatalogTile = React.memo(function ProductCatalogTile({
     <div
       onClick={() => {
         if (!addedItem) {
-          onToggle(prod);
+          onOpenQtyModal(prod, false);
         }
       }}
       className={`group relative rounded-xl p-2 flex flex-col justify-between transition-all duration-150 select-none ${
@@ -204,20 +201,6 @@ const ProductCatalogTile = React.memo(function ProductCatalogTile({
               <Star size={11} className="fill-amber-400 text-amber-400" />
             </span>
           )}
-
-          {isAdded && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggle(prod);
-              }}
-              className="absolute top-1 left-1 w-5.5 h-5.5 rounded-md bg-red-500/90 hover:bg-red-600 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-90"
-              title="Remove product"
-            >
-              <Trash2 size={11} />
-            </button>
-          )}
         </div>
 
         {/* Product Name Below Image */}
@@ -242,60 +225,52 @@ const ProductCatalogTile = React.memo(function ProductCatalogTile({
         </div>
       </div>
 
-      {/* ACTIVE STATE: Stepper & Line Total & Packet Toggle (Add button removed for unselected state) */}
+      {/* SAVED STATE: Edit (Left), Quantity Display (Middle), Delete (Right) & Packet Toggle */}
       {addedItem && (
         <div
           onClick={(e) => e.stopPropagation()}
           className="mt-1.5 pt-1 border-t border-slate-200/80 space-y-1"
         >
-          <div className="flex items-center justify-between gap-1 bg-white p-0.5 rounded-lg border border-slate-300 shadow-2xs">
+          <div className="flex items-center justify-between gap-1 bg-white p-1 rounded-lg border border-slate-300 shadow-2xs">
+            {/* Left: Edit Icon Button */}
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onQuantityChange(prod.id, -1);
-              }}
-              className="w-5.5 h-5.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-extrabold text-xs transition-colors cursor-pointer active:scale-90"
-              title="Decrease"
+              onClick={() => onOpenQtyModal(prod, true)}
+              className="w-6 h-6 flex items-center justify-center rounded-md bg-slate-100 hover:bg-[#02626D] hover:text-white text-slate-700 transition-colors cursor-pointer active:scale-90"
+              title="Edit Quantity"
             >
-              -
+              <Pencil size={11} />
             </button>
-            <input
-              type="number"
-              step="any"
-              min="0"
-              value={addedItem.quantity === 0 ? '' : addedItem.quantity}
-              onChange={(e) => onFieldChange(prod.id, 'quantity', e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              className="w-10 h-5.5 text-center font-extrabold text-xs text-[#02626D] bg-transparent focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onQuantityChange(prod.id, 1);
-              }}
-              className="w-5.5 h-5.5 rounded bg-[#02626D] hover:bg-[#014d56] text-white flex items-center justify-center font-extrabold text-xs transition-colors cursor-pointer shadow-2xs active:scale-90"
-              title="Increase"
-            >
-              +
-            </button>
-          </div>
 
-          <div className="flex items-center justify-between text-[10px]">
-            <span className="text-slate-400 font-medium">Total:</span>
-            <span className="font-extrabold text-slate-900">
-              ₹ {addedItem.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 1 })}
-            </span>
+            {/* Middle: Quantity Display */}
+            <div
+              onClick={() => onOpenQtyModal(prod, true)}
+              className="flex flex-col items-center justify-center cursor-pointer hover:opacity-80 px-1"
+              title="Click to edit quantity"
+            >
+              <span className="text-xs font-black text-[#02626D] leading-tight">
+                {addedItem.quantity} <span className="text-[9px] font-bold text-slate-500">{addedItem.unit}</span>
+              </span>
+              <span className="text-[9px] text-slate-400 font-bold leading-none">
+                ₹{addedItem.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 1 })}
+              </span>
+            </div>
+
+            {/* Right: Delete Icon Button */}
+            <button
+              type="button"
+              onClick={() => onRemoveItem(prod.id)}
+              className="w-6 h-6 flex items-center justify-center rounded-md bg-red-50 hover:bg-red-600 text-red-600 hover:text-white transition-colors cursor-pointer active:scale-90"
+              title="Delete Item"
+            >
+              <Trash2 size={11} />
+            </button>
           </div>
 
           {/* Packet Toggle on Tile */}
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onFieldChange(prod.id, 'hasPacket', !addedItem.hasPacket);
-            }}
+            onClick={() => onTogglePacket(prod.id)}
             className={`w-full py-0.5 px-1.5 rounded-lg text-[9px] font-bold flex items-center justify-between transition-all cursor-pointer ${
               addedItem.hasPacket
                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs'
@@ -422,6 +397,14 @@ export default function CreateOrderClient() {
   const [productGridSearch, setProductGridSearch] = useState('');
   const [productGridCategory, setProductGridCategory] = useState('All');
   const [productGridOnlyFavorites, setProductGridOnlyFavorites] = useState(false);
+
+  // Item Quantity Modal State
+  const [qtyModalProduct, setQtyModalProduct] = useState<{
+    prod: ItemMasterOption;
+    existingQty?: number;
+    isEdit?: boolean;
+  } | null>(null);
+  const [modalQuantityInput, setModalQuantityInput] = useState<string>('');
 
   // Slot Categories & Live Capacity Tracking
   const [slotCategories, setSlotCategories] = useState<SlotCategory[]>([]);
@@ -1062,33 +1045,66 @@ export default function CreateOrderClient() {
     });
   };
 
-  // Tile Handlers with useCallback for Instant 0ms response
-  const handleToggleTileProduct = useCallback((prod: ItemMasterOption) => {
-    const existingItem = orderItems.find((it) => it.itemId === prod.id);
-    if (existingItem) {
-      setOrderItems((prev) => prev.filter((it) => it.itemId !== prod.id));
-    } else {
-      // Check slot capacity before adding with quantity 1
-      const check = checkSlotExceeded(prod.id, prod.name, 1);
-      if (check.isExceeded && check.cat) {
-        setSlotOverrideModalData({
-          categoryId: check.cat.id,
-          categoryName: check.cat.name,
-          itemId: prod.id,
-          itemCode: prod.code,
-          itemName: prod.name,
-          unit: prod.unit || 'KG',
-          unitPrice: prod.price,
-          imageUrl: prod.imageUrl || '',
-          requestedQty: 1,
-          slot: orderSlot,
-          date: effectiveTargetDate || 'Selected Date',
-          maxLimit: check.maxLimit,
-          bookedQty: check.bookedQty,
-        });
-        return;
-      }
+  // Quantity Modal Open & Save Handlers
+  const handleOpenQtyModal = useCallback((prod: ItemMasterOption, isEdit: boolean) => {
+    const existing = orderItems.find((it) => it.itemId === prod.id);
+    setQtyModalProduct({
+      prod,
+      existingQty: existing?.quantity,
+      isEdit,
+    });
+    // By default for new items, do NOT pre-fill any number like 1!
+    setModalQuantityInput(isEdit && existing?.quantity ? String(existing.quantity) : '');
+  }, [orderItems]);
 
+  const handleSaveModalQuantity = useCallback(() => {
+    if (!qtyModalProduct) return;
+    const qtyVal = parseFloat(modalQuantityInput);
+    if (!qtyVal || qtyVal <= 0 || isNaN(qtyVal)) {
+      toast.error('Invalid Quantity', 'Please enter a valid quantity greater than 0.');
+      return;
+    }
+
+    const { prod } = qtyModalProduct;
+
+    // Check slot capacity limit
+    const check = checkSlotExceeded(prod.id, prod.name, qtyVal);
+    if (check.isExceeded && check.cat) {
+      setQtyModalProduct(null);
+      setModalQuantityInput('');
+      setSlotOverrideModalData({
+        categoryId: check.cat.id,
+        categoryName: check.cat.name,
+        itemId: prod.id,
+        itemCode: prod.code,
+        itemName: prod.name,
+        unit: prod.unit || 'KG',
+        unitPrice: prod.price,
+        imageUrl: prod.imageUrl || '',
+        requestedQty: qtyVal,
+        slot: orderSlot,
+        date: effectiveTargetDate || 'Selected Date',
+        maxLimit: check.maxLimit,
+        bookedQty: check.bookedQty,
+      });
+      return;
+    }
+
+    // Capacity is available: Add or update item
+    const existing = orderItems.find((it) => it.itemId === prod.id);
+    if (existing) {
+      setOrderItems((prev) =>
+        prev.map((it) => {
+          if (it.itemId !== prod.id) return it;
+          return {
+            ...it,
+            quantity: qtyVal,
+            lineTotal: Math.round(qtyVal * it.unitPrice * 100) / 100,
+          };
+        })
+      );
+      toast.success('Quantity Updated', `Updated ${prod.name} quantity to ${qtyVal} ${prod.unit}.`);
+    } else {
       const uniqueLineId = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const newLine: OrderItemLine = {
         lineId: uniqueLineId,
@@ -1099,171 +1115,20 @@ export default function CreateOrderClient() {
         unit: prod.unit || 'KG',
         imageUrl: prod.imageUrl || '',
         unitPrice: prod.price,
-        quantity: 1,
-        lineTotal: prod.price * 1,
+        quantity: qtyVal,
+        lineTotal: Math.round(qtyVal * prod.price * 100) / 100,
         hasPacket: false,
         packetCharge: 0,
         manufacturingDescription: '',
         packingDescription: '',
       };
       setOrderItems((prev) => [...prev, newLine]);
-    }
-  }, [orderItems, checkSlotExceeded, orderSlot, effectiveTargetDate]);
-
-  const handleTileQuantityChange = useCallback((prodId: string, delta: number) => {
-    const prod = itemsMaster.find((p) => p.id === prodId);
-    const existingItem = orderItems.find((it) => it.itemId === prodId);
-
-    if (!existingItem) {
-      if (delta <= 0 || !prod) return;
-      const check = checkSlotExceeded(prod.id, prod.name, delta);
-      if (check.isExceeded && check.cat) {
-        setSlotOverrideModalData({
-          categoryId: check.cat.id,
-          categoryName: check.cat.name,
-          itemId: prod.id,
-          itemCode: prod.code,
-          itemName: prod.name,
-          unit: prod.unit || 'KG',
-          unitPrice: prod.price,
-          imageUrl: prod.imageUrl || '',
-          requestedQty: delta,
-          slot: orderSlot,
-          date: effectiveTargetDate || 'Selected Date',
-          maxLimit: check.maxLimit,
-          bookedQty: check.bookedQty,
-        });
-        return;
-      }
-
-      const uniqueLineId = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-      setOrderItems((prev) => [
-        ...prev,
-        {
-          lineId: uniqueLineId,
-          itemId: prod.id,
-          itemCode: prod.code,
-          itemName: prod.name,
-          category: prod.category,
-          unit: prod.unit || 'KG',
-          imageUrl: prod.imageUrl || '',
-          unitPrice: prod.price,
-          quantity: delta,
-          lineTotal: prod.price * delta,
-          hasPacket: false,
-          packetCharge: 0,
-          manufacturingDescription: '',
-          packingDescription: '',
-        },
-      ]);
-      return;
+      toast.success('Item Added', `Added ${qtyVal} ${prod.unit} of ${prod.name}.`);
     }
 
-    const updatedQty = Math.max(0, Math.round(((existingItem.quantity || 0) + delta) * 10) / 10);
-    if (updatedQty === 0) {
-      setOrderItems((prev) => prev.filter((it) => it.itemId !== prodId));
-      return;
-    }
-
-    // Check slot limit if increasing
-    if (delta > 0 && prod) {
-      const check = checkSlotExceeded(prod.id, prod.name, updatedQty);
-      if (check.isExceeded && check.cat) {
-        setSlotOverrideModalData({
-          categoryId: check.cat.id,
-          categoryName: check.cat.name,
-          itemId: prod.id,
-          itemCode: prod.code,
-          itemName: prod.name,
-          unit: prod.unit || 'KG',
-          unitPrice: prod.price,
-          imageUrl: prod.imageUrl || '',
-          requestedQty: updatedQty,
-          slot: orderSlot,
-          date: effectiveTargetDate || 'Selected Date',
-          maxLimit: check.maxLimit,
-          bookedQty: check.bookedQty,
-        });
-        return;
-      }
-    }
-
-    setOrderItems((prev) =>
-      prev.map((it) => {
-        if (it.itemId === prodId) {
-          return {
-            ...it,
-            quantity: updatedQty,
-            lineTotal: Math.round(updatedQty * it.unitPrice * 100) / 100,
-          };
-        }
-        return it;
-      })
-    );
-  }, [itemsMaster, orderItems, checkSlotExceeded, orderSlot, effectiveTargetDate]);
-
-  const handleTileFieldChange = useCallback((
-    prodId: string,
-    field: 'quantity' | 'unitPrice' | 'mfgDesc' | 'pckDesc' | 'hasPacket',
-    val: any
-  ) => {
-    const prod = itemsMaster.find((p) => p.id === prodId);
-    const existingItem = orderItems.find((it) => it.itemId === prodId);
-
-    if (field === 'quantity') {
-      const qtyNum = val === '' ? 0 : Math.max(0, parseFloat(val) || 0);
-      if (qtyNum > (existingItem?.quantity || 0) && prod) {
-        const check = checkSlotExceeded(prod.id, prod.name, qtyNum);
-        if (check.isExceeded && check.cat) {
-          setSlotOverrideModalData({
-            categoryId: check.cat.id,
-            categoryName: check.cat.name,
-            itemId: prod.id,
-            itemCode: prod.code,
-            itemName: prod.name,
-            unit: prod.unit || 'KG',
-            unitPrice: prod.price,
-            imageUrl: prod.imageUrl || '',
-            requestedQty: qtyNum,
-            slot: orderSlot,
-            date: effectiveTargetDate || 'Selected Date',
-            maxLimit: check.maxLimit,
-            bookedQty: check.bookedQty,
-          });
-          return;
-        }
-      }
-    }
-
-    setOrderItems((prev) =>
-      prev.map((item) => {
-        if (item.itemId !== prodId) return item;
-
-        let qty = item.quantity;
-        let price = item.unitPrice;
-        let mfgDesc = item.manufacturingDescription;
-        let pckDesc = item.packingDescription;
-        let packet = item.hasPacket;
-
-        if (field === 'quantity') qty = val === '' ? 0 : Math.max(0, parseFloat(val) || 0);
-        if (field === 'unitPrice') price = Math.max(0, parseFloat(val) || 0);
-        if (field === 'mfgDesc') mfgDesc = val;
-        if (field === 'pckDesc') pckDesc = val;
-        if (field === 'hasPacket') packet = Boolean(val);
-
-        return {
-          ...item,
-          quantity: qty,
-          unitPrice: price,
-          lineTotal: Math.round(qty * price * 100) / 100,
-          manufacturingDescription: mfgDesc,
-          packingDescription: pckDesc,
-          hasPacket: packet,
-          packetCharge: packet ? 5 : 0,
-        };
-      })
-    );
-  }, [itemsMaster, orderItems, checkSlotExceeded, orderSlot, effectiveTargetDate]);
+    setQtyModalProduct(null);
+    setModalQuantityInput('');
+  }, [qtyModalProduct, modalQuantityInput, checkSlotExceeded, orderItems, orderSlot, effectiveTargetDate]);
 
   // Summary Quantity Modifier
   const handleSummaryQuantityChange = useCallback((itemId: string, newQty: number) => {
@@ -2128,9 +1993,9 @@ export default function CreateOrderClient() {
                             isCustomisation={isCustomisation}
                             numericNoOfBoxes={numericNoOfBoxes}
                             packetCostPerBox={packetCostPerBox}
-                            onToggle={handleToggleTileProduct}
-                            onQuantityChange={handleTileQuantityChange}
-                            onFieldChange={handleTileFieldChange}
+                            onOpenQtyModal={handleOpenQtyModal}
+                            onRemoveItem={handleSummaryRemoveItem}
+                            onTogglePacket={handleToggleItemPacket}
                           />
                         );
                       })}
@@ -3244,6 +3109,123 @@ export default function CreateOrderClient() {
                   className="px-4 h-8 rounded-xl text-xs font-bold text-white bg-[#02626D] hover:bg-[#014d56] shadow-2xs"
                 >
                   Save &amp; Select
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: ENTER / EDIT ITEM QUANTITY ─────────────────────── */}
+      {qtyModalProduct && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 font-sans">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-teal-50 text-[#02626D] flex items-center justify-center border border-teal-100 shrink-0">
+                  <ShoppingBag size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    {qtyModalProduct.isEdit ? 'Edit Item Quantity' : 'Enter Item Quantity'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {qtyModalProduct.prod.category} • {qtyModalProduct.prod.code}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setQtyModalProduct(null);
+                  setModalQuantityInput('');
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Product Summary Card */}
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <div className="relative w-12 h-12 rounded-lg bg-white border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                <Image
+                  src={qtyModalProduct.prod.imageUrl || '/app-icon.png'}
+                  alt={qtyModalProduct.prod.name}
+                  fill
+                  className="object-contain p-1"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-xs font-bold text-slate-900 truncate">
+                  {qtyModalProduct.prod.name}
+                </h4>
+                <p className="text-xs font-extrabold text-[#02626D] mt-0.5">
+                  ₹{qtyModalProduct.prod.price} <span className="text-[10px] text-slate-400 font-normal">/ {qtyModalProduct.prod.unit}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Quantity Input Form */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveModalQuantity();
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Enter Quantity ({qtyModalProduct.prod.unit}) *
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="any"
+                    min="0.01"
+                    autoFocus
+                    required
+                    placeholder={`Enter quantity in ${qtyModalProduct.prod.unit}...`}
+                    value={modalQuantityInput}
+                    onChange={(e) => setModalQuantityInput(e.target.value)}
+                    className="w-full h-12 px-4 text-xl font-black text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:outline-none focus:border-[#02626D] focus:ring-2 focus:ring-[#02626D]/20 transition-all placeholder:text-slate-300 placeholder:text-xs placeholder:font-normal"
+                  />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-slate-500 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
+                    {qtyModalProduct.prod.unit}
+                  </span>
+                </div>
+              </div>
+
+              {/* Live Subtotal Preview */}
+              {parseFloat(modalQuantityInput) > 0 && (
+                <div className="p-3 bg-teal-50/70 border border-teal-200 rounded-xl flex items-center justify-between text-xs animate-in fade-in">
+                  <span className="font-semibold text-slate-600">Projected Line Total:</span>
+                  <span className="text-sm font-black text-[#02626D]">
+                    ₹ {(parseFloat(modalQuantityInput) * qtyModalProduct.prod.price).toFixed(2)}
+                  </span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQtyModalProduct(null);
+                    setModalQuantityInput('');
+                  }}
+                  className="px-4 h-9 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!modalQuantityInput || parseFloat(modalQuantityInput) <= 0}
+                  className="px-5 h-9 rounded-xl text-xs font-bold text-white bg-[#02626D] hover:bg-[#014d56] shadow-2xs transition-all cursor-pointer disabled:opacity-40 active:scale-95 flex items-center gap-1.5"
+                >
+                  <Check size={14} />
+                  <span>{qtyModalProduct.isEdit ? 'Update Quantity' : 'Save & Add Item'}</span>
                 </button>
               </div>
             </form>

@@ -45,6 +45,7 @@ export default function SlotLimitOverrideModal({
   userIdentifier = 'Order Booking Counter',
   onAuthorized,
 }: SlotLimitOverrideModalProps) {
+  const [step, setStep] = useState<'prompt' | 'otp'>('prompt');
   const [otp, setOtp] = useState('');
   const [token, setToken] = useState<string | null>(null);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
@@ -52,19 +53,19 @@ export default function SlotLimitOverrideModal({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number>(300); // 5 mins in seconds
 
-  // Auto-send OTP whenever modal opens with new data
+  // Reset to prompt whenever modal opens with new data
   useEffect(() => {
     if (isOpen && data) {
+      setStep('prompt');
       setOtp('');
       setToken(null);
       setErrorMsg(null);
-      handleSendOtp();
     }
   }, [isOpen, data?.itemId, data?.requestedQty, data?.slot, data?.date]);
 
   // Expiry timer
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || step !== 'otp') return;
     const interval = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -76,7 +77,7 @@ export default function SlotLimitOverrideModal({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isOpen, token]);
+  }, [isOpen, step, token]);
 
   const formatCountdown = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -85,8 +86,8 @@ export default function SlotLimitOverrideModal({
   };
 
   // 1. Trigger OTP Email
-  const handleSendOtp = async () => {
-    if (!data) return;
+  const handleSendOtp = async (): Promise<boolean> => {
+    if (!data) return false;
     try {
       setIsSendingOtp(true);
       setErrorMsg(null);
@@ -117,10 +118,12 @@ export default function SlotLimitOverrideModal({
       setToken(resData.token);
       setCountdown(300);
       toast.success('OTP Sent', 'A 6-digit slot override code was sent to the administrator email.');
+      return true;
     } catch (err: any) {
       console.error('Error sending slot override OTP:', err);
       setErrorMsg(err.message || 'Failed to send OTP email.');
       toast.error('OTP Failed', err.message || 'Could not send verification code.');
+      return false;
     } finally {
       setIsSendingOtp(false);
     }
@@ -237,77 +240,130 @@ export default function SlotLimitOverrideModal({
           </div>
         </div>
 
-        {/* Security Info & Form */}
-        <form onSubmit={handleVerifyOtp} className="space-y-4">
-          <div className="bg-teal-50/70 border border-teal-200 rounded-xl p-3 space-y-1">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-[#02626D]">
-              <ShieldCheck size={15} />
-              <span>Manager Authorization OTP</span>
-            </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              A 6-digit authorization code has been emailed to the administrator (<strong className="text-slate-800">sureshdivya2015@zohomail.in</strong>). Please enter it below to authorize this excess quantity.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Enter 6-Digit OTP Code *
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                maxLength={6}
-                required
-                autoFocus
-                placeholder="• • • • • •"
-                value={otp}
-                onChange={(e) => {
-                  const clean = e.target.value.replace(/\D/g, '').slice(0, 6);
-                  setOtp(clean);
-                }}
-                className="w-full text-center text-2xl font-mono font-extrabold tracking-[0.4em] py-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#02626D] focus:bg-white text-slate-900 transition-all placeholder:text-slate-300"
-              />
-              <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        {/* STEP 1: Capacity Exceeded Notification & Ask Permission Prompt */}
+        {step === 'prompt' && (
+          <div className="space-y-4 animate-in fade-in duration-150">
+            <div className="p-4 bg-amber-50/90 border border-amber-300 rounded-2xl space-y-2.5">
+              <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+                <AlertTriangle size={18} className="text-amber-600 shrink-0" />
+                <span>Slot Limit Exceeded Notification</span>
+              </div>
+              <p className="text-xs text-amber-950 leading-relaxed">
+                Adding <strong className="font-bold text-slate-900">{data.requestedQty} {data.unit}</strong> of <strong className="font-bold text-slate-900">{data.itemName}</strong> exceeds the allowed slot capacity for <strong className="font-bold text-slate-900">{data.slot}</strong> by <strong className="font-black text-rose-600 font-mono">+{excessQty > 0 ? excessQty : data.requestedQty} {data.unit}</strong>.
+              </p>
+              <div className="pt-1 text-xs font-semibold text-slate-800 bg-white/70 p-2.5 rounded-xl border border-amber-200/70">
+                ⚠️ It is exceeded. Do you want permission from admin?
+              </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-              <span className="font-mono">
-                {countdown > 0 ? (
-                  <span className="text-amber-700 font-semibold">⏳ Code expires in: {formatCountdown(countdown)}</span>
-                ) : (
-                  <span className="text-red-600 font-bold">⚠️ Code expired</span>
-                )}
-              </span>
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
               <button
                 type="button"
                 disabled={isSendingOtp}
-                onClick={handleSendOtp}
-                className="text-xs font-bold text-[#02626D] hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                onClick={async () => {
+                  const sent = await handleSendOtp();
+                  if (sent) {
+                    setStep('otp');
+                  }
+                }}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-[#02626D] hover:bg-[#014d56] text-white shadow-xs transition-all cursor-pointer disabled:opacity-50 active:scale-95"
               >
-                <RefreshCw size={12} className={isSendingOtp ? 'animate-spin' : ''} />
-                <span>Resend Code</span>
+                {isSendingOtp ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Sending OTP to Admin...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck size={15} />
+                    <span>Ask Permission</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
+        )}
 
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isVerifyingOtp || otp.length !== 6}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-[#02626D] hover:bg-[#014d56] text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-            >
-              {isVerifyingOtp ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-              <span>Verify OTP &amp; Add Quantity</span>
-            </button>
-          </div>
-        </form>
+        {/* STEP 2: Manager Authorization OTP Form */}
+        {step === 'otp' && (
+          <form onSubmit={handleVerifyOtp} className="space-y-4 animate-in fade-in duration-150">
+            <div className="bg-teal-50/70 border border-teal-200 rounded-xl p-3 space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#02626D]">
+                <ShieldCheck size={15} />
+                <span>Manager Authorization OTP</span>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                A 6-digit authorization code has been emailed to the administrator (<strong className="text-slate-800">sureshdivya2015@zohomail.in</strong>). Please enter it below to authorize this excess quantity.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Enter 6-Digit OTP Code *
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  maxLength={6}
+                  required
+                  autoFocus
+                  placeholder="• • • • • •"
+                  value={otp}
+                  onChange={(e) => {
+                    const clean = e.target.value.replace(/\D/g, '').slice(0, 6);
+                    setOtp(clean);
+                  }}
+                  className="w-full text-center text-2xl font-mono font-extrabold tracking-[0.4em] py-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#02626D] focus:bg-white text-slate-900 transition-all placeholder:text-slate-300"
+                />
+                <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <span className="font-mono">
+                  {countdown > 0 ? (
+                    <span className="text-amber-700 font-semibold">⏳ Code expires in: {formatCountdown(countdown)}</span>
+                  ) : (
+                    <span className="text-red-600 font-bold">⚠️ Code expired</span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  disabled={isSendingOtp}
+                  onClick={handleSendOtp}
+                  className="text-xs font-bold text-[#02626D] hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw size={12} className={isSendingOtp ? 'animate-spin' : ''} />
+                  <span>Resend Code</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setStep('prompt')}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Back
+              </button>
+              <button
+                type="submit"
+                disabled={isVerifyingOtp || otp.length !== 6}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-[#02626D] hover:bg-[#014d56] text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isVerifyingOtp ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                <span>Verify OTP &amp; Add Quantity</span>
+              </button>
+            </div>
+          </form>
+        )}
 
       </div>
     </div>

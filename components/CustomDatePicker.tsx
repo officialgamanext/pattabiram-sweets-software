@@ -13,6 +13,7 @@ interface CustomDatePickerProps {
   onlyTuesdays?: boolean;
   placeholder?: string;
   className?: string;
+  buttonClassName?: string;
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -42,6 +43,7 @@ export default function CustomDatePicker({
   onlyTuesdays = false,
   placeholder = 'Select Date',
   className = '',
+  buttonClassName = '',
   size = 'md',
 }: CustomDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -233,7 +235,9 @@ export default function CustomDatePicker({
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className={`flex items-center justify-between gap-2 bg-white border border-slate-300 hover:border-[#02626D] text-slate-800 font-semibold transition-all shadow-2xs cursor-pointer ${
+          className={`flex items-center justify-between gap-2 text-slate-800 font-semibold transition-all cursor-pointer ${
+            buttonClassName ? buttonClassName : 'bg-white border border-slate-300 hover:border-[#02626D] shadow-2xs'
+          } ${
             isFullWidth ? 'w-full' : ''
           } ${sizeClasses[size]} ${isOpen ? 'border-[#02626D] ring-2 ring-[#02626D]/10' : ''}`}
         >

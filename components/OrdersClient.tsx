@@ -39,6 +39,10 @@ import {
   Package,
   Star,
   Minus,
+  Sun,
+  Moon,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
 import CustomDatePicker from '@/components/CustomDatePicker';
@@ -266,6 +270,36 @@ export function getOrderStatusBadgeStyle(status?: string) {
   }
 }
 
+export function getSlotHeaderConfig(slotTime: string) {
+  switch (slotTime) {
+    case '9:00 AM - 12:00 PM':
+      return {
+        bg: 'bg-[#f0f9fa]/70 border-[#d5eff1]',
+        icon: <Sun size={17} className="text-[#02626D]" />,
+      };
+    case '12:00 PM - 3:00 PM':
+      return {
+        bg: 'bg-[#f3f7fd]/70 border-[#dce8fa]',
+        icon: <Sun size={17} className="text-blue-500" />,
+      };
+    case '3:00 PM - 6:00 PM':
+      return {
+        bg: 'bg-[#fef8f0]/70 border-[#fae9d3]',
+        icon: <Sun size={17} className="text-amber-500" />,
+      };
+    case '6:00 PM - 9:00 PM':
+      return {
+        bg: 'bg-[#f7f4fd]/70 border-[#ebe2fa]',
+        icon: <Moon size={17} className="text-purple-600" />,
+      };
+    default:
+      return {
+        bg: 'bg-slate-50/70 border-slate-200/80',
+        icon: <Clock size={17} className="text-slate-500" />,
+      };
+  }
+}
+
 export default function OrdersClient() {
   const router = useRouter();
   const { allowedDates: allowedTuesdays } = useAllowedTuesdays();
@@ -286,6 +320,38 @@ export default function OrdersClient() {
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const day = String(today.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+
+  const handlePrevDay = () => {
+    if (!selectedDate || selectedDate === 'All') {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      setSelectedDate(d.toISOString().split('T')[0]);
+    } else {
+      const [y, m, d] = selectedDate.split('-').map(Number);
+      const dateObj = new Date(y, m - 1, d);
+      dateObj.setDate(dateObj.getDate() - 1);
+      const yr = dateObj.getFullYear();
+      const mo = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dy = String(dateObj.getDate()).padStart(2, '0');
+      setSelectedDate(`${yr}-${mo}-${dy}`);
+    }
+  };
+
+  const handleNextDay = () => {
+    if (!selectedDate || selectedDate === 'All') {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      setSelectedDate(d.toISOString().split('T')[0]);
+    } else {
+      const [y, m, d] = selectedDate.split('-').map(Number);
+      const dateObj = new Date(y, m - 1, d);
+      dateObj.setDate(dateObj.getDate() + 1);
+      const yr = dateObj.getFullYear();
+      const mo = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dy = String(dateObj.getDate()).padStart(2, '0');
+      setSelectedDate(`${yr}-${mo}-${dy}`);
+    }
   };
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -1628,131 +1694,158 @@ export default function OrdersClient() {
   return (
     <div className="w-full flex flex-col gap-4 font-sans pb-10">
 
-      {/* ── 1. SHOPIFY POLARIS PAGE TITLE & ACTION BAR ────────────────────── */}
-      <div className="flex flex-col gap-3 pt-1">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center flex-shrink-0">
-              <ShoppingBag size={18} />
-            </div>
-            <div>
-              <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Orders</h1>
-              <p className="text-[11px] text-slate-500 hidden sm:block">Manage, filter, and track manufacturing and delivery time slots</p>
-            </div>
+      {/* ── 1. PAGE HEADER & ACTION BAR ─────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#e6f4f5] border border-[#cce8eb] text-[#02626D] flex items-center justify-center flex-shrink-0 shadow-2xs">
+            <ShoppingBag size={20} />
           </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => toast.info('Exporting Orders', 'Generating orders CSV / Excel export...')}
-              className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 h-8 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer"
-            >
-              Export
-            </button>
-            <Link
-              href="/orders/create"
-              className="bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-semibold px-3.5 py-1.5 h-8 rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <Plus size={14} />
-              <span>Create order</span>
-            </Link>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Orders</h1>
+            <p className="text-xs text-slate-500 font-normal">Manage, filter, and track manufacturing and delivery time slots</p>
           </div>
         </div>
 
-        {/* ── Filter Toolbar (Date, Order Status, Payment Status, Search) ── */}
-        <div className="bg-white rounded-xl p-3 border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
-          {/* Left: Custom Date Picker Control */}
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => toast.info('Exporting Orders', 'Generating orders CSV / Excel export...')}
+            className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-4 py-2 h-9 rounded-xl border border-slate-200/90 shadow-2xs transition-all cursor-pointer flex items-center gap-2"
+          >
+            <Download size={14} className="text-slate-500" />
+            <span>Export</span>
+          </button>
+          <Link
+            href="/orders/create"
+            className="bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-bold px-4 py-2 h-9 rounded-xl shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <Plus size={15} />
+            <span>Create order</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* ── 2. DATE NAVIGATION & FILTER TOOLBAR ───────────────────────────── */}
+      <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs flex flex-col gap-3.5">
+        {/* Top Sub-row: Date Navigation Capsule & Quick Presets */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Date Capsule with Prev/Next buttons */}
+          <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-2xs">
             <CustomDatePicker
               value={selectedDate}
               onChange={setSelectedDate}
               allowAll={true}
               size="md"
+              className="border-0 shadow-none bg-transparent p-0"
+              buttonClassName="border-0 shadow-none bg-transparent hover:bg-slate-50 px-2 py-1 text-xs font-bold"
             />
-
-            <button
-              type="button"
-              onClick={() => setSelectedDate(getTodayDateStr())}
-              className={`px-3 py-1 h-8 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
-                selectedDate === getTodayDateStr()
-                  ? 'bg-slate-100 text-slate-900 border-slate-300 font-bold'
-                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-              }`}
-            >
-              Today
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSelectedDate('All')}
-              className={`px-3 py-1 h-8 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
-                selectedDate === 'All'
-                  ? 'bg-slate-100 text-slate-900 border-slate-300 font-bold'
-                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-              }`}
-            >
-              All Dates
-            </button>
+            <div className="flex items-center border-l border-slate-200 pl-1.5 ml-1.5 gap-0.5">
+              <button
+                type="button"
+                onClick={handlePrevDay}
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                title="Previous Day"
+              >
+                <ChevronLeft size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={handleNextDay}
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                title="Next Day"
+              >
+                <ChevronRight size={13} />
+              </button>
+            </div>
           </div>
 
-          {/* Right: Order Type, Order Status & Payment Status Filters */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Order Type Filter (Customisation & Transport) */}
+          {/* Today Button */}
+          <button
+            type="button"
+            onClick={() => setSelectedDate(getTodayDateStr())}
+            className={`px-4 py-1.5 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              selectedDate === getTodayDateStr()
+                ? 'bg-[#d9eff1] text-[#02626D] border border-[#b2e0e4] shadow-2xs'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Today
+          </button>
+
+          {/* All Dates Button */}
+          <button
+            type="button"
+            onClick={() => setSelectedDate('All')}
+            className={`px-4 py-1.5 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              selectedDate === 'All'
+                ? 'bg-[#d9eff1] text-[#02626D] border border-[#b2e0e4] shadow-2xs'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            All Dates
+          </button>
+        </div>
+
+        {/* Bottom Sub-row: Dropdown Filters & Search */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-100">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* TYPE Filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-bold text-slate-400 uppercase hidden xl:inline">Type:</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TYPE</span>
               <CustomSelect
                 options={orderTypeOptions}
                 value={orderTypeFilter}
                 onChange={setOrderTypeFilter}
-                icon={<Boxes size={13} />}
+                icon={<Boxes size={13} className="text-slate-500" />}
                 size="sm"
-                buttonClassName="h-8 text-xs font-medium border-slate-300 rounded-lg bg-white shadow-2xs"
+                buttonClassName="h-9 text-xs font-semibold border-slate-200 rounded-xl bg-white shadow-2xs px-3"
               />
             </div>
 
-            {/* Order Status Filter */}
+            {/* STATUS Filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-bold text-slate-400 uppercase hidden xl:inline">Order Status:</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">STATUS</span>
               <CustomSelect
                 options={orderStatusOptions}
                 value={orderStatusFilter}
                 onChange={setOrderStatusFilter}
-                icon={<Filter size={13} />}
+                icon={<Filter size={13} className="text-slate-500" />}
                 size="sm"
-                buttonClassName="h-8 text-xs font-medium border-slate-300 rounded-lg bg-white shadow-2xs"
+                buttonClassName="h-9 text-xs font-semibold border-slate-200 rounded-xl bg-white shadow-2xs px-3"
               />
             </div>
 
-            {/* Payment Status Filter */}
+            {/* PAYMENT Filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-bold text-slate-400 uppercase hidden xl:inline">Payment:</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">PAYMENT</span>
               <CustomSelect
                 options={paymentStatusOptions}
                 value={paymentStatusFilter}
                 onChange={setPaymentStatusFilter}
-                icon={<Tag size={13} />}
+                icon={<Tag size={13} className="text-slate-500" />}
                 size="sm"
-                buttonClassName="h-8 text-xs font-medium border-slate-300 rounded-lg bg-white shadow-2xs"
+                buttonClassName="h-9 text-xs font-semibold border-slate-200 rounded-xl bg-white shadow-2xs px-3"
               />
             </div>
 
-            {/* Item Filter Dropdown */}
+            {/* ITEM Filter */}
             <div className="relative" ref={itemFilterDropdownRef}>
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-bold text-slate-400 uppercase hidden xl:inline">Item:</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ITEM</span>
                 <button
                   type="button"
                   onClick={() => {
                     setIsItemFilterDropdownOpen((prev) => !prev);
                     setItemFilterSearchQuery('');
                   }}
-                  className={`h-8 px-2.5 py-1 text-xs font-medium rounded-lg border flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
+                  className={`h-9 px-3 text-xs font-semibold rounded-xl border flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
                     selectedItemFilter !== 'All'
                       ? 'bg-[#02626D] text-white border-[#02626D] font-bold shadow-sm'
-                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                   }`}
                   title="Filter orders by specific item"
                 >
-                  <Package size={13} className={selectedItemFilter !== 'All' ? 'text-white' : 'text-slate-400'} />
+                  <Package size={13} className={selectedItemFilter !== 'All' ? 'text-white' : 'text-slate-500'} />
                   <span className="max-w-[110px] sm:max-w-[140px] truncate">
                     {selectedItemFilter === 'All' ? 'All Items' : selectedItemFilter}
                   </span>
@@ -1845,18 +1938,6 @@ export default function OrdersClient() {
               )}
             </div>
 
-            {/* Search Input */}
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search orders..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-3 pr-8 py-1 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-[#02626D] bg-[#f7f7f8] focus:bg-white h-8 w-36 sm:w-48 shadow-2xs transition-colors"
-              />
-              <Search size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
-
             {/* Reset Filters Button */}
             {(selectedDate !== getTodayDateStr() || orderTypeFilter !== 'All' || orderStatusFilter !== 'All' || paymentStatusFilter !== 'All' || selectedItemFilter !== 'All' || searchTerm !== '') && (
               <button
@@ -1870,12 +1951,24 @@ export default function OrdersClient() {
                   setItemFilterSearchQuery('');
                   setSearchTerm('');
                 }}
-                className="px-2.5 py-1 h-8 rounded-lg text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer"
+                className="px-3 py-1 h-9 rounded-xl text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer"
                 title="Reset all filters to defaults"
               >
                 Reset
               </button>
             )}
+          </div>
+
+          {/* Search Input on Right */}
+          <div className="relative w-full sm:w-64">
+            <input
+              type="text"
+              placeholder="Search orders..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-3.5 pr-8 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-[#02626D] bg-white h-9 shadow-2xs transition-colors"
+            />
+            <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
         </div>
 
@@ -1903,102 +1996,113 @@ export default function OrdersClient() {
         )}
       </div>
 
-      {/* ── 2. TOP METRICS & SUMMARY CARDS BAR ───────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {/* Total Orders Card */}
-        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center flex-shrink-0">
-            <ShoppingBag size={17} />
+      {/* ── 3. FIVE KPI / METRICS CARDS ROW ─────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
+        {/* 1. Total Orders Card */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-[#e6f4f5] text-[#02626D] flex items-center justify-center flex-shrink-0">
+            <ShoppingBag size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] text-slate-500 font-medium truncate">Total Orders</p>
-            <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{totalOrdersCount}</h3>
-            <p className="text-[10px] text-emerald-600 font-medium">Filtered count</p>
+            <p className="text-xs text-slate-500 font-medium truncate">Total Orders</p>
+            <div className="flex items-center gap-1.5 my-0.5">
+              <h3 className="text-2xl font-black text-slate-900 leading-tight">{totalOrdersCount}</h3>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 flex items-center gap-0.5">
+                <ArrowUp size={10} /> +12%
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-medium">Filtered count</p>
           </div>
         </div>
 
-        {/* Total Amount Card */}
-        {/* <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center flex-shrink-0">
-            <IndianRupee size={17} />
+        {/* 2. Confirmed Orders */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+            <CheckCircle2 size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] text-slate-500 font-medium truncate">Total Amount</p>
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight truncate">
-              ₹ {totalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-            </h3>
-            <p className="text-[10px] text-emerald-600 font-medium">Filtered total</p>
-          </div>
-        </div> */}
-
-        {/* Confirmed Orders */}
-        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center flex-shrink-0">
-            <CheckCircle2 size={17} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[11px] text-slate-500 font-medium truncate">Confirmed</p>
-            <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{confirmedCount}</h3>
-            <p className="text-[10px] text-slate-400">Created/Confirmed</p>
+            <p className="text-xs text-slate-500 font-medium truncate">Confirmed</p>
+            <div className="flex items-center gap-1.5 my-0.5">
+              <h3 className="text-2xl font-black text-slate-900 leading-tight">{confirmedCount}</h3>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 flex items-center gap-0.5">
+                <ArrowUp size={10} /> +8%
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-medium">Created/Confirmed</p>
           </div>
         </div>
 
-        {/* Pending Orders */}
-        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center flex-shrink-0">
-            <Clock size={17} />
+        {/* 3. Pending Orders */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
+            <Clock size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] text-slate-500 font-medium truncate">Pending</p>
-            <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{pendingCount}</h3>
-            <p className="text-[10px] text-slate-400">Status/Payment</p>
+            <p className="text-xs text-slate-500 font-medium truncate">Pending</p>
+            <div className="flex items-center gap-1.5 my-0.5">
+              <h3 className="text-2xl font-black text-slate-900 leading-tight">{pendingCount}</h3>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-700 flex items-center gap-0.5">
+                <ArrowDown size={10} /> -3%
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-medium">Status/Payment</p>
           </div>
         </div>
 
-        {/* Processing Orders */}
-        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center flex-shrink-0">
-            <PackageCheck size={17} />
+        {/* 4. Processing Orders */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center flex-shrink-0">
+            <PackageCheck size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] text-slate-500 font-medium truncate">Processing</p>
-            <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{processingCount}</h3>
-            <p className="text-[10px] text-slate-400">In workflow</p>
+            <p className="text-xs text-slate-500 font-medium truncate">Processing</p>
+            <div className="flex items-center gap-1.5 my-0.5">
+              <h3 className="text-2xl font-black text-slate-900 leading-tight">{processingCount}</h3>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 flex items-center gap-0.5">
+                <ArrowDown size={10} /> 0%
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-medium">In workflow</p>
           </div>
         </div>
 
-        {/* Delivered Orders */}
-        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center flex-shrink-0">
-            <Truck size={17} />
+        {/* 5. Delivered Orders */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+            <Truck size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] text-slate-500 font-medium truncate">Delivered</p>
-            <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{deliveredCount}</h3>
-            <p className="text-[10px] text-slate-400">Completed</p>
+            <p className="text-xs text-slate-500 font-medium truncate">Delivered</p>
+            <div className="flex items-center gap-1.5 my-0.5">
+              <h3 className="text-2xl font-black text-slate-900 leading-tight">{deliveredCount}</h3>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 flex items-center gap-0.5">
+                <ArrowUp size={10} /> +15%
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-medium">Completed</p>
           </div>
         </div>
       </div>
 
-      {/* ── 3. Navigation Sub-Tabs (Orders by Slot vs Orders List) & Quick Filter Pills ── */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-2 flex-wrap gap-2">
-        <div className="flex items-center gap-1.5">
+      {/* ── 4. NAVIGATION SUB-TABS & QUICK FILTER PILLS ──────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setActiveTab('slot')}
-            className={`px-3 py-1.5 h-8 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+            className={`px-4 py-2 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'slot'
                 ? 'bg-[#02626D] text-white shadow-2xs'
-                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
             }`}
           >
             Orders by Slot ({filteredOrders.length})
           </button>
           <button
             onClick={() => setActiveTab('list')}
-            className={`px-3 py-1.5 h-8 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+            className={`px-4 py-2 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'list'
                 ? 'bg-[#02626D] text-white shadow-2xs'
-                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
             }`}
           >
             Orders List ({filteredOrders.length})
@@ -2006,79 +2110,81 @@ export default function OrdersClient() {
         </div>
 
         {/* Quick Filter Pills for Customisation & Transport Orders */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[11px] font-bold text-slate-400 uppercase hidden sm:inline">Filter:</span>
-          <div className="flex items-center gap-1 bg-[#f1f2f4] p-1 rounded-xl border border-slate-200/80">
-            <button
-              type="button"
-              onClick={() => setOrderTypeFilter('All')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                orderTypeFilter === 'All'
-                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              All Orders
-            </button>
-            <button
-              type="button"
-              onClick={() => setOrderTypeFilter(orderTypeFilter === 'Customisation' ? 'All' : 'Customisation')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                orderTypeFilter === 'Customisation'
-                  ? 'bg-purple-600 text-white shadow-2xs font-bold'
-                  : 'text-purple-800 hover:bg-purple-50'
-              }`}
-              title="Filter only Customisation orders"
-            >
-              <Boxes size={12} />
-              <span>Customisation ({customOrdersCount})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setOrderTypeFilter(orderTypeFilter === 'Transport' ? 'All' : 'Transport')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                orderTypeFilter === 'Transport'
-                  ? 'bg-teal-700 text-white shadow-2xs font-bold'
-                  : 'text-teal-800 hover:bg-teal-50'
-              }`}
-              title="Filter only Transport orders"
-            >
-              <Truck size={12} />
-              <span>Transport ({transportOrdersCount})</span>
-            </button>
-          </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">FILTER:</span>
+          <button
+            type="button"
+            onClick={() => setOrderTypeFilter('All')}
+            className={`px-3.5 py-1.5 h-8 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              orderTypeFilter === 'All'
+                ? 'bg-white text-slate-900 shadow-2xs border border-slate-300'
+                : 'text-slate-600 hover:bg-slate-100 border border-transparent'
+            }`}
+          >
+            All Orders
+          </button>
+          <button
+            type="button"
+            onClick={() => setOrderTypeFilter(orderTypeFilter === 'Customisation' ? 'All' : 'Customisation')}
+            className={`px-3.5 py-1.5 h-8 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+              orderTypeFilter === 'Customisation'
+                ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                : 'bg-[#fbf7ff] text-purple-700 border-purple-200 hover:bg-purple-100/70'
+            }`}
+            title="Filter only Customisation orders"
+          >
+            <Boxes size={13} className={orderTypeFilter === 'Customisation' ? 'text-white' : 'text-purple-600'} />
+            <span>Customisation ({customOrdersCount})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setOrderTypeFilter(orderTypeFilter === 'Transport' ? 'All' : 'Transport')}
+            className={`px-3.5 py-1.5 h-8 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+              orderTypeFilter === 'Transport'
+                ? 'bg-teal-700 text-white border-teal-700 shadow-2xs'
+                : 'bg-[#f0fbf9] text-teal-800 border-teal-200 hover:bg-teal-100/70'
+            }`}
+            title="Filter only Transport orders"
+          >
+            <Truck size={13} className={orderTypeFilter === 'Transport' ? 'text-white' : 'text-teal-700'} />
+            <span>Transport ({transportOrdersCount})</span>
+          </button>
         </div>
       </div>
 
-      {/* ── 4. SLOT VIEW (Grid of 4 Time Slots - WITHOUT visible scrollbar) ───── */}
+      {/* ── 5. SLOT VIEW (Grid of 4 Time Slots) ──────────────────────────── */}
       {activeTab === 'slot' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {SLOT_TIMES.map((slotTime) => {
             const slotOrders = filteredOrders.filter((o) => o.slot === slotTime);
+            const slotConfig = getSlotHeaderConfig(slotTime);
 
             return (
               <div
                 key={slotTime}
-                className="bg-white rounded-xl border border-slate-200/90 shadow-2xs flex flex-col overflow-hidden"
+                className={`${slotConfig.bg} rounded-2xl border p-3 flex flex-col space-y-3 shadow-2xs`}
               >
                 {/* Slot Column Header */}
-                <div className="p-3 sm:p-3.5 border-b border-slate-100 flex items-center justify-between bg-[#f7f7f8]">
-                  <span className="font-bold text-xs sm:text-sm text-slate-800">{slotTime}</span>
+                <div className="flex items-center justify-between pb-0.5">
+                  <div className="flex items-center gap-2">
+                    {slotConfig.icon}
+                    <span className="font-bold text-xs sm:text-sm text-slate-900">{slotTime}</span>
+                  </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-lg bg-slate-200/70 text-slate-700">
                       {slotOrders.length}
                     </span>
-                    {/* Analytics Button: Left of Plus Button */}
+                    {/* Analytics Button */}
                     <button
                       onClick={() => {
                         setSelectedSlotForAnalytics(slotTime);
                         setIsSlotAnalyticsModalOpen(true);
                         setSlotAnalyticsSearchTerm('');
                       }}
-                      className="flex items-center justify-center h-7 w-7 rounded-lg bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                      className="flex items-center justify-center h-7 w-7 rounded-lg bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/90 shadow-2xs transition-colors cursor-pointer"
                       title={`View Item Quantity Analytics for ${slotTime}`}
                     >
-                      <BarChart3 size={14} />
+                      <BarChart3 size={13} />
                     </button>
                     {/* Plus Button */}
                     <Link
@@ -2086,98 +2192,16 @@ export default function OrdersClient() {
                       className="flex items-center justify-center h-7 w-7 rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs transition-colors cursor-pointer"
                       title={`Add Order for ${slotTime}`}
                     >
-                      <Plus size={14} />
+                      <Plus size={13} />
                     </Link>
                   </div>
                 </div>
 
-                {/* Slot Category Capacity Indicators */}
-                {slotCategories.length > 0 && (() => {
-                  const catStats = slotCategories.map((cat) => {
-                    const maxLimit = cat.slotLimits?.[slotTime] || 0;
-                    const assignedIds = new Set(cat.assignedItemIds || []);
-                    const assignedNames = new Set((cat.assignedItemNames || []).map((n) => n.toLowerCase()));
-
-                    let bookedQty = 0;
-                    slotOrders.forEach((order) => {
-                      if (order.orderStatus === 'Cancelled' || order.orderStatus === 'Rejected') return;
-                      (order.items || []).forEach((it) => {
-                        const itId = it.itemId || (it as any).id || '';
-                        const itName = (it.itemName || (it as any).name || '').toLowerCase();
-                        if (assignedIds.has(itId) || assignedNames.has(itName)) {
-                          bookedQty += parseFloat(String(it.quantity || 0)) || 0;
-                        }
-                      });
-                    });
-
-                    const remaining = maxLimit > 0 ? maxLimit - bookedQty : Infinity;
-                    const percent = maxLimit > 0 ? Math.min(100, Math.round((bookedQty / maxLimit) * 100)) : 0;
-                    const isExceeded = maxLimit > 0 && bookedQty > maxLimit;
-
-                    return {
-                      id: cat.id,
-                      name: cat.name,
-                      color: cat.color || '#02626D',
-                      maxLimit,
-                      bookedQty: Math.round(bookedQty * 10) / 10,
-                      remaining: remaining !== Infinity ? Math.round(remaining * 10) / 10 : Infinity,
-                      percent,
-                      isExceeded,
-                      hasLimit: maxLimit > 0,
-                    };
-                  });
-
-                  const categoriesWithLimits = catStats.filter((c) => c.hasLimit);
-                  if (categoriesWithLimits.length === 0) return null;
-
-                  return (
-                    // <div className="px-3 py-2 bg-gradient-to-r from-slate-50 to-indigo-50/30 border-b border-slate-100 space-y-1.5">
-                    //   <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    //     <span className="flex items-center gap-1">
-                    //       <Layers size={11} className="text-indigo-600" />
-                    //       <span>Category Capacity</span>
-                    //     </span>
-                    //     <Link href="/slot-categories" className="text-indigo-600 hover:underline">
-                    //       Limits
-                    //     </Link>
-                    //   </div>
-
-                    //   <div className="space-y-1.5">
-                    //     {categoriesWithLimits.map((cat) => (
-                    //       <div key={cat.id} className="bg-white p-1.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1">
-                    //         <div className="flex items-center justify-between text-[10.5px]">
-                    //           <span className="font-bold truncate max-w-[120px]" style={{ color: cat.color }}>
-                    //             {cat.name}
-                    //           </span>
-                    //           <span className={`text-[9.5px] font-extrabold px-1.5 py-0.2 rounded ${cat.isExceeded ? 'bg-rose-100 text-rose-800' : cat.remaining <= (cat.maxLimit * 0.2) ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                    //             {cat.isExceeded ? `${Math.abs(cat.remaining)} KG Over` : `${cat.remaining} KG Left`}
-                    //           </span>
-                    //         </div>
-
-                    //         <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
-                    //           <div
-                    //             className={`h-full rounded-full transition-all ${cat.isExceeded ? 'bg-rose-500' : cat.percent >= 80 ? 'bg-amber-500' : 'bg-[#02626D]'}`}
-                    //             style={{ width: `${Math.min(100, cat.percent)}%` }}
-                    //           />
-                    //         </div>
-
-                    //         <div className="flex items-center justify-between text-[9px] text-slate-400 font-medium">
-                    //           <span>Booked: {cat.bookedQty} KG</span>
-                    //           <span>Max: {cat.maxLimit} KG</span>
-                    //         </div>
-                    //       </div>
-                    //     ))}
-                    //   </div>
-                    // </div>
-                    <></>
-                  );
-                })()}
-
                 {/* Order Cards List inside Slot (24 Items Per Page) */}
-                <div className="p-3 space-y-2.5 flex-1">
+                <div className="space-y-2.5 flex-1">
                   {slotOrders.length === 0 ? (
-                    <div className="py-10 text-center text-slate-400 text-xs font-medium">
-                      No orders in this slot for the selected filters.
+                    <div className="py-12 text-center text-slate-400 text-xs font-medium bg-white/60 rounded-xl border border-dashed border-slate-200">
+                      No orders in this slot
                     </div>
                   ) : (
                     (() => {
@@ -2192,36 +2216,41 @@ export default function OrdersClient() {
                             <div
                               key={order.id}
                               onClick={() => navigateToOrder(order.id)}
-                              className="bg-white border border-slate-200/90 hover:border-[#02626D]/50 rounded-lg p-3 shadow-2xs hover:shadow-xs transition-all space-y-2 relative group cursor-pointer"
+                              className="bg-white border border-slate-200/80 hover:border-[#02626D]/50 rounded-xl p-3.5 shadow-2xs hover:shadow-xs transition-all space-y-2.5 relative group cursor-pointer"
                             >
+                              {/* Top Row: Order Code & Total Amount */}
                               <div className="flex items-center justify-between">
-                                <span className="font-bold text-xs text-[#02626D] font-mono">{order.code}</span>
-                                <span className="font-bold text-xs text-slate-900">
+                                <span className="font-bold text-xs text-[#02626D] font-mono tracking-tight">{order.code}</span>
+                                <span className="font-extrabold text-xs sm:text-sm text-slate-900">
                                   ₹ {(order.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </span>
                               </div>
 
-                              <div className="flex items-center justify-between gap-1">
-                                <h4 className="text-xs font-semibold text-slate-900 truncate max-w-[120px]" title={order.customerName}>
+                              {/* Second Row: Customer Name & Status Badges */}
+                              <div className="flex items-center justify-between gap-1.5">
+                                <h4 className="text-xs font-bold text-slate-900 truncate max-w-[130px]" title={order.customerName}>
                                   {order.customerName}
                                 </h4>
-                                <div className="flex items-center gap-1 flex-wrap justify-end">
+                                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                  {/* Payment Status Badge */}
                                   <span
-                                    className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${
-                                      order.paymentStatus === 'Completed'
+                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                      order.paymentStatus === 'Completed' || order.paymentStatus === 'Paid'
                                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                         : order.paymentStatus === 'Partial'
                                           ? 'bg-sky-50 text-sky-700 border-sky-200'
                                           : 'bg-amber-50 text-amber-700 border-amber-200'
                                     }`}
                                   >
-                                    {order.paymentStatus}
+                                    {order.paymentStatus === 'Paid' ? 'Completed' : order.paymentStatus}
                                   </span>
+
+                                  {/* Order Status Badge */}
                                   {(() => {
                                     const osStyle = getOrderStatusBadgeStyle(order.orderStatus);
                                     return (
                                       <span
-                                        className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${osStyle.bg} ${osStyle.text} ${osStyle.border}`}
+                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${osStyle.bg} ${osStyle.text} ${osStyle.border}`}
                                       >
                                         {order.orderStatus}
                                       </span>
@@ -2230,11 +2259,12 @@ export default function OrdersClient() {
                                 </div>
                               </div>
 
+                              {/* Third Row: Customisation and Transport badges if applicable */}
                               {(order.isCustomisation || order.isTransportRequired) && (
-                                <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   {order.isCustomisation && (
-                                    <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
-                                      <Boxes size={10} />
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                                      <Boxes size={11} className="text-purple-600" />
                                       <span>Customisation</span>
                                       {order.customisationDetails?.noOfBoxes ? (
                                         <span className="text-purple-900 font-extrabold">({order.customisationDetails.noOfBoxes}B)</span>
@@ -2242,16 +2272,17 @@ export default function OrdersClient() {
                                     </span>
                                   )}
                                   {order.isTransportRequired && (
-                                    <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1">
-                                      <Truck size={10} />
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1">
+                                      <Truck size={11} className="text-teal-600" />
                                       <span>Transport</span>
                                     </span>
                                   )}
                                 </div>
                               )}
 
+                              {/* Fourth Row: Product Item Tags */}
                               {order.items && order.items.length > 0 && (
-                                <div className="flex flex-wrap gap-1 pt-0.5">
+                                <div className="flex flex-wrap gap-1.5">
                                   {order.items.slice(0, 3).map((it: any, iIdx: number) => {
                                     const itName = (it.itemName || it.name || 'Item').trim();
                                     const isSelected = selectedItemFilter.toLowerCase() === itName.toLowerCase();
@@ -2263,10 +2294,10 @@ export default function OrdersClient() {
                                           e.stopPropagation();
                                           setSelectedItemFilter(isSelected ? 'All' : itName);
                                         }}
-                                        className={`text-[9.5px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer max-w-[110px] truncate ${
+                                        className={`text-[10px] px-2 py-0.5 rounded-md border transition-colors cursor-pointer max-w-[120px] truncate ${
                                           isSelected
                                             ? 'bg-[#02626D] text-white border-[#02626D] font-bold'
-                                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-[#02626D]/10 hover:text-[#02626D]'
+                                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-[#02626D]/10 hover:text-[#02626D]'
                                         }`}
                                         title={`Filter orders with "${itName}"`}
                                       >
@@ -2275,45 +2306,48 @@ export default function OrdersClient() {
                                     );
                                   })}
                                   {order.items.length > 3 && (
-                                    <span className="text-[9px] text-slate-400 self-center">
+                                    <span className="text-[10px] text-slate-400 self-center font-medium">
                                       +{order.items.length - 3} more
                                     </span>
                                   )}
                                 </div>
                               )}
 
-                              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-100">
-                                <div className="flex items-center gap-1">
-                                  <ShoppingBag size={12} />
-                                  <span>{order.totalItems || order.items?.length || 0} Items</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Clock size={12} />
-                                  <span>{order.orderTime || '10:00 AM'}</span>
+                              {/* Fifth Row / Bottom Footer */}
+                              <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-1 font-medium text-slate-500">
+                                    <Package size={13} className="text-slate-400" />
+                                    <span>{order.totalItems || order.items?.length || 0} Items</span>
+                                  </div>
+                                  <div className="flex items-center gap-1 font-medium text-slate-500">
+                                    <Clock size={13} className="text-slate-400" />
+                                    <span>{(order as any).deliveryTime || order.orderTime || '10:00 AM'}</span>
+                                  </div>
                                 </div>
 
-                                {/* Icon-Only Action Buttons for View, Print, Edit */}
+                                {/* Action Buttons: View, Print, Edit */}
                                 <div className="flex items-center gap-1">
                                   <button
                                     onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
-                                    className="flex items-center justify-center h-6.5 w-6.5 rounded-md text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-300 shadow-2xs"
+                                    className="flex items-center justify-center h-7 w-7 rounded-lg text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-200 shadow-2xs"
                                     title="View Order Details"
                                   >
-                                    <Eye size={12} />
+                                    <Eye size={13} />
                                   </button>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handlePrintOrderSlip(order); }}
-                                    className="flex items-center justify-center h-6.5 w-6.5 rounded-md text-[#02626D] bg-[#02626D]/10 hover:bg-[#02626D]/20 transition-colors cursor-pointer border border-[#02626D]/30 shadow-2xs"
+                                    className="flex items-center justify-center h-7 w-7 rounded-lg text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-200 shadow-2xs"
                                     title="Print Thermal Receipt"
                                   >
-                                    <Printer size={12} />
+                                    <Printer size={13} />
                                   </button>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}
-                                    className="flex items-center justify-center h-6.5 w-6.5 rounded-md text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-300 shadow-2xs"
+                                    className="flex items-center justify-center h-7 w-7 rounded-lg text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-200 shadow-2xs"
                                     title="Edit Order"
                                   >
-                                    <Pencil size={12} />
+                                    <Pencil size={13} />
                                   </button>
                                 </div>
                               </div>
@@ -2321,12 +2355,12 @@ export default function OrdersClient() {
                           ))}
 
                           {totalSlotPages > 1 && (
-                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs gap-1">
+                            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs gap-1">
                               <button
                                 type="button"
                                 disabled={currentSlotPage <= 1}
                                 onClick={() => setSlotPages((prev) => ({ ...prev, [slotTime]: Math.max(1, currentSlotPage - 1) }))}
-                                className="px-2 py-1 rounded-lg border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-50 font-semibold cursor-pointer text-[11px] flex items-center gap-0.5 shadow-2xs"
+                                className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-40 hover:bg-slate-50 font-semibold cursor-pointer text-[11px] flex items-center gap-0.5 shadow-2xs"
                               >
                                 <ChevronLeft size={12} /> Prev
                               </button>
@@ -2337,7 +2371,7 @@ export default function OrdersClient() {
                                 type="button"
                                 disabled={currentSlotPage >= totalSlotPages}
                                 onClick={() => setSlotPages((prev) => ({ ...prev, [slotTime]: Math.min(totalSlotPages, currentSlotPage + 1) }))}
-                                className="px-2 py-1 rounded-lg border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-50 font-semibold cursor-pointer text-[11px] flex items-center gap-0.5 shadow-2xs"
+                                className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-40 hover:bg-slate-50 font-semibold cursor-pointer text-[11px] flex items-center gap-0.5 shadow-2xs"
                               >
                                 Next <ChevronRight size={12} />
                               </button>
@@ -2350,10 +2384,10 @@ export default function OrdersClient() {
                 </div>
 
                 {/* Footer Link */}
-                <div className="p-2.5 text-center border-t border-slate-100 bg-[#f7f7f8]">
+                <div className="pt-1 text-center">
                   <button
                     onClick={() => setActiveTab('list')}
-                    className="text-xs font-semibold text-[#02626D] hover:text-[#014d56] transition-colors cursor-pointer"
+                    className="text-xs font-bold text-[#02626D] hover:text-[#014d56] transition-colors cursor-pointer"
                   >
                     View all {slotOrders.length} orders →
                   </button>

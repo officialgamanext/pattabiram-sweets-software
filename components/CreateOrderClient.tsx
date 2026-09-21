@@ -1772,7 +1772,7 @@ export default function CreateOrderClient() {
         <form noValidate onSubmit={handleCreateOrderSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 lg:gap-4.5 items-start">
           
           {/* ── 1. LEFT COLUMN: SLOTS, DATES & TIMES, CUSTOMER, CAPACITY, PRODUCT CATALOG ── */}
-          <div className="lg:col-span-7 xl:col-span-7 space-y-3.5">
+          <div className="lg:col-span-8 xl:col-span-8 space-y-3.5">
             
             {/* Top Order Configuration Card: Slots, Dates, Customer, Slot Capacity */}
             <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-3.5">
@@ -2232,7 +2232,7 @@ export default function CreateOrderClient() {
           </div>
 
           {/* ── 2. RIGHT COLUMN: SELECTED ITEMS, CUSTOMISATION, TRANSPORT, TOTAL COUNT ── */}
-          <div className="lg:col-span-5 xl:col-span-5 space-y-3.5 lg:sticky lg:top-16 max-h-[calc(100vh-5rem)] overflow-y-auto pr-0.5 no-scrollbar">
+          <div className="lg:col-span-4 xl:col-span-4 space-y-3.5">
 
             {/* Selected Items (Cart) */}
             <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-2.5">

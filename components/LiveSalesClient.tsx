@@ -441,7 +441,7 @@ export default function LiveSalesClient() {
 
   // Helper to add item to cart
   const addItemToCart = (item: ItemRecord, qty: number = 1, amount?: number) => {
-    const unitPrice = typeof item.posPrice === 'number' && item.posPrice > 0 ? item.posPrice : item.price || 0;
+    const unitPrice = item.price || 0;
     const isWeight = isWeightUnit(item.unit);
     const itemTotal = amount !== undefined ? amount : isWeight ? Math.round(unitPrice * qty * 100) / 100 : unitPrice * qty;
 
@@ -482,7 +482,7 @@ export default function LiveSalesClient() {
       setActiveWeightItem(item);
       setEditingCartItemIndex(null);
       setInputWeightKg('1.0');
-      const unitPrice = typeof item.posPrice === 'number' && item.posPrice > 0 ? item.posPrice : item.price || 0;
+      const unitPrice = item.price || 0;
       setInputAmount(unitPrice.toString());
     } else {
       addItemToCart(item, 1);
@@ -778,7 +778,7 @@ export default function LiveSalesClient() {
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 max-h-[580px] overflow-y-auto pr-1">
                 {filteredProducts.map((prod) => {
-                  const unitPrice = typeof prod.posPrice === 'number' && prod.posPrice > 0 ? prod.posPrice : prod.price || 0;
+                  const unitPrice = prod.price || 0;
                   const isWeight = isWeightUnit(prod.unit);
 
                   return (
@@ -1259,7 +1259,7 @@ export default function LiveSalesClient() {
               <div>
                 <h3 className="text-sm font-bold text-slate-900">{activeWeightItem.name}</h3>
                 <p className="text-[11px] text-slate-400 font-mono">
-                  Rate: ₹{activeWeightItem.posPrice || activeWeightItem.price} / {activeWeightItem.unit}
+                  Rate: ₹{activeWeightItem.price || 0} / {activeWeightItem.unit}
                 </p>
               </div>
               <button
@@ -1276,7 +1276,7 @@ export default function LiveSalesClient() {
               <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Weight Presets</label>
               <div className="grid grid-cols-4 gap-1.5">
                 {PRESET_WEIGHTS.map((preset) => {
-                  const unitPrice = activeWeightItem.posPrice || activeWeightItem.price || 0;
+                  const unitPrice = activeWeightItem.price || 0;
                   const presetAmt = (unitPrice * preset.kg).toFixed(2);
                   return (
                     <button
@@ -1308,7 +1308,7 @@ export default function LiveSalesClient() {
                     const val = e.target.value;
                     setInputWeightKg(val);
                     const num = parseFloat(val) || 0;
-                    const unitPrice = activeWeightItem.posPrice || activeWeightItem.price || 0;
+                    const unitPrice = activeWeightItem.price || 0;
                     setInputAmount((unitPrice * num).toFixed(2));
                   }}
                   className="w-full h-9 px-2.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D]"
@@ -1325,7 +1325,7 @@ export default function LiveSalesClient() {
                     const val = e.target.value;
                     setInputAmount(val);
                     const amt = parseFloat(val) || 0;
-                    const unitPrice = activeWeightItem.posPrice || activeWeightItem.price || 0;
+                    const unitPrice = activeWeightItem.price || 0;
                     if (unitPrice > 0) {
                       setInputWeightKg((amt / unitPrice).toFixed(3));
                     }

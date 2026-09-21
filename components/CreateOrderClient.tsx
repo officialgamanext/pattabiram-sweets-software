@@ -342,6 +342,7 @@ export default function CreateOrderClient() {
   const [deliveryTime, setDeliveryTime] = useState<string>('10:00 AM');
   const [mfgDate, setMfgDate] = useState<string>(initialDate || getTodayDateStr());
   const [expDeliveryDate, setExpDeliveryDate] = useState<string>(initialDate || getTodayDateStr());
+  const [isSlotCapacityOpen, setIsSlotCapacityOpen] = useState<boolean>(false);
 
   const handleSelectSlot = (slot: SlotTime) => {
     setOrderSlot(slot);
@@ -1770,94 +1771,24 @@ export default function CreateOrderClient() {
       <div className="w-full px-2.5 sm:px-4 lg:px-6 pt-3 pb-8">
         <form noValidate onSubmit={handleCreateOrderSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 lg:gap-4.5 items-start">
           
-          {/* ── 1. LEFT COLUMN: TIME SLOTS, DELIVERY DATE & TIME, MANUFACTURING DATE ── */}
-          <div className="lg:col-span-3 xl:col-span-2 space-y-3.5 lg:sticky lg:top-16 relative z-20">
+          {/* ── 1. LEFT COLUMN: SLOTS, DATES & TIMES, CUSTOMER, CAPACITY, PRODUCT CATALOG ── */}
+          <div className="lg:col-span-7 xl:col-span-7 space-y-3.5">
+            
+            {/* Top Order Configuration Card: Slots, Dates, Customer, Slot Capacity */}
             <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-3.5">
-              {/* Header */}
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center shrink-0">
-                  <Clock size={15} />
+              
+              {/* 1.1 Four Slots at the Top */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
+                    <Clock size={14} className="text-[#02626D]" />
+                    <span>Delivery Slot</span>
+                  </label>
+                  <span className="text-[10px] font-mono font-bold text-[#02626D] bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                    Selected: {orderSlot}
+                  </span>
                 </div>
-                <div>
-                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                    Schedule &amp; Slots
-                  </h3>
-                  <p className="text-[10px] text-slate-400">Timings &amp; batch dates</p>
-                </div>
-              </div>
-
-              {/* Expected Delivery Date */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Expected Delivery Date <span className="text-rose-500">*</span>
-                </label>
-                <CustomDatePicker
-                  value={expDeliveryDate}
-                  onChange={(val) => setExpDeliveryDate(val)}
-                  placeholder="Select Delivery Date"
-                  blockTuesdays={true}
-                  allowedTuesdays={allowedTuesdays}
-                  className="w-full"
-                />
-                {allowedTuesdays.includes(expDeliveryDate) ? (
-                  <span className="text-[9.5px] text-emerald-600 font-bold mt-0.5 block flex items-center gap-1">
-                    ✓ Special Tuesday Enabled
-                  </span>
-                ) : (
-                  <span className="text-[9.5px] text-slate-400 mt-0.5 block">Store closed on Tuesdays</span>
-                )}
-              </div>
-
-              {/* Specific Delivery Time (1-hr interval) */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Delivery Time <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={deliveryTime}
-                  onChange={(e) => setDeliveryTime(e.target.value)}
-                  className="w-full h-8.5 px-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] shadow-2xs cursor-pointer"
-                >
-                  {DELIVERY_TIME_OPTIONS.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-                <span className="text-[9.5px] text-slate-400 mt-0.5 block">1-hr time slot</span>
-              </div>
-
-              {/* Manufacturing Date */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Manufacturing Date <span className="text-rose-500">*</span>
-                </label>
-                <CustomDatePicker
-                  value={mfgDate}
-                  onChange={(val) => setMfgDate(val)}
-                  placeholder="Select Mfg Date"
-                  blockTuesdays={true}
-                  allowedTuesdays={allowedTuesdays}
-                  className="w-full"
-                />
-                {allowedTuesdays.includes(mfgDate) ? (
-                  <span className="text-[9.5px] text-emerald-600 font-bold mt-0.5 block flex items-center gap-1">
-                    ✓ Special Tuesday Enabled
-                  </span>
-                ) : (
-                  <span className="text-[9.5px] text-slate-400 mt-0.5 block">Factory closed on Tuesdays</span>
-                )}
-              </div>
-
-              {/* Delivery Slots */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                  <span>Delivery Slot</span>
-                  <span className="text-[9.5px] font-mono font-bold text-[#02626D] bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
-                    Selected
-                  </span>
-                </label>
-                <div className="space-y-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {ALL_SLOTS.map((slot) => {
                     const isSelected = orderSlot === slot;
                     return (
@@ -1865,7 +1796,7 @@ export default function CreateOrderClient() {
                         key={slot}
                         type="button"
                         onClick={() => handleSelectSlot(slot)}
-                        className={`w-full h-8.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer select-none ${
+                        className={`h-9.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer select-none ${
                           isSelected
                             ? 'bg-[#02626D] text-white shadow-xs ring-2 ring-[#02626D]/30'
                             : 'bg-[#f7f7f8] hover:bg-slate-100 text-slate-700 border border-slate-200/80'
@@ -1873,79 +1804,285 @@ export default function CreateOrderClient() {
                       >
                         <span className="flex items-center gap-1.5 truncate">
                           <Clock size={12} className={isSelected ? 'text-white' : 'text-slate-400'} />
-                          <span className="truncate text-[11.5px]">{slot}</span>
+                          <span className="truncate text-[11px] sm:text-xs">{slot}</span>
                         </span>
-                        {isSelected && <Check size={12} className="text-white shrink-0" />}
+                        {isSelected && <Check size={12} className="text-white shrink-0 ml-1" />}
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Compact Capacity Limit Tracker if active slot categories */}
-              {slotCategoryCapacities.length > 0 && (
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                    <span className="flex items-center gap-1">
-                      <Layers size={12} className="text-[#02626D]" />
-                      <span>Capacity</span>
+              {/* 1.2 Delivery Date, Delivery Time & Customer Selection */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2.5 border-t border-slate-100 items-start">
+                {/* Expected Delivery Date */}
+                <div className="sm:col-span-3">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Delivery Date <span className="text-rose-500">*</span>
+                  </label>
+                  <CustomDatePicker
+                    value={expDeliveryDate}
+                    onChange={(val) => {
+                      setExpDeliveryDate(val);
+                      setMfgDate(val);
+                    }}
+                    placeholder="Select Date"
+                    blockTuesdays={true}
+                    allowedTuesdays={allowedTuesdays}
+                    className="w-full"
+                  />
+                  {allowedTuesdays.includes(expDeliveryDate) ? (
+                    <span className="text-[9.5px] text-emerald-600 font-bold mt-0.5 block flex items-center gap-1">
+                      ✓ Special Tuesday Enabled
                     </span>
-                    <Link
-                      href="/slot-categories"
-                      target="_blank"
-                      className="text-[10px] text-[#02626D] hover:underline"
+                  ) : (
+                    <span className="text-[9.5px] text-slate-400 mt-0.5 block">Store closed on Tuesdays</span>
+                  )}
+                </div>
+
+                {/* Specific Delivery Time (1-hr interval) */}
+                <div className="sm:col-span-3">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Delivery Time <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={deliveryTime}
+                    onChange={(e) => setDeliveryTime(e.target.value)}
+                    className="w-full h-8.5 px-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] shadow-2xs cursor-pointer"
+                  >
+                    {DELIVERY_TIME_OPTIONS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[9.5px] text-slate-400 mt-0.5 block">1-hr time slot</span>
+                </div>
+
+                {/* Customer Selection */}
+                <div className="sm:col-span-6 space-y-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      <UserCheck size={13} className="text-[#02626D]" />
+                      <span>Customer Selection</span>
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddCustomerModalOpen(true)}
+                      className="text-[11px] font-bold text-[#02626D] hover:underline flex items-center gap-0.5 cursor-pointer"
                     >
-                      Manage
-                    </Link>
+                      <Plus size={12} />
+                      <span>New</span>
+                    </button>
                   </div>
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5 no-scrollbar">
-                    {slotCategoryCapacities.map((cap) => (
-                      <div
-                        key={cap.id}
-                        className={`p-2 rounded-xl border text-[10.5px] ${
-                          cap.isExceeded
-                            ? 'border-rose-300 bg-rose-50/50 text-rose-900'
-                            : 'border-slate-200 bg-slate-50/60 text-slate-800'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between font-bold">
-                          <span className="truncate max-w-[90px]" style={{ color: cap.color }}>
-                            {cap.name}
+
+                  {selectedCustomer ? (
+                    <div className="h-8.5 px-2.5 rounded-xl bg-teal-50/70 border border-teal-200/90 flex items-center justify-between gap-2 shadow-2xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-5 h-5 rounded-md bg-[#02626D] text-white font-black text-[10px] flex items-center justify-center shrink-0">
+                          {selectedCustomer.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-extrabold text-xs text-slate-900 truncate max-w-[130px] sm:max-w-[170px]">{selectedCustomer.name}</span>
+                          <span className="text-[8.5px] font-bold px-1.5 py-0.2 rounded bg-[#02626D] text-white uppercase shrink-0">
+                            {selectedCustomer.type}
                           </span>
-                          {cap.hasLimit ? (
-                            <span className={cap.isExceeded ? 'text-rose-600' : 'text-slate-600'}>
-                              {cap.remainingAfterCurrent < 0
-                                ? `${Math.abs(cap.remainingAfterCurrent)}KG Over!`
-                                : `${cap.remainingAfterCurrent}KG Left`}
-                            </span>
+                          <span className="text-[10px] text-slate-500 truncate hidden md:inline">
+                            {selectedCustomer.mobile || 'No mobile'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomer(null);
+                          setCustomerSearchTerm('');
+                        }}
+                        className="text-[10px] font-bold text-slate-500 hover:text-red-600 px-2 py-0.5 rounded-md border border-slate-300 hover:border-red-200 bg-white transition-colors cursor-pointer shrink-0 shadow-2xs"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative" ref={customerSearchRef}>
+                      <div className="relative">
+                        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <input
+                          id="customer-search-input"
+                          type="text"
+                          placeholder="Search customer name or mobile..."
+                          value={customerSearchTerm}
+                          onChange={(e) => {
+                            setCustomerSearchTerm(e.target.value);
+                            setIsCustomerDropdownOpen(true);
+                          }}
+                          onFocus={() => setIsCustomerDropdownOpen(true)}
+                          className="w-full pl-8 pr-3 h-8.5 text-xs border border-slate-300 rounded-xl bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] font-medium shadow-2xs"
+                        />
+                      </div>
+
+                      {/* Customer Dropdown Results */}
+                      {isCustomerDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1.5 max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-30 divide-y divide-slate-100 no-scrollbar">
+                          {filteredCustomers.length === 0 ? (
+                            <div className="p-3 text-center text-xs text-slate-400">
+                              No customer found.{' '}
+                              <button
+                                type="button"
+                                onClick={() => setIsAddCustomerModalOpen(true)}
+                                className="text-[#02626D] font-bold underline ml-1"
+                              >
+                                Add New
+                              </button>
+                            </div>
                           ) : (
-                            <span className="text-slate-400 text-[10px]">No Limit</span>
+                            filteredCustomers.map((cust) => (
+                              <div
+                                key={cust.id}
+                                onClick={() => {
+                                  setSelectedCustomer(cust);
+                                  setIsCustomerDropdownOpen(false);
+                                }}
+                                className="p-2.5 hover:bg-slate-50 flex items-center justify-between cursor-pointer transition-colors"
+                              >
+                                <div>
+                                  <p className="text-xs font-bold text-slate-900">{cust.name}</p>
+                                  <p className="text-[10px] text-slate-400">{cust.mobile} • {cust.code}</p>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                                  {cust.type}
+                                </span>
+                              </div>
+                            ))
                           )}
                         </div>
-                        {cap.hasLimit && (
-                          <div className="w-full bg-slate-200 rounded-full h-1 mt-1 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${
-                                cap.isExceeded
-                                  ? 'bg-rose-500'
-                                  : cap.percentUsed >= 80
-                                  ? 'bg-amber-500'
-                                  : 'bg-[#02626D]'
-                              }`}
-                              style={{ width: `${Math.min(100, cap.percentUsed)}%` }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                      )}
+                    </div>
+                  )}
+                  <span className="text-[9.5px] text-slate-400 mt-0.5 block">Search name or mobile</span>
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
 
-          {/* ── 2. MIDDLE COLUMN: ITEMS LIST (5 IN A ROW E-COMMERCE PRODUCT TILES) ── */}
-          <div className="lg:col-span-5 xl:col-span-7 space-y-3.5">
+              {/* 1.4 Down Button: Display/Hide Slot Capacity */}
+              <div className="pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsSlotCapacityOpen((prev) => !prev)}
+                  className={`w-full py-2 px-3 rounded-xl border flex items-center justify-between text-xs font-bold transition-all cursor-pointer select-none ${
+                    isSlotCapacityOpen
+                      ? 'bg-teal-50/70 border-teal-200 text-[#02626D]'
+                      : 'bg-slate-50/80 hover:bg-slate-100/80 border-slate-200/90 text-slate-700 shadow-2xs'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
+                      isSlotCapacityOpen ? 'bg-[#02626D] text-white' : 'bg-[#02626D]/10 text-[#02626D]'
+                    }`}>
+                      <Layers size={13} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span>Slot Capacity ({orderSlot})</span>
+                      {slotCategoryCapacities.length > 0 && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white text-slate-600 border border-slate-200">
+                          {slotCategoryCapacities.length} {slotCategoryCapacities.length === 1 ? 'category' : 'categories'}
+                        </span>
+                      )}
+                      {slotCategoryCapacities.some((c) => c.isExceeded) && (
+                        <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200 animate-pulse">
+                          Exceeded
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-slate-400">
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {isSlotCapacityOpen ? 'Hide' : 'View'} Details
+                    </span>
+                    <ChevronDown
+                      size={15}
+                      className={`transition-transform duration-200 ${isSlotCapacityOpen ? 'rotate-180 text-[#02626D]' : 'text-slate-400'}`}
+                    />
+                  </div>
+                </button>
+
+                {/* Collapsible Slot Capacity Content */}
+                {isSlotCapacityOpen && (
+                  <div className="mt-2.5 p-3 bg-slate-50/60 rounded-xl border border-slate-200/90 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700 border-b border-slate-200/80 pb-1.5">
+                      <span className="flex items-center gap-1.5 text-[#02626D]">
+                        <Layers size={13} />
+                        <span>Active Category Capacity Limits</span>
+                      </span>
+                      <Link
+                        href="/slot-categories"
+                        target="_blank"
+                        className="text-[10.5px] text-[#02626D] hover:underline font-bold"
+                      >
+                        Manage Limits
+                      </Link>
+                    </div>
+
+                    {slotCategoryCapacities.length === 0 ? (
+                      <p className="text-xs text-slate-400 py-1 italic">No slot category limits configured for this slot.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {slotCategoryCapacities.map((cap) => (
+                          <div
+                            key={cap.id}
+                            className={`p-2.5 rounded-xl border text-[11px] ${
+                              cap.isExceeded
+                                ? 'border-rose-300 bg-rose-50/70 text-rose-900 shadow-2xs'
+                                : 'border-slate-200 bg-white text-slate-800 shadow-2xs'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between font-bold">
+                              <span className="truncate max-w-[120px]" style={{ color: cap.color }}>
+                                {cap.name}
+                              </span>
+                              {cap.hasLimit ? (
+                                <span className={cap.isExceeded ? 'text-rose-600 font-black' : 'text-slate-700 font-bold'}>
+                                  {cap.remainingAfterCurrent < 0
+                                    ? `${Math.abs(cap.remainingAfterCurrent)}KG Over!`
+                                    : `${cap.remainingAfterCurrent}KG Left`}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 text-[10px]">No Limit</span>
+                              )}
+                            </div>
+                            {cap.hasLimit && (
+                              <>
+                                <div className="w-full bg-slate-200 rounded-full h-1.5 mt-1.5 overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all ${
+                                      cap.isExceeded
+                                        ? 'bg-rose-500'
+                                        : cap.percentUsed >= 80
+                                        ? 'bg-amber-500'
+                                        : 'bg-[#02626D]'
+                                    }`}
+                                    style={{ width: `${Math.min(100, cap.percentUsed)}%` }}
+                                  />
+                                </div>
+                                <div className="flex justify-between text-[9.5px] text-slate-500 mt-1">
+                                  <span>Used: {cap.totalProjected.toFixed(1)}KG</span>
+                                  <span>Max: {cap.maxLimit}KG</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* 1.5 Products List (Below Slot Capacity) */}
             <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-3">
               {/* Catalog Header with Search & Count */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
@@ -2019,7 +2156,7 @@ export default function CreateOrderClient() {
                 ))}
               </div>
 
-              {/* 5 ITEMS IN A ROW GRID */}
+              {/* Products Tiles Grid */}
               <div className="pt-1">
                 {filteredProductTiles.length === 0 ? (
                   <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
@@ -2029,7 +2166,7 @@ export default function CreateOrderClient() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-5 gap-2.5 sm:gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3">
                       {paginatedProductTiles.map((prod) => {
                         const addedItem = orderItems.find((it) => it.itemId === prod.id);
 
@@ -2091,119 +2228,13 @@ export default function CreateOrderClient() {
                 )}
               </div>
             </div>
+
           </div>
 
-          {/* ── 3. RIGHT COLUMN: CUSTOMER, ITEMS, CUSTOMISATION, TRANSPORT, TOTAL COUNT ── */}
-          <div className="lg:col-span-4 xl:col-span-3 space-y-3.5 lg:sticky lg:top-16 max-h-[calc(100vh-5rem)] overflow-y-auto pr-0.5 no-scrollbar">
+          {/* ── 2. RIGHT COLUMN: SELECTED ITEMS, CUSTOMISATION, TRANSPORT, TOTAL COUNT ── */}
+          <div className="lg:col-span-5 xl:col-span-5 space-y-3.5 lg:sticky lg:top-16 max-h-[calc(100vh-5rem)] overflow-y-auto pr-0.5 no-scrollbar">
 
-            {/* 3.1 Customer Selection */}
-            <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-2.5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-6 h-6 rounded-lg bg-[#02626D]/10 text-[#02626D] flex items-center justify-center shrink-0">
-                    <UserCheck size={13} />
-                  </div>
-                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                    Customer Selection <span className="text-rose-500">*</span>
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsAddCustomerModalOpen(true)}
-                  className="text-[11px] font-bold text-[#02626D] hover:underline flex items-center gap-0.5 cursor-pointer"
-                >
-                  <Plus size={12} />
-                  <span>New</span>
-                </button>
-              </div>
-
-              {selectedCustomer ? (
-                <div className="p-2.5 rounded-xl bg-teal-50/70 border border-teal-200/90 flex items-center justify-between gap-2 shadow-2xs">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-[#02626D] text-white font-black text-xs flex items-center justify-center flex-shrink-0">
-                      {selectedCustomer.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1">
-                        <span className="font-extrabold text-xs text-slate-900 truncate max-w-[130px]">{selectedCustomer.name}</span>
-                        <span className="text-[8.5px] font-bold px-1.5 py-0.2 rounded bg-[#02626D] text-white uppercase">
-                          {selectedCustomer.type}
-                        </span>
-                      </div>
-                      <p className="text-[10.5px] text-slate-600 truncate">{selectedCustomer.mobile || 'No mobile'}</p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedCustomer(null);
-                      setCustomerSearchTerm('');
-                    }}
-                    className="text-[10.5px] font-bold text-slate-500 hover:text-red-600 px-2 py-1 rounded-lg border border-slate-300 hover:border-red-200 bg-white transition-colors cursor-pointer flex-shrink-0"
-                  >
-                    Change
-                  </button>
-                </div>
-              ) : (
-                <div className="relative" ref={customerSearchRef}>
-                  <div className="relative">
-                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    <input
-                      id="customer-search-input"
-                      type="text"
-                      placeholder="Search customer name or mobile..."
-                      value={customerSearchTerm}
-                      onChange={(e) => {
-                        setCustomerSearchTerm(e.target.value);
-                        setIsCustomerDropdownOpen(true);
-                      }}
-                      onFocus={() => setIsCustomerDropdownOpen(true)}
-                      className="w-full pl-8 pr-3 h-8.5 text-xs border border-slate-300 rounded-xl bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D] font-medium shadow-2xs"
-                    />
-                  </div>
-
-                  {/* Customer Dropdown Results */}
-                  {isCustomerDropdownOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-1.5 max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-30 divide-y divide-slate-100 no-scrollbar">
-                      {filteredCustomers.length === 0 ? (
-                        <div className="p-3 text-center text-xs text-slate-400">
-                          No customer found.{' '}
-                          <button
-                            type="button"
-                            onClick={() => setIsAddCustomerModalOpen(true)}
-                            className="text-[#02626D] font-bold underline ml-1"
-                          >
-                            Add New
-                          </button>
-                        </div>
-                      ) : (
-                        filteredCustomers.map((cust) => (
-                          <div
-                            key={cust.id}
-                            onClick={() => {
-                              setSelectedCustomer(cust);
-                              setIsCustomerDropdownOpen(false);
-                            }}
-                            className="p-2.5 hover:bg-slate-50 flex items-center justify-between cursor-pointer transition-colors"
-                          >
-                            <div>
-                              <p className="text-xs font-bold text-slate-900">{cust.name}</p>
-                              <p className="text-[10px] text-slate-400">{cust.mobile} • {cust.code}</p>
-                            </div>
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                              {cust.type}
-                            </span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* 3.2 Selected Items (Cart) */}
+            {/* Selected Items (Cart) */}
             <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-2.5">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                 <div className="flex items-center gap-1.5">

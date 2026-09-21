@@ -1918,7 +1918,7 @@ export default function OrdersClient() {
         </div>
 
         {/* Total Amount Card */}
-        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
+        {/* <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center flex-shrink-0">
             <IndianRupee size={17} />
           </div>
@@ -1929,7 +1929,7 @@ export default function OrdersClient() {
             </h3>
             <p className="text-[10px] text-emerald-600 font-medium">Filtered total</p>
           </div>
-        </div>
+        </div> */}
 
         {/* Confirmed Orders */}
         <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3">

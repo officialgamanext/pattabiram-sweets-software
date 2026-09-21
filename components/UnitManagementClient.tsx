@@ -42,6 +42,7 @@ export interface UnitItem {
   status: 'Active' | 'Inactive';
   isCustomisationUnit?: boolean;
   isTransportUnit?: boolean;
+  isWholesaleUnit?: boolean;
   createdAt?: any;
 }
 
@@ -81,6 +82,7 @@ export default function UnitManagementClient({
     status: 'Active' as 'Active' | 'Inactive',
     isCustomisationUnit: false,
     isTransportUnit: false,
+    isWholesaleUnit: false,
   });
 
   // Edit unit form state
@@ -91,6 +93,7 @@ export default function UnitManagementClient({
     status: 'Active' as 'Active' | 'Inactive',
     isCustomisationUnit: false,
     isTransportUnit: false,
+    isWholesaleUnit: false,
   });
 
   // Real-time Firebase Firestore listener
@@ -112,6 +115,7 @@ export default function UnitManagementClient({
             status: data.status || 'Active',
             isCustomisationUnit: Boolean(data.isCustomisationUnit),
             isTransportUnit: Boolean(data.isTransportUnit),
+            isWholesaleUnit: Boolean(data.isWholesaleUnit),
             createdAt: data.createdAt,
           };
         });
@@ -169,6 +173,7 @@ export default function UnitManagementClient({
         ...(unitType === 'packing' ? {
           isCustomisationUnit: Boolean(newUnit.isCustomisationUnit),
           isTransportUnit: Boolean(newUnit.isTransportUnit),
+          isWholesaleUnit: Boolean(newUnit.isWholesaleUnit),
         } : {}),
         createdAt: serverTimestamp(),
       });
@@ -181,6 +186,7 @@ export default function UnitManagementClient({
         status: 'Active',
         isCustomisationUnit: false,
         isTransportUnit: false,
+        isWholesaleUnit: false,
       });
     } catch (err: any) {
       console.error(`Failed to add ${unitType} unit to Firestore:`, err);
@@ -200,6 +206,7 @@ export default function UnitManagementClient({
       status: unit.status || 'Active',
       isCustomisationUnit: Boolean(unit.isCustomisationUnit),
       isTransportUnit: Boolean(unit.isTransportUnit),
+      isWholesaleUnit: Boolean(unit.isWholesaleUnit),
     });
   };
 
@@ -219,6 +226,7 @@ export default function UnitManagementClient({
         ...(unitType === 'packing' ? {
           isCustomisationUnit: Boolean(editFormData.isCustomisationUnit),
           isTransportUnit: Boolean(editFormData.isTransportUnit),
+          isWholesaleUnit: Boolean(editFormData.isWholesaleUnit),
         } : {}),
         updatedAt: serverTimestamp(),
       });
@@ -403,7 +411,12 @@ export default function UnitManagementClient({
                               Transport Orders
                             </span>
                           )}
-                          {!unit.isCustomisationUnit && !unit.isTransportUnit && (
+                          {unit.isWholesaleUnit && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                              Wholesale Orders
+                            </span>
+                          )}
+                          {!unit.isCustomisationUnit && !unit.isTransportUnit && !unit.isWholesaleUnit && (
                             <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
                               Standard
                             </span>
@@ -532,6 +545,23 @@ export default function UnitManagementClient({
                       </span>
                       <p className="text-[11px] text-slate-500">
                         Displays orders requiring transport / delivery logistics.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none group">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(newUnit.isWholesaleUnit)}
+                      onChange={(e) => setNewUnit({ ...newUnit, isWholesaleUnit: e.target.checked })}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                        Is Wholesale Orders Packing Unit
+                      </span>
+                      <p className="text-[11px] text-slate-500">
+                        Displays B2B wholesale orders (exclusive to wholesale packing units).
                       </p>
                     </div>
                   </label>
@@ -665,6 +695,23 @@ export default function UnitManagementClient({
                       </p>
                     </div>
                   </label>
+
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none group">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editFormData.isWholesaleUnit)}
+                      onChange={(e) => setEditFormData({ ...editFormData, isWholesaleUnit: e.target.checked })}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                        Is Wholesale Orders Packing Unit
+                      </span>
+                      <p className="text-[11px] text-slate-500">
+                        Displays B2B wholesale orders (exclusive to wholesale packing units).
+                      </p>
+                    </div>
+                  </label>
                 </div>
               )}
 
@@ -794,7 +841,12 @@ export default function UnitManagementClient({
                         Transport Orders Unit
                       </span>
                     )}
-                    {!viewUnit.isCustomisationUnit && !viewUnit.isTransportUnit && (
+                    {viewUnit.isWholesaleUnit && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                        Wholesale Orders Unit
+                      </span>
+                    )}
+                    {!viewUnit.isCustomisationUnit && !viewUnit.isTransportUnit && !viewUnit.isWholesaleUnit && (
                       <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
                         Standard Packing Unit
                       </span>

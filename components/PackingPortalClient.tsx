@@ -34,6 +34,7 @@ export interface DynamicUnit {
   status: string;
   isCustomisationUnit?: boolean;
   isTransportUnit?: boolean;
+  isWholesaleUnit?: boolean;
 }
 
 export interface ItemMasterInfo {
@@ -119,17 +120,46 @@ export function isOrderEligibleForPacking(order: OrderRecord): boolean {
 }
 
 /**
+ * Helper to identify if an order is a wholesale order
+ */
+export function isWholesaleOrder(order: OrderRecord): boolean {
+  const ord = order as any;
+  return Boolean(
+    ord.orderType === 'Wholesaler B2B' ||
+    ord.customerType === 'Wholesaler' ||
+    ord.wholesalerId ||
+    ord.wholesalerName
+  );
+}
+
+/**
  * Checks if a specific packing unit is responsible for handling an order based on:
+ * - Wholesale order -> Wholesale packing unit(s)
  * - Customisation order -> Customisation packing unit(s)
  * - Transport order -> Transport packing unit(s)
  * - Both -> Both Customisation and Transport packing units
- * - Standard order -> Standard (non-customisation, non-transport) packing units
+ * - Standard order -> Standard (non-customisation, non-transport, non-wholesale) packing units
  */
 export function isOrderMatchingPackingUnit(
   order: OrderRecord,
   unit: DynamicUnit,
   allUnits: DynamicUnit[]
 ): boolean {
+  const isWholesale = isWholesaleOrder(order);
+  const isUnitWholesale = Boolean(unit.isWholesaleUnit);
+  const hasWholesaleUnits = allUnits.some((u) => Boolean(u.isWholesaleUnit));
+
+  if (isWholesale) {
+    if (hasWholesaleUnits) {
+      return isUnitWholesale;
+    }
+  } else {
+    // Non-wholesale orders should NOT go to dedicated wholesale-only units
+    if (isUnitWholesale && !unit.isCustomisationUnit && !unit.isTransportUnit) {
+      return false;
+    }
+  }
+
   const isCustom = Boolean(order.isCustomisation);
   const isTransport = Boolean(order.isTransportRequired);
   const isUnitCustom = Boolean(unit.isCustomisationUnit);
@@ -143,7 +173,7 @@ export function isOrderMatchingPackingUnit(
     if (hasCustomUnits || hasTransportUnits) {
       return isUnitCustom || isUnitTransport;
     }
-    return !isUnitCustom && !isUnitTransport;
+    return !isUnitCustom && !isUnitTransport && !isUnitWholesale;
   }
 
   // Case 2: Order is Customisation ONLY
@@ -151,7 +181,7 @@ export function isOrderMatchingPackingUnit(
     if (hasCustomUnits) {
       return isUnitCustom;
     }
-    return !isUnitCustom && !isUnitTransport;
+    return !isUnitCustom && !isUnitTransport && !isUnitWholesale;
   }
 
   // Case 3: Order is Transport ONLY
@@ -159,11 +189,11 @@ export function isOrderMatchingPackingUnit(
     if (hasTransportUnits) {
       return isUnitTransport;
     }
-    return !isUnitCustom && !isUnitTransport;
+    return !isUnitCustom && !isUnitTransport && !isUnitWholesale;
   }
 
-  // Case 4: Standard order (neither customisation nor transport)
-  return !isUnitCustom && !isUnitTransport;
+  // Case 4: Standard order (neither customisation nor transport nor wholesale)
+  return !isUnitCustom && !isUnitTransport && !isUnitWholesale;
 }
 
 export function getEffectivePackingUnitName(
@@ -180,6 +210,14 @@ export function getEffectivePackingUnitName(
   // 2. Explicit order-level override takes precedence
   if ((order as any)?.packingUnitOverride) {
     return (order as any).packingUnitOverride;
+  }
+
+  // 3. Wholesale order handling
+  if (isWholesaleOrder(order)) {
+    const wholesaleUnits = allUnits.filter((u) => u.isWholesaleUnit);
+    if (wholesaleUnits.length > 0) {
+      return wholesaleUnits.map((u) => u.name).join(', ');
+    }
   }
 
   const isCustom = Boolean(order.isCustomisation);
@@ -264,6 +302,7 @@ export default function PackingPortalClient() {
             status: data.status || 'Active',
             isCustomisationUnit: Boolean(data.isCustomisationUnit),
             isTransportUnit: Boolean(data.isTransportUnit),
+            isWholesaleUnit: Boolean(data.isWholesaleUnit),
           };
         });
         setPckUnits(list.filter((u) => u.status !== 'Inactive'));
@@ -328,14 +367,11 @@ export default function PackingPortalClient() {
       });
     }
     accessiblePckUnits.forEach((u) => {
-      let roleTag = '';
-      if (u.isCustomisationUnit && u.isTransportUnit) {
-        roleTag = ' [Custom & Transport]';
-      } else if (u.isCustomisationUnit) {
-        roleTag = ' [Customisation]';
-      } else if (u.isTransportUnit) {
-        roleTag = ' [Transport]';
-      }
+      const tags: string[] = [];
+      if (u.isWholesaleUnit) tags.push('Wholesale');
+      if (u.isCustomisationUnit) tags.push('Customisation');
+      if (u.isTransportUnit) tags.push('Transport');
+      const roleTag = tags.length > 0 ? ` [${tags.join(' & ')}]` : '';
 
       opts.push({
         value: u.name,
@@ -377,6 +413,7 @@ export default function PackingPortalClient() {
 
     const isCustom = Boolean(order.isCustomisation);
     const isTransport = Boolean(order.isTransportRequired);
+    const isWholesale = isWholesaleOrder(order);
 
     if (selectedUnit !== 'all') {
       const activeUnit = pckUnits.find((u) => u.name.toLowerCase() === selectedUnit.toLowerCase());
@@ -388,7 +425,7 @@ export default function PackingPortalClient() {
       }
 
       // If standard order, also check if item's assigned packing unit matches activeUnit
-      if (!isCustom && !isTransport) {
+      if (!isCustom && !isTransport && !isWholesale) {
         if (itemPckUnitName && activeUnit.name && itemPckUnitName.toLowerCase() !== activeUnit.name.toLowerCase()) {
           return false;
         }
@@ -404,7 +441,7 @@ export default function PackingPortalClient() {
     // Restricted employee: check accessible units
     return accessiblePckUnits.some((unit) => {
       if (!isOrderMatchingPackingUnit(order, unit, pckUnits)) return false;
-      if (!isCustom && !isTransport) {
+      if (!isCustom && !isTransport && !isWholesale) {
         if (itemPckUnitName && unit.name && itemPckUnitName.toLowerCase() !== unit.name.toLowerCase()) {
           return false;
         }
@@ -421,8 +458,9 @@ export default function PackingPortalClient() {
       if (!isOrderEligibleForPacking(order)) return;
 
       (order.items || []).forEach((item) => {
+        const isWholesale = isWholesaleOrder(order);
         const itemMfgStatus = item.mfgStatus || (
-          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
+          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store' || isWholesale
             ? 'Moved to Packing'
             : 'Pending'
         );
@@ -435,8 +473,9 @@ export default function PackingPortalClient() {
             : 'Pending'
         );
 
-        // Item must have finished manufacturing AND not yet moved to store!
-        if (itemMfgStatus !== 'Moved to Packing' || itemPckStatus === 'Moved to Store') return;
+        // Item must have finished manufacturing (or wholesale order / not required) AND not yet moved to store!
+        const isMfgReady = isWholesale || itemMfgStatus === 'Moved to Packing' || itemMfgStatus === 'Not Required';
+        if (!isMfgReady || itemPckStatus === 'Moved to Store') return;
 
         const rawName = item.itemName || 'Unknown Item';
         const key = rawName.toLowerCase().trim();
@@ -532,8 +571,9 @@ export default function PackingPortalClient() {
 
         if (!isItemAllowedForPacking(order, item, pckUnit)) return false;
 
+        const isWholesale = isWholesaleOrder(order);
         const itemMfgStatus = item.mfgStatus || (
-          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
+          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store' || isWholesale
             ? 'Moved to Packing'
             : 'Pending'
         );
@@ -544,7 +584,8 @@ export default function PackingPortalClient() {
             ? 'Packing Started'
             : 'Pending'
         );
-        return itemMfgStatus === 'Moved to Packing' && itemPckStatus !== 'Moved to Store';
+        const isMfgReady = isWholesale || itemMfgStatus === 'Moved to Packing' || itemMfgStatus === 'Not Required';
+        return isMfgReady && itemPckStatus !== 'Moved to Store';
       });
 
       if (!hasPendingPackingItem) return false;
@@ -579,8 +620,9 @@ export default function PackingPortalClient() {
       const slot = (order.slot || 'Regular / General Slot').trim();
 
       (order.items || []).forEach((item) => {
+        const isWholesale = isWholesaleOrder(order);
         const itemMfgStatus = item.mfgStatus || (
-          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
+          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store' || isWholesale
             ? 'Moved to Packing'
             : 'Pending'
         );
@@ -593,7 +635,8 @@ export default function PackingPortalClient() {
             : 'Pending'
         );
 
-        if (itemMfgStatus !== 'Moved to Packing' || itemPckStatus === 'Moved to Store') return;
+        const isMfgReady = isWholesale || itemMfgStatus === 'Moved to Packing' || itemMfgStatus === 'Not Required';
+        if (!isMfgReady || itemPckStatus === 'Moved to Store') return;
 
         const rawName = item.itemName || (item as any).name || 'Unknown Item';
         const key = rawName.toLowerCase().trim();
@@ -1474,6 +1517,11 @@ export default function PackingPortalClient() {
                         {order.isTransportRequired && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
                             Transport
+                          </span>
+                        )}
+                        {isWholesaleOrder(order) && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                            Wholesale B2B
                           </span>
                         )}
                       </div>

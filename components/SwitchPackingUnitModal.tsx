@@ -388,7 +388,12 @@ export default function SwitchPackingUnitModal({
                                   Transport Orders
                                 </span>
                               )}
-                              {!u.isCustomisationUnit && !u.isTransportUnit && (
+                              {u.isWholesaleUnit && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                  Wholesale Orders
+                                </span>
+                              )}
+                              {!u.isCustomisationUnit && !u.isTransportUnit && !u.isWholesaleUnit && (
                                 <span className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
                                   Standard
                                 </span>

@@ -1066,7 +1066,7 @@ export default function LiveSalesClient() {
                         )}
 
                         <span className="text-xs font-black text-[#02626D] w-16 text-right">
-                          ₹{cItem.totalAmount.toFixed(2)}
+                          ₹{cItem.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                         </span>
 
                         <button
@@ -1140,7 +1140,7 @@ export default function LiveSalesClient() {
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-2">
               <div className="flex justify-between text-slate-500">
                 <span>Subtotal ({cart.length} items):</span>
-                <span className="font-bold text-slate-800 font-mono">₹{subtotal.toFixed(2)}</span>
+                <span className="font-bold text-slate-800 font-mono">₹{subtotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between items-center text-slate-500">
                 <span>Discount (₹):</span>
@@ -1155,7 +1155,7 @@ export default function LiveSalesClient() {
               <div className="pt-2 border-t border-slate-200 flex justify-between items-baseline">
                 <span className="font-extrabold text-slate-900 text-sm">Grand Total:</span>
                 <span className="font-black text-xl text-[#02626D] font-mono">
-                  ₹{grandTotal.toFixed(2)}
+                  ₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                 </span>
               </div>
 
@@ -1198,7 +1198,7 @@ export default function LiveSalesClient() {
                   <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 space-y-0.5">
                     <div className="flex justify-between items-center font-bold text-xs">
                       <span>Remaining Credit Due:</span>
-                      <span className="text-amber-700 font-mono font-black text-sm">₹{creditAmount.toFixed(2)}</span>
+                      <span className="text-amber-700 font-mono font-black text-sm">₹{creditAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                     </div>
                     <p className="text-[10px] text-amber-700">
                       Balance will be stored as Credit Due for {selectedCustomer ? selectedCustomer.name : 'Customer'} and tracked in Live Sales Analytics.
@@ -1238,8 +1238,8 @@ export default function LiveSalesClient() {
                 <>
                   <Printer size={15} />
                   <span>
-                    Settle &amp; Print Slip (Recv: ₹{receivedAmount.toFixed(2)}
-                    {creditAmount > 0 ? ` | Due: ₹${creditAmount.toFixed(2)}` : ''})
+                    Settle &amp; Print Slip (Recv: ₹{receivedAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                    {creditAmount > 0 ? ` | Due: ₹${creditAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : ''})
                   </span>
                 </>
               )}
@@ -1386,27 +1386,27 @@ export default function LiveSalesClient() {
                 {lastSettledBill.items.map((it) => (
                   <div key={it.id} className="pt-1 flex justify-between text-[11px]">
                     <span className="truncate pr-2">{it.name} ({it.quantity}{it.unit})</span>
-                    <span className="font-bold font-mono">₹{it.totalAmount.toFixed(2)}</span>
+                    <span className="font-bold font-mono">₹{it.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                   </div>
                 ))}
               </div>
 
               <div className="pt-2 border-t border-slate-200 flex justify-between font-black text-xs text-slate-700">
                 <span>Net Total:</span>
-                <span className="font-mono">₹{lastSettledBill.total.toFixed(2)}</span>
+                <span className="font-mono">₹{lastSettledBill.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
               </div>
 
               <div className="flex justify-between font-bold text-xs text-emerald-700">
                 <span>Received / Paid:</span>
                 <span className="font-mono">
-                  ₹{(lastSettledBill.receivedAmount !== undefined ? lastSettledBill.receivedAmount : lastSettledBill.total).toFixed(2)}
+                  ₹{(lastSettledBill.receivedAmount !== undefined ? lastSettledBill.receivedAmount : lastSettledBill.total).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                 </span>
               </div>
 
               {lastSettledBill.creditAmount && lastSettledBill.creditAmount > 0 ? (
                 <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 flex justify-between font-black text-xs text-amber-800">
                   <span>CREDIT / DUE:</span>
-                  <span className="font-mono font-black text-sm text-amber-700">₹{lastSettledBill.creditAmount.toFixed(2)}</span>
+                  <span className="font-mono font-black text-sm text-amber-700">₹{lastSettledBill.creditAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                 </div>
               ) : null}
             </div>

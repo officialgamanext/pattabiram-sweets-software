@@ -562,7 +562,7 @@ export default function CreditClient() {
             <div>
               <p className="text-rose-100 text-xs font-bold uppercase tracking-wider">Total Outstanding Due</p>
               <h3 className="text-2xl sm:text-3xl font-black mt-1 tracking-tight">
-                ₹ {analytics.totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹ {analytics.totalOutstanding.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </h3>
             </div>
             <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs text-rose-100 font-medium">
@@ -596,7 +596,7 @@ export default function CreditClient() {
               <div>
                 <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Advance / Paid Amount</p>
                 <h3 className="text-2xl font-black text-emerald-700 mt-1">
-                  ₹ {analytics.totalCollected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹ {analytics.totalCollected.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                 </h3>
               </div>
               <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
@@ -606,7 +606,7 @@ export default function CreditClient() {
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
               <span>Gross Billed:</span>
               <span className="font-bold text-slate-800">
-                ₹ {analytics.totalBilled.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹ {analytics.totalBilled.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </span>
             </div>
           </div>
@@ -798,12 +798,12 @@ export default function CreditClient() {
 
                           {/* Total */}
                           <td className="py-3.5 px-4 text-right font-bold text-slate-900">
-                            ₹ {(order.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            ₹ {(order.totalAmount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                           </td>
 
                           {/* Received */}
                           <td className="py-3.5 px-4 text-right font-semibold text-emerald-700">
-                            ₹ {(order.receivedAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            ₹ {(order.receivedAmount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                             {order.paymentMode && (
                               <span className="block text-[9px] text-slate-400 font-sans truncate max-w-[100px] ml-auto">
                                 {order.paymentMode}
@@ -814,7 +814,7 @@ export default function CreditClient() {
                           {/* Balance Due */}
                           <td className="py-3.5 px-4 text-right">
                             <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 font-black text-xs shadow-2xs">
-                              ₹ {due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              ₹ {due.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                             </span>
                           </td>
 
@@ -943,7 +943,7 @@ export default function CreditClient() {
                           <div className="text-right">
                             <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Due</span>
                             <span className="text-lg font-black text-rose-600">
-                              ₹ {cust.outstandingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              ₹ {cust.outstandingBalance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                             </span>
                             <span className="text-[10px] text-slate-400 block">
                               Billed: ₹{cust.totalBilled.toFixed(0)} | Paid: ₹{cust.totalPaid.toFixed(0)}

@@ -183,7 +183,7 @@ function computePaymentStatus(received: number, total: number): PaymentStatus {
 }
 
 function fmtCurrency(n: number) {
-  return '₹ ' + (n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+  return '₹ ' + (n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 }
 
 function fmtDate(iso: string) {
@@ -1701,7 +1701,7 @@ export default function OrderDetailClient({ orderId }: Props) {
                               Amount (₹) <span className="text-red-500">*</span>
                             </label>
                             <span className="text-[10px] font-bold text-slate-400">
-                              Max: ₹{Math.max(0, balanceDue).toFixed(2)}
+                              Max: {fmtCurrency(Math.max(0, balanceDue))}
                             </span>
                           </div>
                           <div className="relative">
@@ -1711,7 +1711,7 @@ export default function OrderDetailClient({ orderId }: Props) {
                               step="0.01"
                               min="0.01"
                               max={Math.max(0, balanceDue)}
-                              placeholder={`Max: ${Math.max(0, balanceDue).toFixed(2)}`}
+                              placeholder={`Max: ${Math.max(0, balanceDue).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`}
                               value={payAmount}
                               onChange={e => {
                                 const val = e.target.value;
@@ -1767,7 +1767,7 @@ export default function OrderDetailClient({ orderId }: Props) {
                           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
                         >
                           {isSavingPayment ? <Loader2 size={14} className="animate-spin" /> : <BadgeCheck size={15} />}
-                          Confirm Payment (₹{(parseFloat(payAmount) || 0).toFixed(2)})
+                          Confirm Payment ({fmtCurrency(parseFloat(payAmount) || 0)})
                         </button>
                       </div>
                     ) : (
@@ -1840,7 +1840,7 @@ export default function OrderDetailClient({ orderId }: Props) {
                                         }}
                                         className="text-[10px] font-bold text-[#02626D] bg-teal-50 px-2 py-0.5 rounded hover:bg-teal-100 cursor-pointer border border-teal-200"
                                       >
-                                        Fill Balance (₹{remainingToFill.toFixed(2)})
+                                        Fill Balance ({fmtCurrency(remainingToFill)})
                                       </button>
                                     )}
                                     {splitPayments.length > 1 && (
@@ -1945,16 +1945,16 @@ export default function OrderDetailClient({ orderId }: Props) {
                         <div className="p-2.5 rounded-xl bg-white border border-[#b2e3e8] text-xs space-y-1">
                           <div className="flex justify-between items-center text-slate-600">
                             <span>Total of Splits:</span>
-                            <span className="font-extrabold text-slate-900">₹ {splitTotal.toFixed(2)}</span>
+                            <span className="font-extrabold text-slate-900">{fmtCurrency(splitTotal)}</span>
                           </div>
                           <div className="flex justify-between items-center text-slate-600">
                             <span>Balance Due:</span>
-                            <span className="font-extrabold text-red-600">₹ {Math.max(0, balanceDue).toFixed(2)}</span>
+                            <span className="font-extrabold text-red-600">{fmtCurrency(Math.max(0, balanceDue))}</span>
                           </div>
                           <div className="pt-1 border-t border-slate-100 flex justify-between items-center font-bold">
                             <span className="text-[11px] text-slate-500">Remaining after splits:</span>
                             <span className={`text-xs font-black ${balanceDue - splitTotal < -0.001 ? 'text-red-600' : 'text-emerald-700'}`}>
-                              ₹ {Math.max(0, balanceDue - splitTotal).toFixed(2)}
+                              {fmtCurrency(Math.max(0, balanceDue - splitTotal))}
                               {balanceDue - splitTotal < -0.001 && ' (Exceeds balance!)'}
                             </span>
                           </div>
@@ -1972,7 +1972,7 @@ export default function OrderDetailClient({ orderId }: Props) {
                           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
                         >
                           {isSavingPayment ? <Loader2 size={14} className="animate-spin" /> : <BadgeCheck size={15} />}
-                          Confirm Split Payment (₹{splitTotal.toFixed(2)})
+                          Confirm Split Payment ({fmtCurrency(splitTotal)})
                         </button>
                       </div>
                     )}

@@ -600,7 +600,7 @@ export default function LiveSalesAnalyticsClient() {
                 </div>
               </div>
               <div className="text-lg font-bold text-slate-900 tracking-tight">
-                ₹{metrics.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ₹{metrics.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <div className="text-[11px] text-slate-500 mt-1 font-medium">
                 {metrics.totalBills} Bills generated
@@ -616,7 +616,7 @@ export default function LiveSalesAnalyticsClient() {
                 </div>
               </div>
               <div className="text-lg font-bold text-amber-700 tracking-tight">
-                ₹{metrics.cashTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ₹{metrics.cashTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <div className="text-[11px] text-slate-500 mt-1">Direct &amp; split cash</div>
             </div>
@@ -630,7 +630,7 @@ export default function LiveSalesAnalyticsClient() {
                 </div>
               </div>
               <div className="text-lg font-bold text-emerald-700 tracking-tight">
-                ₹{metrics.upiTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ₹{metrics.upiTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <div className="text-[11px] text-slate-500 mt-1">Direct &amp; split UPI</div>
             </div>
@@ -644,7 +644,7 @@ export default function LiveSalesAnalyticsClient() {
                 </div>
               </div>
               <div className="text-lg font-bold text-sky-700 tracking-tight">
-                ₹{metrics.cardTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ₹{metrics.cardTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <div className="text-[11px] text-slate-500 mt-1">POS Card machines</div>
             </div>
@@ -658,7 +658,7 @@ export default function LiveSalesAnalyticsClient() {
                 </div>
               </div>
               <div className="text-lg font-bold text-purple-700 tracking-tight">
-                ₹{metrics.splitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ₹{metrics.splitTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <div className="text-[11px] text-slate-500 mt-1">Multi-mode bills</div>
             </div>
@@ -689,7 +689,7 @@ export default function LiveSalesAnalyticsClient() {
                 </div>
               </div>
               <div className="text-xl font-black text-slate-900 tracking-tight">
-                ₹{creditMetrics.totalCreditBilled.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ₹{creditMetrics.totalCreditBilled.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <div className="text-xs text-slate-500 mt-1 font-medium">
                 Across {creditMetrics.totalCreditBills} credit bills
@@ -705,7 +705,7 @@ export default function LiveSalesAnalyticsClient() {
                 </div>
               </div>
               <div className="text-xl font-black text-emerald-700 tracking-tight">
-                ₹{creditMetrics.totalReceived.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ₹{creditMetrics.totalReceived.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <div className="text-xs text-emerald-600 mt-1 font-medium">
                 Paid at counter or settled later
@@ -721,7 +721,7 @@ export default function LiveSalesAnalyticsClient() {
                 </div>
               </div>
               <div className="text-2xl font-black text-amber-700 tracking-tight">
-                ₹{creditMetrics.totalOutstandingDue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ₹{creditMetrics.totalOutstandingDue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <div className="text-xs text-amber-800 font-bold mt-1">
                 {creditMetrics.pendingDueBillsCount} pending customer balances

@@ -1272,7 +1272,7 @@ export default function WholesalerOrdersClient() {
                                   </div>
 
                                   <span className="text-[11px] font-black text-slate-900 min-w-[50px] text-right">
-                                    ₹{line.totalAmount.toFixed(2)}
+                                    ₹{line.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                                   </span>
                                 </div>
                               </div>
@@ -1388,7 +1388,7 @@ export default function WholesalerOrdersClient() {
                               </div>
 
                               <span className="text-xs font-black text-slate-900">
-                                ₹{item.totalAmount.toFixed(2)}
+                                ₹{item.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                               </span>
                             </div>
                           </div>
@@ -1416,7 +1416,7 @@ export default function WholesalerOrdersClient() {
                     <div className="flex items-baseline justify-between pt-2 border-t border-slate-200">
                       <span className="text-sm font-bold text-slate-900">Grand Total:</span>
                       <span className="text-xl font-black text-[#02626D]">
-                        ₹ {modalTotal.toFixed(2)}
+                        ₹ {modalTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
@@ -1932,7 +1932,7 @@ export default function WholesalerOrdersClient() {
                                 </div>
 
                                 <span className="text-[11px] font-black text-slate-900 min-w-[50px] text-right">
-                                  ₹{line.totalAmount.toFixed(2)}
+                                  ₹{line.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                                 </span>
                               </div>
                             </div>
@@ -2037,7 +2037,7 @@ export default function WholesalerOrdersClient() {
                               </div>
 
                               <span className="text-xs font-black text-slate-900">
-                                ₹{item.totalAmount.toFixed(2)}
+                                ₹{item.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                               </span>
                             </div>
                           </div>
@@ -2065,7 +2065,7 @@ export default function WholesalerOrdersClient() {
                     <div className="flex items-baseline justify-between pt-2 border-t border-slate-200">
                       <span className="text-sm font-bold text-slate-900">Grand Total:</span>
                       <span className="text-xl font-black text-[#02626D]">
-                        ₹ {editModalTotal.toFixed(2)}
+                        ₹ {editModalTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>

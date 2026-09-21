@@ -252,7 +252,7 @@ const ProductCatalogTile = React.memo(function ProductCatalogTile({
                 {addedItem.quantity} <span className="text-[9px] font-bold text-slate-500">{addedItem.unit}</span>
               </span>
               <span className="text-[9px] text-slate-400 font-bold leading-none">
-                ₹{addedItem.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 1 })}
+                ₹{addedItem.lineTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </span>
             </div>
 
@@ -2808,7 +2808,7 @@ export default function CreateOrderClient() {
                 <div className="pt-2.5 border-t-2 border-slate-200 flex justify-between items-baseline">
                   <span className="text-sm font-extrabold text-slate-900">Grand Total:</span>
                   <span className="text-xl font-black text-[#02626D]">
-                    ₹ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    ₹ {grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>

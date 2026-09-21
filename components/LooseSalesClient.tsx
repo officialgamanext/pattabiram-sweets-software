@@ -362,7 +362,7 @@ export default function LooseSalesClient() {
             </div>
             <div className="mt-2">
               <div className="text-2xl font-bold font-mono text-slate-900">
-                ₹{todayMetrics.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹{todayMetrics.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">{todayMetrics.count} sales recorded today</p>
             </div>
@@ -377,7 +377,7 @@ export default function LooseSalesClient() {
             </div>
             <div className="mt-2">
               <div className="text-2xl font-bold font-mono text-amber-700">
-                ₹{todayMetrics.cash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹{todayMetrics.cash.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">Cash mode &amp; split</p>
             </div>
@@ -392,7 +392,7 @@ export default function LooseSalesClient() {
             </div>
             <div className="mt-2">
               <div className="text-2xl font-bold font-mono text-emerald-700">
-                ₹{todayMetrics.upi.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹{todayMetrics.upi.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">UPI QR / PhonePe</p>
             </div>
@@ -407,7 +407,7 @@ export default function LooseSalesClient() {
             </div>
             <div className="mt-2">
               <div className="text-2xl font-bold font-mono text-sky-700">
-                ₹{todayMetrics.card.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹{todayMetrics.card.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">POS Card Machine</p>
             </div>
@@ -422,7 +422,7 @@ export default function LooseSalesClient() {
             </div>
             <div className="mt-2">
               <div className="text-2xl font-bold font-mono text-purple-700">
-                ₹{todayMetrics.split.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹{todayMetrics.split.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">Cash + UPI split</p>
             </div>
@@ -577,7 +577,7 @@ export default function LooseSalesClient() {
                           </div>
                         </td>
                         <td className="py-3 px-4 text-right font-bold text-slate-900 text-sm">
-                          ₹{sale.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          ₹{sale.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 px-4">
                           {sale.paymentMode === 'Cash' && (

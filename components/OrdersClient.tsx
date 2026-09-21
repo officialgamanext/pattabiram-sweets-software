@@ -2222,7 +2222,7 @@ export default function OrdersClient() {
                               <div className="flex items-center justify-between">
                                 <span className="font-bold text-xs text-[#02626D] font-mono tracking-tight">{order.code}</span>
                                 <span className="font-extrabold text-xs sm:text-sm text-slate-900">
-                                  ₹ {(order.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  ₹ {(order.totalAmount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                                 </span>
                               </div>
 
@@ -2832,7 +2832,7 @@ export default function OrdersClient() {
               <div className="p-3 rounded-lg bg-emerald-50/60 border border-emerald-100">
                 <span className="text-[10px] font-bold uppercase text-emerald-700 tracking-wider">Total Revenue</span>
                 <p className="text-base font-extrabold text-emerald-800 mt-0.5">
-                  ₹ {slotAnalyticsData.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹ {slotAnalyticsData.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                 </p>
                 <span className="text-[10px] text-emerald-600 font-medium">Slot order value</span>
               </div>
@@ -3018,7 +3018,7 @@ export default function OrdersClient() {
                             </span>
                           </td>
                           <td className="py-2.5 px-3 text-right font-bold text-slate-900">
-                            ₹ {item.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            ₹ {item.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                           </td>
                           <td className="py-2.5 px-3">
                             <div className="flex flex-wrap gap-1 max-w-xs">

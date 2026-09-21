@@ -379,7 +379,7 @@ export default function LooseSalesAnalyticsClient() {
             </div>
             <div className="mt-2">
               <div className="text-2xl font-bold font-mono text-slate-900">
-                ₹{metrics.totalSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹{metrics.totalSales.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
                 {metrics.count} transactions recorded
@@ -399,7 +399,7 @@ export default function LooseSalesAnalyticsClient() {
             </div>
             <div className="mt-2">
               <div className="text-2xl font-bold font-mono text-amber-700">
-                ₹{metrics.cash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹{metrics.cash.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
                 {metrics.cashPct}% of total volume
@@ -419,7 +419,7 @@ export default function LooseSalesAnalyticsClient() {
             </div>
             <div className="mt-2">
               <div className="text-2xl font-bold font-mono text-emerald-700">
-                ₹{metrics.upi.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹{metrics.upi.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
                 {metrics.upiPct}% of total volume
@@ -439,7 +439,7 @@ export default function LooseSalesAnalyticsClient() {
             </div>
             <div className="mt-2">
               <div className="text-2xl font-bold font-mono text-sky-700">
-                ₹{metrics.card.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹{metrics.card.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
                 {metrics.cardPct}% of total volume
@@ -552,7 +552,7 @@ export default function LooseSalesAnalyticsClient() {
                           </div>
                         </td>
                         <td className="py-3 px-4 text-right font-bold text-slate-900 font-mono text-sm">
-                          ₹{sale.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          ₹{sale.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 px-4">
                           {sale.paymentMode === 'Cash' && (

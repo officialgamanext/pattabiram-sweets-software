@@ -33,6 +33,14 @@ import {
   Banknote,
   Smartphone,
   MapPin,
+  Copy,
+  Mail,
+  MoreHorizontal,
+  User,
+  Eye,
+  FileText,
+  Check,
+  Settings,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { usePrinter } from '@/context/PrinterContext';
@@ -59,6 +67,7 @@ export interface PaymentEntry {
 
 interface OrderWithPayments extends OrderRecord {
   payments?: PaymentEntry[];
+  customerEmail?: string;
 }
 
 // ── Constants ────────────────────────────────────────────────────
@@ -566,11 +575,47 @@ export default function OrderDetailClient({ orderId }: Props) {
   // ── Derived values ───────────────────────────────────────────
   const sc             = getStatusColor(order.orderStatus);
   const psBadge        = getPaymentStatusBadge(order.paymentStatus);
-  const currentStepIdx = STATUS_TIMELINE.findIndex(t => t.status === order.orderStatus);
   const payments       = getEffectivePayments(order);
   const displayReceived = payments.reduce((s, p) => s + p.amount, 0);
   const balanceDue     = (order.totalAmount || 0) - displayReceived;
   const paidPct        = order.totalAmount > 0 ? Math.min(100, Math.round((displayReceived / order.totalAmount) * 100)) : 0;
+
+  const handleCopy = (text: string, label: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    toast.success(`Copied ${label} to clipboard`);
+  };
+
+  const DISPLAY_TIMELINE = [
+    { id: 'Order Created',           label: 'Order Created',           time: order.orderTime || '04:00 PM', icon: <FileText size={13} /> },
+    { id: 'Moved to Manufacturing',  label: 'Moved to Manufacturing',  time: '04:05 PM', icon: <Factory size={13} /> },
+    { id: 'Manufacturing Started',   label: 'Manufacturing Started',   time: '05:00 PM', icon: <Factory size={13} /> },
+    { id: 'Manufacturing Completed', label: 'Manufacturing Completed', time: '05:30 PM', icon: <CheckCircle2 size={13} /> },
+    { id: 'Moved to Packing',        label: 'Moved to Packing',        time: '06:00 PM', icon: <Package size={13} /> },
+    { id: 'Packing Completed',       label: 'Packing Completed',       time: '06:30 PM', icon: <CheckCircle2 size={13} /> },
+    { id: 'Moved to Store',          label: 'Moved to Store',          time: '06:45 PM', icon: <Store size={13} /> },
+    { id: 'Received at Store',       label: 'Received at Store',       time: '06:50 PM', icon: <Store size={13} /> },
+    { id: 'Awaiting for Delivery',   label: 'Awaiting for Delivery',   time: '06:55 PM', icon: <Clock size={13} /> },
+    { id: 'Delivered',               label: 'Delivered',               time: '07:10 PM', icon: <Truck size={13} /> },
+  ];
+
+  const getTimelineStepIndex = (status: OrderStatus) => {
+    switch (status) {
+      case 'Order Created': return 0;
+      case 'Moved to Manufacturing': return 1;
+      case 'Manufacturing Started': return 2;
+      case 'Manufacturing Completed': return 3;
+      case 'Moved to Packing':
+      case 'Packing Started': return 4;
+      case 'Packing Completed': return 5;
+      case 'Moved to Store': return 6;
+      case 'Received at Store': return 7;
+      case 'Awaiting for Delivery': return 8;
+      case 'Delivered': return 9;
+      default: return 0;
+    }
+  };
+  const activeTimelineIdx = getTimelineStepIndex(order.orderStatus);
 
   return (
     <div className="w-full flex flex-col gap-6 font-sans pb-10">
@@ -578,15 +623,22 @@ export default function OrderDetailClient({ orderId }: Props) {
       {/* ── Breadcrumb & Actions bar ──────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <Link href="/orders" className="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors mb-1">
+          <Link
+            href="/orders"
+            className="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors mb-1.5"
+          >
             <ArrowLeft size={16} /> Back to Orders
           </Link>
           <nav className="flex items-center gap-1.5 text-xs text-slate-400">
-            <Link href="/" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
-            <ChevronRight size={12} />
-            <Link href="/orders" className="hover:text-indigo-600 transition-colors">Orders</Link>
-            <ChevronRight size={12} />
-            <span className="text-slate-700 font-semibold">{order.code}</span>
+            <Link href="/" className="hover:text-indigo-600 transition-colors">
+              Dashboard
+            </Link>
+            <ChevronRight size={12} className="text-slate-300" />
+            <Link href="/orders" className="hover:text-indigo-600 transition-colors">
+              Orders
+            </Link>
+            <ChevronRight size={12} className="text-slate-300" />
+            <span className="text-slate-700 font-bold">#{order.code}</span>
           </nav>
         </div>
 
@@ -594,33 +646,36 @@ export default function OrderDetailClient({ orderId }: Props) {
           {/* Manage Payment primary CTA */}
           <button
             onClick={() => setIsPaymentModalOpen(true)}
-            className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#02626D] hover:bg-[#024f58] text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
           >
-            <Wallet size={14} />
+            <CreditCard size={14} />
             Manage Payment
           </button>
           <button
             onClick={handleThermalPrint}
-            className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-white border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
           >
             <Printer size={14} /> Print
           </button>
           <button
-            onClick={() => { setPendingStatus(order.orderStatus); setIsStatusEditOpen(true); }}
-            className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-white border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
+            onClick={() => {
+              setPendingStatus(order.orderStatus);
+              setIsStatusEditOpen(true);
+            }}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
           >
             <Pencil size={14} /> Edit Status
           </button>
           <Link
             href={`/orders/create?editId=${order.id}`}
-            className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-white border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
             title="Edit Order Details"
           >
             <Pencil size={14} /> Edit Order
           </Link>
           <button
             onClick={() => setIsDeleteOpen(true)}
-            className="flex items-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-red-50 border border-red-200 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50/70 border border-red-200 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
           >
             <Trash2 size={14} /> Delete
           </button>
@@ -631,118 +686,208 @@ export default function OrderDetailClient({ orderId }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
         {/* LEFT (8 cols) ─────────────────────────────────────── */}
-        <div className="lg:col-span-8 space-y-5">
+        <div className="lg:col-span-8 space-y-6">
 
-          {/* Order Header Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-            <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-600" />
-            <div className="p-5 sm:p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm flex-shrink-0">
-                    <ShoppingBag size={22} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-100">
-                        {order.code}
-                      </span>
-                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${sc.bg} ${sc.text} ${sc.border} flex items-center gap-1.5`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
-                        {order.orderStatus}
-                      </span>
-                    </div>
-                    <h1 className="text-xl font-extrabold text-slate-900 mt-1 tracking-tight">{order.customerName}</h1>
-                  </div>
+          {/* Order Header Banner Card */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs relative overflow-hidden p-6">
+            {/* Background 3D Box Watermark */}
+            <div className="absolute right-4 -top-8 text-indigo-100/40 pointer-events-none select-none">
+              <Package size={170} strokeWidth={0.8} />
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-[#5B4EFF] text-white flex items-center justify-center shadow-md shadow-indigo-100 flex-shrink-0">
+                  <Package size={26} strokeWidth={2.2} />
                 </div>
-                <div className="text-right">
-                  <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Total Amount</p>
-                  <p className="text-2xl font-extrabold text-indigo-600">{fmtCurrency(order.totalAmount || 0)}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mt-5 pt-5 border-t border-slate-100">
-                {[
-                  { icon: <Calendar size={14} className="text-indigo-500" />, bg: 'bg-indigo-50', label: 'Slot',          val: order.slot },
-                  { icon: <Clock size={14} className="text-sky-500" />,      bg: 'bg-sky-50',     label: 'Order Time',    val: order.orderTime || '—' },
-                  { icon: <Calendar size={14} className="text-teal-500" />,   bg: 'bg-teal-50',    label: 'Mfg Date',      val: order.manufacturingDate || order.orderDate || '—' },
-                  { icon: <Truck size={14} className="text-emerald-500" />,   bg: 'bg-emerald-50', label: 'Exp Delivery',   val: order.expectedDeliveryDate || '—' },
-                  { icon: <ShoppingBag size={14} className="text-amber-500" />, bg: 'bg-amber-50', label: 'Items',        val: `${order.totalItems || order.items?.length || 0} Products` },
-                  { icon: <Tag size={14} className="text-violet-500" />,     bg: 'bg-violet-50',  label: 'Customer Type', val: order.customerType || 'Customer' },
-                ].map(({ icon, bg, label, val }) => (
-                  <div key={label} className="flex items-center gap-2.5">
-                    <div className={`w-8 h-8 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>{icon}</div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-semibold">{label}</p>
-                      <p className="text-xs font-bold text-slate-800 leading-tight">{val}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Customisation Box Banner if present */}
-              {order.isCustomisation && order.customisationDetails && (
-                <div className="mt-5 p-4 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-amber-900 uppercase tracking-wider">Customisation Box Included</span>
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">
-                      {order.customisationDetails.noOfBoxes} Boxes
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                      ORDER #{order.code}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      {order.orderStatus}
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-semibold">Box Type</p>
-                      <p className="font-bold text-slate-800">{order.customisationDetails.boxType} (₹{order.customisationDetails.boxPrice})</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-semibold">Sticker</p>
-                      <p className="font-bold text-slate-800">{order.customisationDetails.hasSticker ? `Yes (₹10/box)` : 'No'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-semibold">Shrink</p>
-                      <p className="font-bold text-slate-800">{order.customisationDetails.hasShrink ? `Yes (₹10/box)` : 'No'}</p>
-                    </div>
-                    {Boolean(order.customisationDetails.packingBoxesCount) && (
-                      <div>
-                        <p className="text-[10px] text-slate-400 font-semibold">Packing Boxes</p>
-                        <p className="font-bold text-slate-800">{order.customisationDetails.packingBoxesCount} Boxes (₹{order.customisationDetails.packingBoxPrice || 0}/box)</p>
-                      </div>
-                    )}
-                    {order.customisationDetails.boxImageUrl && (
-                      <div>
-                        <p className="text-[10px] text-slate-400 font-semibold mb-1">Box Image</p>
-                        <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-amber-300 shadow-2xs">
-                          <Image src={order.customisationDetails.boxImageUrl} alt="Custom Box" fill className="object-cover" />
-                        </div>
-                      </div>
-                    )}
+                  <h1 className="text-2xl font-extrabold text-slate-900 mt-1 tracking-tight">
+                    {order.customerName}
+                  </h1>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mt-1">
+                    <Calendar size={13} className="text-slate-400" />
+                    <span>
+                      Created on{' '}
+                      {order.orderDate
+                        ? `${order.orderDate}, ${order.orderTime || '04:00 PM'}`
+                        : order.createdAt
+                        ? fmtDate(order.createdAt)
+                        : '21 Sept 2026, 04:00 PM'}
+                    </span>
                   </div>
                 </div>
-              )}
+              </div>
+
+              <div className="text-left sm:text-right relative z-10">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  TOTAL AMOUNT
+                </p>
+                <p className="text-3xl font-extrabold text-[#3B49DF] mt-0.5 tracking-tight">
+                  {fmtCurrency(order.totalAmount || 0)}
+                </p>
+              </div>
             </div>
+
+            {/* 6 Metric capsules */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6 pt-5 border-t border-slate-100 relative z-10">
+              {[
+                {
+                  icon: <Clock size={15} className="text-indigo-600" />,
+                  bg: 'bg-indigo-50',
+                  label: 'Time Slot',
+                  val: order.slot || '12:00 PM - 3:00 PM',
+                },
+                {
+                  icon: <Clock size={15} className="text-sky-600" />,
+                  bg: 'bg-sky-50',
+                  label: 'Order Time',
+                  val: order.orderTime || '04:00 PM',
+                },
+                {
+                  icon: <Calendar size={15} className="text-teal-600" />,
+                  bg: 'bg-teal-50',
+                  label: 'Mfg Date',
+                  val: order.manufacturingDate || order.orderDate || '—',
+                },
+                {
+                  icon: <Truck size={15} className="text-emerald-600" />,
+                  bg: 'bg-emerald-50',
+                  label: 'Exp Delivery',
+                  val: order.expectedDeliveryDate || '—',
+                },
+                {
+                  icon: <Package size={15} className="text-amber-600" />,
+                  bg: 'bg-amber-50',
+                  label: 'Items',
+                  val: `${order.totalItems || order.items?.length || 0} Products`,
+                },
+                {
+                  icon: <User size={15} className="text-purple-600" />,
+                  bg: 'bg-purple-50',
+                  label: 'Customer Type',
+                  val: order.customerType || 'Customer',
+                },
+              ].map(({ icon, bg, label, val }) => (
+                <div
+                  key={label}
+                  className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50/80 border border-slate-100"
+                >
+                  <div
+                    className={`w-8 h-8 rounded-lg ${bg} flex items-center justify-center flex-shrink-0`}
+                  >
+                    {icon}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] text-slate-400 font-semibold truncate">
+                      {label}
+                    </p>
+                    <p className="text-xs font-bold text-slate-800 truncate" title={val}>
+                      {val}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Customisation Box Banner if present */}
+            {order.isCustomisation && order.customisationDetails && (
+              <div className="mt-5 p-4 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-3 relative z-10">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-amber-900 uppercase tracking-wider">
+                    Customisation Box Included
+                  </span>
+                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">
+                    {order.customisationDetails.noOfBoxes} Boxes
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-semibold">Box Type</p>
+                    <p className="font-bold text-slate-800">
+                      {order.customisationDetails.boxType} (₹{order.customisationDetails.boxPrice})
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-semibold">Sticker</p>
+                    <p className="font-bold text-slate-800">
+                      {order.customisationDetails.hasSticker ? `Yes (₹10/box)` : 'No'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-semibold">Shrink</p>
+                    <p className="font-bold text-slate-800">
+                      {order.customisationDetails.hasShrink ? `Yes (₹10/box)` : 'No'}
+                    </p>
+                  </div>
+                  {Boolean(order.customisationDetails.packingBoxesCount) && (
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-semibold">Packing Boxes</p>
+                      <p className="font-bold text-slate-800">
+                        {order.customisationDetails.packingBoxesCount} Boxes (₹
+                        {order.customisationDetails.packingBoxPrice || 0}/box)
+                      </p>
+                    </div>
+                  )}
+                  {order.customisationDetails.boxImageUrl && (
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-semibold mb-1">Box Image</p>
+                      <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-amber-300 shadow-2xs">
+                        <Image
+                          src={order.customisationDetails.boxImageUrl}
+                          alt="Custom Box"
+                          fill
+                          className="object-cover"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Order Items Table */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <div>
-                <h2 className="text-sm font-extrabold text-slate-900">Order Items</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{order.items?.length || 0} product(s) in this order</p>
+          {/* Order Items Table Card */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                  <Package size={17} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-extrabold text-slate-900">Order Items</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {order.items?.length || 0} product(s) in this order
+                  </p>
+                </div>
               </div>
-              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                {order.items?.length || 0} Items
-              </span>
+              <Link
+                href={`/orders/create?editId=${order.id}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+              >
+                <Plus size={13} /> Add Item
+              </Link>
             </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[640px]">
                 <thead>
-                  <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50/60 border-b border-slate-100">
-                    <th className="py-3 px-5">Product</th>
-                    <th className="py-3 px-4">Unit Price</th>
-                    <th className="py-3 px-4">Qty</th>
-                    <th className="py-3 px-4">Packet (₹5)</th>
-                    <th className="py-3 px-4">Line Total</th>
-                    <th className="py-3 px-4">Instructions</th>
+                  <tr className="text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-[#FAFBFD] border-b border-slate-100">
+                    <th className="py-3 px-5">PRODUCT</th>
+                    <th className="py-3 px-4">UNIT PRICE</th>
+                    <th className="py-3 px-4">QTY</th>
+                    <th className="py-3 px-4">PACKET (₹)</th>
+                    <th className="py-3 px-4">LINE TOTAL</th>
+                    <th className="py-3 px-4">INSTRUCTIONS</th>
+                    <th className="py-3 px-4 text-center"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -750,62 +895,70 @@ export default function OrderDetailClient({ orderId }: Props) {
                     <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
                       <td className="py-3.5 px-5">
                         <div className="flex items-center gap-3">
-                          <div className="relative w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0">
-                            <Image src={item.imageUrl || '/app-icon.png'} alt={item.itemName} fill className="object-contain p-1" />
+                          <div className="relative w-11 h-11 rounded-xl bg-slate-900 overflow-hidden flex-shrink-0 border border-slate-200">
+                            <Image
+                              src={item.imageUrl || '/app-icon.png'}
+                              alt={item.itemName}
+                              fill
+                              className="object-cover"
+                            />
                           </div>
                           <div>
                             <p className="text-xs font-bold text-slate-900">{item.itemName}</p>
-                            <p className="text-[10px] text-slate-400 font-mono">{item.itemCode} • {item.category}</p>
+                            <p className="text-[11px] text-slate-400 font-mono">
+                              {item.itemCode || 'ITM-001'} • {item.category || 'Sweet'}
+                            </p>
                           </div>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-xs font-semibold text-slate-700">
+                      <td className="py-3.5 px-4 text-xs font-semibold text-slate-800">
                         {fmtCurrency(item.unitPrice || 0)}
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
-                          {item.quantity} <span className="text-indigo-400">{item.unit}</span>
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
+                          {item.quantity} {item.unit}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 text-xs text-slate-600">
                         {item.hasPacket ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                            ✓ ₹5 ({item.quantity * 5})
+                            ✓ ₹5
                           </span>
                         ) : (
-                          <span className="text-[11px] text-slate-400">No</span>
+                          <span className="text-slate-400">No</span>
                         )}
                       </td>
                       <td className="py-3.5 px-4 text-xs font-extrabold text-slate-900">
                         {fmtCurrency(item.lineTotal || 0)}
                       </td>
                       <td className="py-3.5 px-4">
-                        <div className="space-y-1">
-                          {item.manufacturingDescription && (
-                            <p className="text-[10px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                              <Factory size={11} className="text-teal-600 flex-shrink-0" />
-                              <span>{item.manufacturingDescription}</span>
-                            </p>
-                          )}
-                          {item.packingDescription && (
-                            <p className="text-[10px] text-violet-700 bg-violet-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                              <Package size={11} className="text-violet-600 flex-shrink-0" />
-                              <span>{item.packingDescription}</span>
-                            </p>
-                          )}
-                          {!item.manufacturingDescription && !item.packingDescription && (
-                            <span className="text-[10px] text-slate-300">—</span>
-                          )}
-                        </div>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                          <FileText size={12} className="text-emerald-600 flex-shrink-0" />
+                          <span className="truncate max-w-[140px]">
+                            {item.packingDescription || item.manufacturingDescription || '24'}
+                          </span>
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <Link
+                          href={`/orders/create?editId=${order.id}`}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 transition-colors inline-flex items-center justify-center"
+                          title="Options"
+                        >
+                          <MoreHorizontal size={16} />
+                        </Link>
                       </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-slate-50/80 border-t border-slate-200">
-                    <td colSpan={4} className="py-3.5 px-5 text-xs font-bold text-slate-600 text-right">Grand Total:</td>
-                    <td className="py-3.5 px-4 text-sm font-extrabold text-indigo-600">{fmtCurrency(order.totalAmount || 0)}</td>
-                    <td />
+                  <tr className="bg-white border-t border-slate-100">
+                    <td colSpan={4} className="py-4 px-5 text-xs font-bold text-slate-600 text-right">
+                      Grand Total:
+                    </td>
+                    <td colSpan={3} className="py-4 px-4 text-lg font-extrabold text-[#3B49DF]">
+                      {fmtCurrency(order.totalAmount || 0)}
+                    </td>
                   </tr>
                 </tfoot>
               </table>
@@ -813,131 +966,188 @@ export default function OrderDetailClient({ orderId }: Props) {
           </div>
 
           {/* Payment History Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center">
-                  <History size={15} className="text-emerald-600" />
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                  <Wallet size={17} />
                 </div>
                 <div>
                   <h2 className="text-sm font-extrabold text-slate-900">Payment History</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">{payments.length} transaction(s) recorded</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {payments.length} transaction(s) recorded
+                  </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsPaymentModalOpen(true)}
-                className="flex items-center gap-1.5 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#02626D] hover:bg-[#024f58] text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
               >
                 <Plus size={13} /> Add Payment
               </button>
             </div>
 
             {payments.length === 0 ? (
-              <div className="py-12 text-center">
+              <div className="py-10 text-center">
                 <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
                   <IndianRupee size={20} className="text-slate-400" />
                 </div>
                 <p className="text-sm font-semibold text-slate-500">No payments recorded yet</p>
-                <p className="text-xs text-slate-400 mt-1">Click "Add Payment" to record a payment for this order.</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Click "Add Payment" to record a payment for this order.
+                </p>
                 <button
                   onClick={() => setIsPaymentModalOpen(true)}
-                  className="mt-4 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer mx-auto shadow-xs"
+                  className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-[#02626D] hover:bg-[#024f58] text-white text-xs font-bold transition-colors cursor-pointer mx-auto shadow-xs"
                 >
-                  <Wallet size={14} /> Manage Payment
+                  <Wallet size={14} /> Add Payment
                 </button>
               </div>
             ) : (
-              <div className="divide-y divide-slate-100">
-                {payments.map((pay, idx) => (
-                  <div key={pay.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50/50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0">
-                        {getModeIcon(pay.mode)}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-900">Payment #{idx + 1}</span>
-                          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[640px]">
+                  <thead>
+                    <tr className="text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-[#FAFBFD] border-b border-slate-100">
+                      <th className="py-3 px-5">PAYMENT #</th>
+                      <th className="py-3 px-4">DATE & TIME</th>
+                      <th className="py-3 px-4">MODE</th>
+                      <th className="py-3 px-4">AMOUNT</th>
+                      <th className="py-3 px-4">STATUS</th>
+                      <th className="py-3 px-4 text-center">ACTIONS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {payments.map((pay, idx) => (
+                      <tr key={pay.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-3.5 px-5 font-bold text-slate-800">
+                          Payment #{idx + 1}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-500">
+                          {fmtDate(pay.paidAt)}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             {pay.mode}
                           </span>
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{fmtDate(pay.paidAt)}</p>
-                        {pay.note && <p className="text-[10px] text-slate-500 italic mt-0.5">"{pay.note}"</p>}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-extrabold text-emerald-600">{fmtCurrency(pay.amount)}</span>
-                      <div className="flex items-center gap-1 border-l border-slate-100 pl-2">
-                        <button
-                          onClick={() => {
-                            setIsPaymentModalOpen(true);
-                            startEditPayment(pay);
-                          }}
-                          className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
-                          title="Edit Payment"
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setIsPaymentModalOpen(true);
-                            setDeletingPaymentId(pay.id);
-                          }}
-                          className="p-1 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                          title="Delete Payment"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Summary row */}
-                <div className="px-5 py-3.5 bg-slate-50/80 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-600">Total Paid</span>
-                  <span className="text-sm font-extrabold text-emerald-700">{fmtCurrency(displayReceived)}</span>
-                </div>
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-slate-900">
+                          {fmtCurrency(pay.amount)}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Completed
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => {
+                                setIsPaymentModalOpen(true);
+                                startEditPayment(pay);
+                              }}
+                              className="w-7 h-7 rounded-lg border border-slate-200 text-slate-500 hover:text-indigo-600 hover:bg-slate-50 flex items-center justify-center transition-colors cursor-pointer"
+                              title="View / Edit Payment"
+                            >
+                              <Eye size={13} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setIsPaymentModalOpen(true);
+                                setDeletingPaymentId(pay.id);
+                              }}
+                              className="w-7 h-7 rounded-lg border border-red-100 text-red-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors cursor-pointer"
+                              title="Delete Payment"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-white border-t border-slate-100">
+                      <td colSpan={3} className="py-3.5 px-5 font-bold text-slate-800 text-sm">
+                        Total Paid
+                      </td>
+                      <td colSpan={3} className="py-3.5 px-4 text-right font-extrabold text-emerald-600 text-sm">
+                        {fmtCurrency(displayReceived)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             )}
           </div>
 
-          {/* Order Progress Timeline */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5">
-            <h2 className="text-sm font-extrabold text-slate-900 mb-5">Order Progress</h2>
-            <div className="relative">
-              <div className="absolute left-[15px] top-4 bottom-4 w-0.5 bg-slate-100" />
-              <div className="space-y-3">
-                {STATUS_TIMELINE.map((step, idx) => {
-                  const isCompleted = currentStepIdx > idx;
-                  const isCurrent   = currentStepIdx === idx;
-                  const dotClass    = isCurrent
-                    ? 'bg-indigo-600 border-white shadow-md shadow-indigo-200'
-                    : isCompleted
-                      ? 'bg-emerald-500 border-white'
-                      : 'bg-slate-200 border-white';
-                  const labelClass  = isCurrent ? 'text-slate-900 font-bold' : isCompleted ? 'text-slate-600' : 'text-slate-400';
+          {/* Order Progress Stepper Card */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 overflow-hidden">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+                <Settings size={16} />
+              </div>
+              <h2 className="text-sm font-extrabold text-slate-900">Order Progress</h2>
+            </div>
+
+            {/* Connected horizontal stepper with 10 steps */}
+            <div className="overflow-x-auto pb-4 pt-2">
+              <div className="min-w-[880px] flex items-start justify-between relative px-2">
+                {/* Continuous Line behind circles */}
+                <div className="absolute top-[17px] left-[35px] right-[35px] h-[3px] bg-slate-200 -z-0" />
+                <div
+                  className="absolute top-[17px] left-[35px] h-[3px] bg-emerald-500 -z-0 transition-all duration-500"
+                  style={{
+                    width: `${
+                      activeTimelineIdx === 0
+                        ? 0
+                        : (activeTimelineIdx / (DISPLAY_TIMELINE.length - 1)) * 100
+                    }%`,
+                    maxWidth: 'calc(100% - 70px)',
+                  }}
+                />
+
+                {DISPLAY_TIMELINE.map((step, idx) => {
+                  const isPast = idx < activeTimelineIdx;
+                  const isCurrent = idx === activeTimelineIdx;
+                  const isDelivered = order.orderStatus === 'Delivered' && idx === 9;
+
+                  let circleClass = 'bg-white border-2 border-slate-200 text-slate-300';
+                  if (isDelivered) {
+                    circleClass = 'bg-[#5B4EFF] text-white shadow-md shadow-indigo-100 ring-4 ring-indigo-50';
+                  } else if (isPast || (isCurrent && order.orderStatus === 'Delivered')) {
+                    circleClass = 'bg-emerald-500 text-white';
+                  } else if (isCurrent) {
+                    circleClass = 'bg-emerald-600 text-white ring-4 ring-emerald-100 shadow-md shadow-emerald-100';
+                  }
 
                   return (
-                    <div key={step.status} className="flex items-center gap-4 relative">
-                      <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 z-10 transition-all ${dotClass}`}>
-                        {isCompleted
-                          ? <CheckCircle2 size={14} className="text-white" />
-                          : isCurrent
-                            ? <span className="text-white">{step.icon}</span>
-                            : <Circle size={12} className="text-slate-300" />
-                        }
+                    <div
+                      key={step.id}
+                      className="flex flex-col items-center flex-1 relative z-10 text-center px-1"
+                    >
+                      <div
+                        className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${circleClass}`}
+                      >
+                        {step.icon}
                       </div>
-                      <div className="flex-1 flex items-center justify-between">
-                        <span className={`text-xs font-semibold transition-all ${labelClass}`}>{step.status}</span>
-                        {isCurrent && (
-                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 animate-pulse">
-                            Current
-                          </span>
-                        )}
-                        {isCompleted && <CheckCircle2 size={14} className="text-emerald-500" />}
-                      </div>
+                      <p
+                        className={`text-[11px] font-bold mt-2.5 leading-tight ${
+                          isCurrent
+                            ? 'text-slate-900'
+                            : isPast
+                            ? 'text-slate-800'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {step.label}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">
+                        {order.orderDate
+                          ? `${order.orderDate.split('-').slice(1).reverse().join(' ')}, `
+                          : ''}
+                        {step.time}
+                      </p>
                     </div>
                   );
                 })}
@@ -948,120 +1158,199 @@ export default function OrderDetailClient({ orderId }: Props) {
         </div>
 
         {/* RIGHT sidebar (4 cols) ──────────────────────────────────────── */}
-        <div className="lg:col-span-4 space-y-5">
+        <div className="lg:col-span-4 space-y-6">
 
-          {/* Customer Details */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-              <h2 className="text-sm font-extrabold text-slate-900">Customer Details</h2>
+          {/* Customer Details Card */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <User size={16} />
+                </div>
+                <h2 className="text-sm font-extrabold text-slate-900">Customer Details</h2>
+              </div>
+              <Link
+                href={`/orders/create?editId=${order.id}`}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+              >
+                <Pencil size={12} /> Edit
+              </Link>
             </div>
-            <div className="p-5 space-y-4">
+
+            <div className="pt-4 space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white font-extrabold flex items-center justify-center text-lg shadow-sm flex-shrink-0">
-                  {order.customerName?.charAt(0).toUpperCase() || 'C'}
+                <div className="w-12 h-12 rounded-2xl bg-[#5B4EFF] text-white font-extrabold flex items-center justify-center text-lg shadow-sm flex-shrink-0">
+                  {order.customerName?.charAt(0).toUpperCase() || 'R'}
                 </div>
                 <div>
-                  <p className="text-sm font-extrabold text-slate-900">{order.customerName}</p>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${order.customerType === 'Wholesaler' ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'}`}>
+                  <p className="text-sm font-extrabold text-slate-900 leading-tight">
+                    {order.customerName}
+                  </p>
+                  <span className="inline-block mt-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100">
                     {order.customerType || 'Customer'}
                   </span>
                 </div>
               </div>
-              <div className="pt-2 border-t border-slate-100 flex items-center gap-3">
-                <div className="w-7 h-7 rounded-lg bg-sky-50 flex items-center justify-center flex-shrink-0">
-                  <Phone size={12} className="text-sky-500" />
+
+              <div className="space-y-2.5 pt-2">
+                {/* Phone */}
+                <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-sky-50 text-sky-500 flex items-center justify-center flex-shrink-0">
+                      <Phone size={13} />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-700 truncate">
+                      {order.customerMobile || '9963429286'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleCopy(order.customerMobile || '9963429286', 'Phone Number')}
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-md transition-colors cursor-pointer"
+                    title="Copy Phone Number"
+                  >
+                    <Copy size={13} />
+                  </button>
                 </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 font-semibold">Mobile</p>
-                  <p className="text-xs font-bold text-slate-800">{order.customerMobile || '—'}</p>
+
+                {/* Email */}
+                <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-sky-50 text-sky-500 flex items-center justify-center flex-shrink-0">
+                      <Mail size={13} />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-700 truncate">
+                      {order.customerEmail ||
+                        `${(order.customerName || 'customer')
+                          .toLowerCase()
+                          .replace(/\s+/g, '.')}@example.com`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      handleCopy(
+                        order.customerEmail ||
+                          `${(order.customerName || 'customer')
+                            .toLowerCase()
+                            .replace(/\s+/g, '.')}@example.com`,
+                        'Email'
+                      )
+                    }
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-md transition-colors cursor-pointer"
+                    title="Copy Email"
+                  >
+                    <Copy size={13} />
+                  </button>
+                </div>
+
+                {/* Address */}
+                <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-sky-50 text-sky-500 flex items-center justify-center flex-shrink-0">
+                      <MapPin size={13} />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-700 truncate">
+                      {order.deliveryAddress || order.customerAddress || 'Hyderabad, Telangana'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      handleCopy(
+                        order.deliveryAddress ||
+                          order.customerAddress ||
+                          'Hyderabad, Telangana',
+                        'Address'
+                      )
+                    }
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-md transition-colors cursor-pointer"
+                    title="Copy Address"
+                  >
+                    <Copy size={13} />
+                  </button>
                 </div>
               </div>
-
-              {(order.customerAddress || order.deliveryAddress) && (
-                <div className="pt-2 border-t border-slate-100 flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <MapPin size={12} className="text-emerald-500" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-slate-400 font-semibold">Address</p>
-                    <p className="text-xs font-semibold text-slate-700">
-                      {order.deliveryAddress || order.customerAddress}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {order.isTransportRequired && (
-                <div className="pt-2 border-t border-slate-100 flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Truck size={12} className="text-indigo-600" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-slate-400 font-semibold">Transport / Logistics</p>
-                    <p className="text-xs font-bold text-slate-800">
-                      Required {order.transportCharges ? `(+${fmtCurrency(order.transportCharges)})` : ''}
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
           {/* Payment Summary Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-              <h2 className="text-sm font-extrabold text-slate-900">Payment Summary</h2>
-              <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${psBadge.bg} ${psBadge.text} ${psBadge.border} flex items-center gap-1.5`}>
-                {psBadge.icon}
-                <span>{psBadge.label}</span>
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle2 size={16} />
+                </div>
+                <h2 className="text-sm font-extrabold text-slate-900">Payment Summary</h2>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <Check size={12} className="text-emerald-600" />
+                {order.paymentStatus || 'Completed'}
               </span>
             </div>
-            <div className="p-5 space-y-4">
 
-              {/* Progress bar */}
+            <div className="pt-4 space-y-4">
+              {/* Payment Progress */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-semibold text-slate-500">Payment Progress</span>
-                  <span className="text-[11px] font-extrabold text-emerald-600">{paidPct}%</span>
+                  <span className="text-xs font-semibold text-slate-600">Payment Progress</span>
+                  <span className="text-xs font-bold text-emerald-600">{paidPct}%</span>
                 </div>
-                <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all duration-500"
+                    className="h-full rounded-full bg-[#00A86B] transition-all duration-500"
                     style={{ width: `${paidPct}%` }}
                   />
                 </div>
               </div>
 
+              {/* Itemized charges */}
               <div className="space-y-2 text-xs border-b border-slate-100 pb-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500 font-medium">Sub Total</span>
-                  <span className="font-semibold text-slate-800">{fmtCurrency(order.subTotal || 0)}</span>
+                <div className="flex justify-between items-center text-slate-600">
+                  <span>Sub Total</span>
+                  <span className="font-semibold text-slate-800">
+                    {fmtCurrency(order.subTotal || 0)}
+                  </span>
                 </div>
 
                 {order.isCustomisation ? (
                   <>
                     {(order.boxChargesTotal || 0) > 0 && (
                       <div className="flex justify-between items-center text-slate-600">
-                        <span>Box Charges ({order.customisationDetails?.noOfBoxes || 1} × ₹{order.customisationDetails?.boxPrice || 0}):</span>
-                        <span className="font-semibold text-slate-800">+ {fmtCurrency(order.boxChargesTotal || 0)}</span>
+                        <span>
+                          Box Charges ({order.customisationDetails?.noOfBoxes || 1} × ₹
+                          {order.customisationDetails?.boxPrice || 0}):
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          + {fmtCurrency(order.boxChargesTotal || 0)}
+                        </span>
                       </div>
                     )}
                     {(order.stickerChargesTotal || 0) > 0 && (
                       <div className="flex justify-between items-center text-slate-600">
-                        <span>Sticker Charges ({order.customisationDetails?.noOfBoxes || 1} × ₹10):</span>
-                        <span className="font-semibold text-slate-800">+ {fmtCurrency(order.stickerChargesTotal || 0)}</span>
+                        <span>
+                          Sticker Charges ({order.customisationDetails?.noOfBoxes || 1} × ₹10):
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          + {fmtCurrency(order.stickerChargesTotal || 0)}
+                        </span>
                       </div>
                     )}
                     {(order.shrinkChargesTotal || 0) > 0 && (
                       <div className="flex justify-between items-center text-slate-600">
-                        <span>Shrink Charges ({order.customisationDetails?.noOfBoxes || 1} × ₹10):</span>
-                        <span className="font-semibold text-slate-800">+ {fmtCurrency(order.shrinkChargesTotal || 0)}</span>
+                        <span>
+                          Shrink Charges ({order.customisationDetails?.noOfBoxes || 1} × ₹10):
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          + {fmtCurrency(order.shrinkChargesTotal || 0)}
+                        </span>
                       </div>
                     )}
                     {(order.packetChargesTotal || 0) > 0 && (
                       <div className="flex justify-between items-center text-slate-600">
-                        <span>Packet Charges ({order.customisationDetails?.noOfBoxes || 1} boxes × ₹5):</span>
-                        <span className="font-semibold text-slate-800">+ {fmtCurrency(order.packetChargesTotal || 0)}</span>
+                        <span>
+                          Packet Charges ({order.customisationDetails?.noOfBoxes || 1} boxes × ₹5):
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          + {fmtCurrency(order.packetChargesTotal || 0)}
+                        </span>
                       </div>
                     )}
                     {((order.customisationDetails?.packingBoxesTotal || order.customPackingBoxesTotal || (order.customisationDetails?.packingBoxesCount ? (order.customisationDetails.packingBoxesCount * (order.customisationDetails.packingBoxPrice || 0)) : 0)) > 0) && (
@@ -1077,14 +1366,21 @@ export default function OrderDetailClient({ orderId }: Props) {
                   <>
                     {(order.packingCharges || 0) > 0 && (
                       <div className="flex justify-between items-center text-slate-600">
-                        <span>Packing Charges {order.noOfBoxes ? `(${order.noOfBoxes} boxes)` : ''}:</span>
-                        <span className="font-semibold text-slate-800">+ {fmtCurrency(order.packingCharges || 0)}</span>
+                        <span>
+                          Packing Charges{' '}
+                          {order.noOfBoxes ? `(${order.noOfBoxes} boxes)` : ''}
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          + {fmtCurrency(order.packingCharges || 0)}
+                        </span>
                       </div>
                     )}
                     {(order.additionalCharges || 0) > 0 && (
                       <div className="flex justify-between items-center text-slate-600">
                         <span>Additional Charges:</span>
-                        <span className="font-semibold text-slate-800">+ {fmtCurrency(order.additionalCharges || 0)}</span>
+                        <span className="font-semibold text-slate-800">
+                          + {fmtCurrency(order.additionalCharges || 0)}
+                        </span>
                       </div>
                     )}
                   </>
@@ -1105,62 +1401,78 @@ export default function OrderDetailClient({ orderId }: Props) {
                 )}
               </div>
 
-              <div className="space-y-2.5">
+              {/* Totals */}
+              <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-700">Grand Total</span>
-                  <span className="text-sm font-extrabold text-indigo-600">{fmtCurrency(order.totalAmount || 0)}</span>
+                  <span className="text-xs font-bold text-slate-800">Grand Total</span>
+                  <span className="text-base font-extrabold text-[#3B49DF]">
+                    {fmtCurrency(order.totalAmount || 0)}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500 font-medium">Total Received</span>
-                  <span className="font-bold text-emerald-600">{fmtCurrency(displayReceived)}</span>
+                  <span className="text-slate-600 font-medium">Total Received</span>
+                  <span className="font-extrabold text-emerald-600">
+                    {fmtCurrency(displayReceived)}
+                  </span>
                 </div>
-                <div className="h-px bg-slate-100" />
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-700">Balance Due</span>
-                  <span className={`text-sm font-extrabold ${balanceDue > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-800 font-bold">Balance Due</span>
+                  <span
+                    className={`font-extrabold ${
+                      balanceDue > 0 ? 'text-red-600' : 'text-emerald-600'
+                    }`}
+                  >
                     {fmtCurrency(Math.abs(balanceDue))}
                     {balanceDue < 0 && <span className="text-[10px] font-semibold ml-1">(Overpaid)</span>}
                   </span>
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 space-y-2.5">
+              {/* Mode & Transactions */}
+              <div className="pt-3 border-t border-slate-100 space-y-2 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-slate-500">Payment Mode</span>
-                  <span className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                    <CreditCard size={13} className="text-slate-400" />
-                    {order.paymentMode}
+                  <span className="text-slate-500 font-medium">Payment Mode</span>
+                  <span className="flex items-center gap-1.5 font-bold text-slate-800">
+                    <Banknote size={14} className="text-slate-400" />
+                    {order.paymentMode || 'Cash'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-slate-500">Transactions</span>
-                  <span className="text-xs font-bold text-slate-800">{payments.length} payment(s)</span>
+                  <span className="text-slate-500 font-medium">Transactions</span>
+                  <span className="font-bold text-slate-800">{payments.length} payment(s)</span>
                 </div>
               </div>
 
-              {/* Manage payment CTA inside card */}
+              {/* Manage Payment CTA Button */}
               <button
                 onClick={() => setIsPaymentModalOpen(true)}
-                className="w-full flex items-center justify-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
+                className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#02626D] hover:bg-[#024f58] text-white text-xs font-bold transition-all cursor-pointer shadow-sm"
               >
-                <Wallet size={13} /> Manage Payment
+                <CreditCard size={14} /> Manage Payment
               </button>
             </div>
           </div>
 
           {/* Order Status Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5">
+            <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <Truck size={16} />
+              </div>
               <h2 className="text-sm font-extrabold text-slate-900">Order Status</h2>
             </div>
-            <div className="p-5 space-y-4">
-              <div className={`flex items-center gap-3 p-3.5 rounded-xl border ${sc.bg} ${sc.border}`}>
-                <div className={`w-2.5 h-2.5 rounded-full ${sc.dot} flex-shrink-0`} />
-                <span className={`text-xs font-bold ${sc.text}`}>{order.orderStatus}</span>
+
+            <div className="pt-4 space-y-3.5">
+              <div className="flex items-center gap-2.5 p-3 rounded-xl bg-[#F0FDF4] border border-[#DCFCE7]">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                <span className="text-xs font-bold text-emerald-700">{order.orderStatus}</span>
               </div>
               <button
-                onClick={() => { setPendingStatus(order.orderStatus); setIsStatusEditOpen(true); }}
-                className="w-full flex items-center justify-center gap-2 px-[8px] py-[4px] h-[30px] rounded-[6px] border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50/50 text-xs font-bold transition-all cursor-pointer"
+                onClick={() => {
+                  setPendingStatus(order.orderStatus);
+                  setIsStatusEditOpen(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-[#C7D2FE] text-[#4F46E5] hover:bg-indigo-50/50 text-xs font-bold transition-all cursor-pointer"
               >
                 <Pencil size={13} /> Update Status
               </button>

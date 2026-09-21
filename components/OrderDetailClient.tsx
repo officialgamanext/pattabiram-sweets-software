@@ -682,6 +682,102 @@ export default function OrderDetailClient({ orderId }: Props) {
         </div>
       </div>
 
+      {/* ── Full Width Order Status & Progress Card ──────────── */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 sm:p-6 overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+              <Truck size={18} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-sm font-extrabold text-slate-900">Order Status</h2>
+                <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  {order.orderStatus}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Track manufacturing, packing, store receipt, and delivery stages
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setPendingStatus(order.orderStatus);
+              setIsStatusEditOpen(true);
+            }}
+            className="self-start sm:self-auto flex items-center gap-2 px-3.5 py-1.5 rounded-xl border-2 border-dashed border-[#C7D2FE] text-[#4F46E5] hover:bg-indigo-50/50 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+          >
+            <Pencil size={13} /> Update Status
+          </button>
+        </div>
+
+        {/* Connected horizontal stepper with 10 steps */}
+        <div className="overflow-x-auto pb-2 pt-6">
+          <div className="min-w-[880px] flex items-start justify-between relative px-2">
+            {/* Continuous Line behind circles */}
+            <div className="absolute top-[17px] left-[35px] right-[35px] h-[3px] bg-slate-200 -z-0" />
+            <div
+              className="absolute top-[17px] left-[35px] h-[3px] bg-emerald-500 -z-0 transition-all duration-500"
+              style={{
+                width: `${
+                  activeTimelineIdx === 0
+                    ? 0
+                    : (activeTimelineIdx / (DISPLAY_TIMELINE.length - 1)) * 100
+                }%`,
+                maxWidth: 'calc(100% - 70px)',
+              }}
+            />
+
+            {DISPLAY_TIMELINE.map((step, idx) => {
+              const isPast = idx < activeTimelineIdx;
+              const isCurrent = idx === activeTimelineIdx;
+              const isDelivered = order.orderStatus === 'Delivered' && idx === 9;
+
+              let circleClass = 'bg-white border-2 border-slate-200 text-slate-300';
+              if (isDelivered) {
+                circleClass = 'bg-[#5B4EFF] text-white shadow-md shadow-indigo-100 ring-4 ring-indigo-50';
+              } else if (isPast || (isCurrent && order.orderStatus === 'Delivered')) {
+                circleClass = 'bg-emerald-500 text-white';
+              } else if (isCurrent) {
+                circleClass = 'bg-emerald-600 text-white ring-4 ring-emerald-100 shadow-md shadow-emerald-100';
+              }
+
+              return (
+                <div
+                  key={step.id}
+                  className="flex flex-col items-center flex-1 relative z-10 text-center px-1"
+                >
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${circleClass}`}
+                  >
+                    {step.icon}
+                  </div>
+                  <p
+                    className={`text-[11px] font-bold mt-2.5 leading-tight ${
+                      isCurrent
+                        ? 'text-slate-900'
+                        : isPast
+                        ? 'text-slate-800'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    {step.label}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">
+                    {order.orderDate
+                      ? `${order.orderDate.split('-').slice(1).reverse().join(' ')}, `
+                      : ''}
+                    {step.time}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       {/* ── Main 12-col grid ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
@@ -1081,80 +1177,6 @@ export default function OrderDetailClient({ orderId }: Props) {
             )}
           </div>
 
-          {/* Order Progress Stepper Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 overflow-hidden">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
-                <Settings size={16} />
-              </div>
-              <h2 className="text-sm font-extrabold text-slate-900">Order Progress</h2>
-            </div>
-
-            {/* Connected horizontal stepper with 10 steps */}
-            <div className="overflow-x-auto pb-4 pt-2">
-              <div className="min-w-[880px] flex items-start justify-between relative px-2">
-                {/* Continuous Line behind circles */}
-                <div className="absolute top-[17px] left-[35px] right-[35px] h-[3px] bg-slate-200 -z-0" />
-                <div
-                  className="absolute top-[17px] left-[35px] h-[3px] bg-emerald-500 -z-0 transition-all duration-500"
-                  style={{
-                    width: `${
-                      activeTimelineIdx === 0
-                        ? 0
-                        : (activeTimelineIdx / (DISPLAY_TIMELINE.length - 1)) * 100
-                    }%`,
-                    maxWidth: 'calc(100% - 70px)',
-                  }}
-                />
-
-                {DISPLAY_TIMELINE.map((step, idx) => {
-                  const isPast = idx < activeTimelineIdx;
-                  const isCurrent = idx === activeTimelineIdx;
-                  const isDelivered = order.orderStatus === 'Delivered' && idx === 9;
-
-                  let circleClass = 'bg-white border-2 border-slate-200 text-slate-300';
-                  if (isDelivered) {
-                    circleClass = 'bg-[#5B4EFF] text-white shadow-md shadow-indigo-100 ring-4 ring-indigo-50';
-                  } else if (isPast || (isCurrent && order.orderStatus === 'Delivered')) {
-                    circleClass = 'bg-emerald-500 text-white';
-                  } else if (isCurrent) {
-                    circleClass = 'bg-emerald-600 text-white ring-4 ring-emerald-100 shadow-md shadow-emerald-100';
-                  }
-
-                  return (
-                    <div
-                      key={step.id}
-                      className="flex flex-col items-center flex-1 relative z-10 text-center px-1"
-                    >
-                      <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${circleClass}`}
-                      >
-                        {step.icon}
-                      </div>
-                      <p
-                        className={`text-[11px] font-bold mt-2.5 leading-tight ${
-                          isCurrent
-                            ? 'text-slate-900'
-                            : isPast
-                            ? 'text-slate-800'
-                            : 'text-slate-400'
-                        }`}
-                      >
-                        {step.label}
-                      </p>
-                      <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">
-                        {order.orderDate
-                          ? `${order.orderDate.split('-').slice(1).reverse().join(' ')}, `
-                          : ''}
-                        {step.time}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
         </div>
 
         {/* RIGHT sidebar (4 cols) ──────────────────────────────────────── */}
@@ -1449,32 +1471,6 @@ export default function OrderDetailClient({ orderId }: Props) {
                 className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#02626D] hover:bg-[#024f58] text-white text-xs font-bold transition-all cursor-pointer shadow-sm"
               >
                 <CreditCard size={14} /> Manage Payment
-              </button>
-            </div>
-          </div>
-
-          {/* Order Status Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5">
-            <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <Truck size={16} />
-              </div>
-              <h2 className="text-sm font-extrabold text-slate-900">Order Status</h2>
-            </div>
-
-            <div className="pt-4 space-y-3.5">
-              <div className="flex items-center gap-2.5 p-3 rounded-xl bg-[#F0FDF4] border border-[#DCFCE7]">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-                <span className="text-xs font-bold text-emerald-700">{order.orderStatus}</span>
-              </div>
-              <button
-                onClick={() => {
-                  setPendingStatus(order.orderStatus);
-                  setIsStatusEditOpen(true);
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-[#C7D2FE] text-[#4F46E5] hover:bg-indigo-50/50 text-xs font-bold transition-all cursor-pointer"
-              >
-                <Pencil size={13} /> Update Status
               </button>
             </div>
           </div>

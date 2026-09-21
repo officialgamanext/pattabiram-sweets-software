@@ -1,6 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@100..800&display=swap');
 @import "tailwindcss";
 
 @theme {
+  --font-sans: 'Sora', sans-serif;
+  --font-sora: 'Sora', sans-serif;
+  --font-weight-semibold: 500;
+  --font-weight-bold: 500;
+  --font-weight-extrabold: 500;
+  --font-weight-black: 500;
   --radius-xs: 6px;
   --radius-sm: 6px;
   --radius-md: 6px;
@@ -13,7 +20,7 @@
 }
 
 :root {
-  --font-sora: 'Inter', 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sora: 'Sora', sans-serif;
   --radius-xs: 6px;
   --radius-sm: 6px;
   --radius-md: 6px;
@@ -23,6 +30,41 @@
   --radius-3xl: 6px;
   --radius-4xl: 6px;
   --radius: 6px;
+}
+
+/* ── Universal Font Family: Sora ── */
+html,
+body,
+*,
+*::before,
+*::after {
+  font-family: 'Sora', sans-serif !important;
+}
+
+/* ── Universal Max Font Weight: 500 ── */
+b,
+strong,
+th,
+optgroup,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-semibold,
+.font-bold,
+.font-extrabold,
+.font-black,
+[class*="font-semibold"],
+[class*="font-bold"],
+[class*="font-extrabold"],
+[class*="font-black"],
+[class*="font-[6"],
+[class*="font-[7"],
+[class*="font-[8"],
+[class*="font-[9"] {
+  font-weight: 500 !important;
 }
 
 /* ── Global 6px Border Radius Rule ── */
@@ -72,7 +114,7 @@
 }
 
 body {
-  font-family: var(--font-sora), -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Sora', sans-serif !important;
   background-color: #f6f6f7;
   color: #1a1a1a;
   -webkit-font-smoothing: antialiased;
@@ -88,14 +130,18 @@ html, body, button, a, input, select, textarea, [role="button"], label {
   touch-action: manipulation;
 }
 
-/* ── Universal 36px Max Height for Buttons, Inputs, Selects & Tabs ── */
+/* ── Universal 34px Max Height for Buttons, Inputs, Selects & Tabs ── */
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not(.allow-any-height),
 select:not(.allow-any-height) {
-  max-height: 36px !important;
+  max-height: 34px !important;
+  box-sizing: border-box;
 }
 
-button:not(.allow-any-height):not(.h-auto):not([class*="h-full"]):not([class*="h-screen"]):not([class*="min-h-"]):not([class*="h-max"]):not([class*="h-min"]):not(.card-button) {
-  max-height: 36px !important;
+button:not(.allow-any-height):not(.h-auto):not([class*="h-full"]):not([class*="h-screen"]):not([class*="min-h-"]):not([class*="h-max"]):not([class*="h-min"]):not(.card-button),
+a[role="button"]:not(.allow-any-height):not(.h-auto):not([class*="h-full"]):not([class*="h-screen"]):not([class*="min-h-"]):not([class*="h-max"]):not([class*="h-min"]):not(.card-button),
+.btn:not(.allow-any-height) {
+  max-height: 34px !important;
+  box-sizing: border-box;
 }
 
 /* Custom scrollbar utility */

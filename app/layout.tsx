@@ -46,11 +46,17 @@ export default function RootLayout({
   return (
     <html lang="en" className={sora.variable} suppressHydrationWarning>
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Sora:wght@100..800&display=swap"
+          rel="stylesheet"
+        />
         <link rel="apple-touch-icon" href="/app-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       </head>
-      <body className="min-h-screen bg-[#f6f6f7] font-sans antialiased text-[#1a1a1a]" suppressHydrationWarning>
+      <body className={`min-h-screen bg-[#f6f6f7] antialiased text-[#1a1a1a] ${sora.className}`} suppressHydrationWarning>
         <GlobalInputBehavior />
         <PWAProvider>
           <ToastProvider>

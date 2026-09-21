@@ -521,7 +521,7 @@ export default function LiveSalesAnalyticsClient() {
             )}
             <button
               onClick={handleExportCSV}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 shadow-sm transition max-h-[36px] cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 shadow-sm transition max-h-[34px] cursor-pointer"
             >
               <Download className="w-3.5 h-3.5 text-slate-500" />
               <span>Export {activeTab === 'credit' ? 'Credit CSV' : 'Sales CSV'}</span>
@@ -759,7 +759,7 @@ export default function LiveSalesAnalyticsClient() {
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:bg-white transition max-h-[36px]"
+              className="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:bg-white transition max-h-[34px]"
             />
             {searchQuery && (
               <button
@@ -783,7 +783,7 @@ export default function LiveSalesAnalyticsClient() {
                       setSelectedPaymentMode(mode);
                       setCurrentPage(1);
                     }}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition max-h-[36px] border cursor-pointer ${
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition max-h-[34px] border cursor-pointer ${
                       active
                         ? 'bg-[#02626D] text-white border-[#02626D] shadow-sm'
                         : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
@@ -1249,13 +1249,13 @@ export default function LiveSalesAnalyticsClient() {
             <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex items-center justify-end gap-2">
               <button
                 onClick={() => setViewSale(null)}
-                className="px-4 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition max-h-[36px] cursor-pointer"
+                className="px-4 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition max-h-[34px] cursor-pointer"
               >
                 Close
               </button>
               <button
                 onClick={() => handleReprint(viewSale)}
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-[#02626D] hover:bg-[#014d56] rounded-xl shadow-sm transition max-h-[36px] cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-[#02626D] hover:bg-[#014d56] rounded-xl shadow-sm transition max-h-[34px] cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
                 Print Bill

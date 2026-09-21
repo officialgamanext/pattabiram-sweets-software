@@ -221,9 +221,9 @@ export default function CustomDatePicker({
   const prevMonthDays = getDaysInMonth(viewYear, viewMonth - 1 < 0 ? 11 : viewMonth - 1);
 
   const sizeClasses = {
-    sm: 'px-2.5 py-1 text-xs rounded-lg h-[32px] max-h-[36px]',
-    md: 'px-3 py-1 text-xs rounded-lg h-[36px] max-h-[36px]',
-    lg: 'px-3.5 py-1 text-xs rounded-lg h-[36px] max-h-[36px]',
+    sm: 'px-2.5 py-1 text-xs rounded-lg h-[32px] max-h-[34px]',
+    md: 'px-3 py-1 text-xs rounded-lg h-[34px] max-h-[34px]',
+    lg: 'px-3.5 py-1 text-xs rounded-lg h-[34px] max-h-[34px]',
   };
 
   const isFullWidth = className.includes('w-full');

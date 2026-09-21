@@ -732,7 +732,7 @@ export default function LooseSalesClient() {
                     value={selectedEmployeeId}
                     onChange={(e) => setSelectedEmployeeId(e.target.value)}
                     required
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:bg-white transition max-h-[38px]"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:bg-white transition max-h-[34px]"
                   >
                     <option value="" disabled>
                       -- Choose Employee --
@@ -794,7 +794,7 @@ export default function LooseSalesClient() {
                         placeholder="0.00"
                         value={splitCash}
                         onChange={(e) => setSplitCash(e.target.value)}
-                        className="w-full px-3 py-1.5 text-xs bg-white border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600 max-h-[36px]"
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600 max-h-[34px]"
                       />
                     </div>
                     <div>
@@ -807,7 +807,7 @@ export default function LooseSalesClient() {
                         placeholder="0.00"
                         value={splitUpi}
                         onChange={(e) => setSplitUpi(e.target.value)}
-                        className="w-full px-3 py-1.5 text-xs bg-white border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600 max-h-[36px]"
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600 max-h-[34px]"
                       />
                     </div>
                   </div>
@@ -824,7 +824,7 @@ export default function LooseSalesClient() {
                   placeholder="e.g. 250g Mixture, Water bottles, Special tea parcel..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:bg-white transition max-h-[36px]"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:bg-white transition max-h-[34px]"
                 />
               </div>
 
@@ -838,7 +838,7 @@ export default function LooseSalesClient() {
                   placeholder="e.g. Ramesh / 9876543210"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:bg-white transition max-h-[36px]"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:bg-white transition max-h-[34px]"
                 />
               </div>
 
@@ -847,14 +847,14 @@ export default function LooseSalesClient() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition max-h-[36px]"
+                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition max-h-[34px]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 font-semibold text-white bg-[#02626D] hover:bg-[#014d56] rounded-xl shadow-sm disabled:opacity-50 transition max-h-[36px]"
+                  className="inline-flex items-center gap-1.5 px-5 py-2 font-semibold text-white bg-[#02626D] hover:bg-[#014d56] rounded-xl shadow-sm disabled:opacity-50 transition max-h-[34px]"
                 >
                   {submitting ? (
                     <>
@@ -892,14 +892,14 @@ export default function LooseSalesClient() {
             <div className="flex items-center justify-center gap-2 pt-2">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="px-4 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition max-h-[36px]"
+                className="px-4 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition max-h-[34px]"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDelete}
                 disabled={deleting}
-                className="px-4 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition max-h-[36px]"
+                className="px-4 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition max-h-[34px]"
               >
                 {deleting ? 'Deleting...' : 'Confirm Delete'}
               </button>

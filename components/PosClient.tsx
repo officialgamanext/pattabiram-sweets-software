@@ -1713,7 +1713,7 @@ export default function PosClient() {
             {/* Thermal Receipt Print Area */}
             <div id="receipt-print-area" className="p-4 bg-white font-mono text-slate-900 text-xs space-y-2 border border-slate-200 rounded-lg">
               <div className="text-center border-b border-slate-200 pb-2">
-                <h2 className="text-sm font-bold uppercase tracking-wider">{businessSettings.businessName || 'Pattabiram Sweets'}</h2>
+                <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wide truncate">{businessSettings.businessName || 'Pattabiram Sweets'}</h2>
                 {businessSettings.tagline && <p className="text-[10px] text-slate-500 italic">{businessSettings.tagline}</p>}
                 <p className="text-[10px] text-slate-500">{formatStoreAddress(businessSettings)}</p>
                 <p className="text-[10px] text-slate-500">Ph: {formatStorePhone(businessSettings)}</p>

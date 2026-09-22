@@ -894,7 +894,7 @@ export default function SettingsClient() {
             <div className="bg-amber-50/40 p-6 rounded-md border border-dashed border-slate-300 font-mono text-xs text-slate-900 max-w-sm mx-auto shadow-inner space-y-3">
               {/* Receipt Header */}
               <div className="text-center space-y-1 pb-2 border-b border-dashed border-slate-400">
-                <p className="font-extrabold text-sm tracking-wider uppercase">
+                <p className="font-extrabold text-xs sm:text-sm tracking-wide uppercase truncate">
                   {formData.businessName || 'PATTABIRAM SWEETS'}
                 </p>
                 {formData.tagline && (

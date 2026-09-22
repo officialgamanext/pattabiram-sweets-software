@@ -295,13 +295,10 @@ export function generateTestReceipt(paperWidth: '58mm' | '80mm' = '80mm'): Uint8
   const builder = new EscPosBuilder(paperWidth);
   const is2Inch = paperWidth === '58mm';
 
-  builder.init().alignCenter().bold(true);
+  builder.init().bold(true);
 
-  if (is2Inch) {
-    builder.doubleHeight(true).textLineCentered('PATTABIRAM SWEETS').doubleHeight(false);
-  } else {
-    builder.doubleSize(true).textLineCentered('PATTABIRAM SWEETS').doubleSize(false);
-  }
+  // Use doubleHeight (single-width, double-height) so it stays cleanly on ONE line
+  builder.doubleHeight(true).textLineCentered('PATTABIRAM SWEETS').doubleHeight(false);
 
   builder
     .bold(false)
@@ -408,14 +405,14 @@ export function generateReceiptEscPos(
   builder.init().bold(true);
 
   const storeName = data.storeName || 'PATTABIRAM SWEETS';
-  if (is2Inch) {
+  // Use doubleHeight (single-width, double-height) so the store title is prominent and bold,
+  // but with standard 1x character width so it cleanly fits on ONE single line without wrapping.
+  // For extra-long business names, use standard bold to guarantee single-line fit.
+  const maxDoubleHeightLength = is2Inch ? 24 : 36;
+  if (storeName.length <= maxDoubleHeightLength) {
     builder.doubleHeight(true).textLineCentered(storeName).doubleHeight(false);
   } else {
-    if (storeName.length <= 24) {
-      builder.doubleSize(true).textLineCentered(storeName).doubleSize(false);
-    } else {
-      builder.doubleHeight(true).textLineCentered(storeName).doubleHeight(false);
-    }
+    builder.textLineCentered(storeName);
   }
 
   builder.bold(false);
@@ -668,7 +665,6 @@ export function generateReceiptEscPos(
   // 9. FOOTER
   builder.drawLine('-');
   builder
-    .alignCenter()
     .textLineCentered(data.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!')
     .textLineCentered('Please visit again')
     .feed(3)

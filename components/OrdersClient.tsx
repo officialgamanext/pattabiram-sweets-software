@@ -52,6 +52,7 @@ import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 import { usePrinter } from '@/context/PrinterContext';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from '@/context/ToastContext';
+import { OrderActionOtpModal } from '@/components/OrderActionOtpModal';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -379,6 +380,25 @@ export default function OrdersClient() {
   const [slotCategories, setSlotCategories] = useState<SlotCategory[]>([]);
   const { user, employeeProfile } = useAuth();
   const { isConnected: isPrinterConnected, printerType, printReceipt } = usePrinter();
+
+  // Admin security check: SuperAdmin or Management/Admin department
+  const isAdmin = Boolean(
+    employeeProfile?.isSuperAdmin ||
+    (user?.email && !employeeProfile) ||
+    employeeProfile?.department === 'Management' ||
+    employeeProfile?.department === 'Admin'
+  );
+
+  // OTP authorization modal state for non-admin edit/delete actions
+  const [authModalState, setAuthModalState] = useState<{
+    isOpen: boolean;
+    order: OrderRecord | null;
+    action: 'edit' | 'delete';
+  }>({
+    isOpen: false,
+    order: null,
+    action: 'edit',
+  });
 
   // Slot Analytics Modal State
   const [selectedSlotForAnalytics, setSelectedSlotForAnalytics] = useState<string | null>(null);
@@ -1058,9 +1078,55 @@ export default function OrdersClient() {
     setIsAddOrderModalOpen(true);
   };
 
-  // Open Edit Order Page
+  // Open Edit Order Page (checks Admin role or opens OTP modal)
   const handleOpenEditOrderModal = (order: OrderRecord) => {
-    router.push(`/orders/create?editId=${order.id}`);
+    if (isAdmin) {
+      router.push(`/orders/create?editId=${order.id}`);
+    } else {
+      setAuthModalState({
+        isOpen: true,
+        order,
+        action: 'edit',
+      });
+    }
+  };
+
+  // Trigger Delete Order (checks Admin role or opens OTP modal)
+  const handleDeleteOrderClick = (order: OrderRecord) => {
+    if (isAdmin) {
+      setDeletingOrder(order);
+    } else {
+      setAuthModalState({
+        isOpen: true,
+        order,
+        action: 'delete',
+      });
+    }
+  };
+
+  // Callback once non-admin successfully verifies OTP with Admin
+  const handleAuthOtpSuccess = async (verifiedToken: string) => {
+    const targetOrder = authModalState.order;
+    if (!targetOrder) return;
+
+    if (authModalState.action === 'edit') {
+      try {
+        sessionStorage.setItem(`order_auth_${targetOrder.id}`, verifiedToken);
+      } catch {}
+      router.push(`/orders/create?editId=${targetOrder.id}&auth=${verifiedToken}`);
+    } else if (authModalState.action === 'delete') {
+      try {
+        setIsDeleting(true);
+        await deleteDoc(doc(db, 'orders', targetOrder.id));
+        toast.success('Order Deleted', `Order #${targetOrder.code} was deleted successfully.`);
+        setDeletingOrder(null);
+      } catch (err: any) {
+        console.error('Failed to delete order:', err);
+        toast.error('Delete Failed', err?.message || 'Could not delete order.');
+      } finally {
+        setIsDeleting(false);
+      }
+    }
   };
 
   // Inline Quick Add New Customer
@@ -1428,12 +1494,24 @@ export default function OrdersClient() {
   // Delete Order
   const handleConfirmDeleteOrder = async () => {
     if (!deletingOrder) return;
+    if (!isAdmin) {
+      const ord = deletingOrder;
+      setDeletingOrder(null);
+      setAuthModalState({
+        isOpen: true,
+        order: ord,
+        action: 'delete',
+      });
+      return;
+    }
     try {
       setIsDeleting(true);
       await deleteDoc(doc(db, 'orders', deletingOrder.id));
+      toast.success('Order Deleted', `Order #${deletingOrder.code} was deleted successfully.`);
       setDeletingOrder(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete order:', err);
+      toast.error('Delete Failed', err?.message || 'Could not delete order.');
     } finally {
       setIsDeleting(false);
     }
@@ -2349,6 +2427,13 @@ export default function OrdersClient() {
                                   >
                                     <Pencil size={13} />
                                   </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteOrderClick(order); }}
+                                    className="flex items-center justify-center h-7 w-7 rounded-lg text-rose-600 bg-white hover:bg-rose-50 transition-colors cursor-pointer border border-rose-200 shadow-2xs"
+                                    title="Delete Order"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -2537,6 +2622,13 @@ export default function OrdersClient() {
                             title="Edit Order"
                           >
                             <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteOrderClick(order); }}
+                            className="flex items-center justify-center h-7 w-7 rounded-lg text-rose-600 bg-white hover:bg-rose-50 transition-colors cursor-pointer border border-rose-200 shadow-2xs"
+                            title="Delete Order"
+                          >
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       </td>
@@ -2778,6 +2870,26 @@ export default function OrdersClient() {
           </div>
         </div>
       )}
+
+      {/* ── OTP Authorization Modal for Non-Admin Edit / Delete ───── */}
+      <OrderActionOtpModal
+        isOpen={authModalState.isOpen}
+        onClose={() => setAuthModalState((prev) => ({ ...prev, isOpen: false }))}
+        order={
+          authModalState.order
+            ? {
+                id: authModalState.order.id,
+                code: authModalState.order.code || authModalState.order.id,
+                customerName: authModalState.order.customerName,
+                totalAmount: authModalState.order.totalAmount,
+                orderDate: authModalState.order.orderDate,
+              }
+            : null
+        }
+        action={authModalState.action}
+        requestedBy={employeeProfile?.name || user?.email?.split('@')[0] || 'Staff'}
+        onAuthorized={handleAuthOtpSuccess}
+      />
 
       {/* ── 11. SLOT ITEM QUANTITY ANALYTICS MODAL ────────────────── */}
       {isSlotAnalyticsModalOpen && selectedSlotForAnalytics && (

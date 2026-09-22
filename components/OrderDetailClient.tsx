@@ -55,6 +55,7 @@ import {
 } from 'firebase/firestore';
 import type { OrderRecord, OrderStatus, PaymentStatus } from './OrdersClient';
 import CustomSelect from '@/components/CustomSelect';
+import { OrderActionOtpModal } from '@/components/OrderActionOtpModal';
 
 // ── Types ────────────────────────────────────────────────────────
 export interface PaymentEntry {
@@ -223,9 +224,27 @@ interface Props { orderId: string }
 
 export default function OrderDetailClient({ orderId }: Props) {
   const router = useRouter();
+  const { user, employeeProfile } = useAuth();
   const [order, setOrder] = useState<OrderWithPayments | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+
+  // Admin security check
+  const isAdmin = Boolean(
+    employeeProfile?.isSuperAdmin ||
+    (user?.email && !employeeProfile) ||
+    employeeProfile?.department === 'Management' ||
+    employeeProfile?.department === 'Admin'
+  );
+
+  // OTP Authorization Modal state for non-admin edit/delete actions
+  const [authModalState, setAuthModalState] = useState<{
+    isOpen: boolean;
+    action: 'edit' | 'delete';
+  }>({
+    isOpen: false,
+    action: 'edit',
+  });
 
   // ── Status edit modal
   const [isStatusEditOpen, setIsStatusEditOpen] = useState(false);
@@ -342,6 +361,68 @@ export default function OrderDetailClient({ orderId }: Props) {
     }
   };
 
+  // ── Order Delete ────────────────────────────────────────────────
+  const handleDeleteClick = () => {
+    if (isAdmin) {
+      setIsDeleteOpen(true);
+    } else {
+      setAuthModalState({ isOpen: true, action: 'delete' });
+    }
+  };
+
+  const handleDeleteOrder = async () => {
+    if (!order) return;
+    if (!isAdmin) {
+      setIsDeleteOpen(false);
+      setAuthModalState({ isOpen: true, action: 'delete' });
+      return;
+    }
+    try {
+      setIsDeleting(true);
+      await deleteDoc(doc(db, 'orders', order.id));
+      toast.success('Order Deleted', `Order #${order.code} was deleted successfully.`);
+      router.push('/orders');
+    } catch (e: any) {
+      console.error(e);
+      toast.error('Delete Failed', e?.message || 'Could not delete order.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // ── Order Edit ──────────────────────────────────────────────────
+  const handleEditOrderClick = () => {
+    if (!order) return;
+    if (isAdmin) {
+      router.push(`/orders/create?editId=${order.id}`);
+    } else {
+      setAuthModalState({ isOpen: true, action: 'edit' });
+    }
+  };
+
+  // ── OTP Authorization Success Callback ───────────────────────────
+  const handleAuthOtpSuccess = async (verifiedToken: string) => {
+    if (!order) return;
+    if (authModalState.action === 'edit') {
+      try {
+        sessionStorage.setItem(`order_auth_${order.id}`, verifiedToken);
+      } catch {}
+      router.push(`/orders/create?editId=${order.id}&auth=${verifiedToken}`);
+    } else if (authModalState.action === 'delete') {
+      try {
+        setIsDeleting(true);
+        await deleteDoc(doc(db, 'orders', order.id));
+        toast.success('Order Deleted', `Order #${order.code} was deleted successfully.`);
+        router.push('/orders');
+      } catch (e: any) {
+        console.error(e);
+        toast.error('Delete Failed', e?.message || 'Could not delete order.');
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
+
   // ── Order Status Update ──────────────────────────────────────────
   const handleStatusUpdate = async () => {
     if (!order) return;
@@ -354,16 +435,6 @@ export default function OrderDetailClient({ orderId }: Props) {
       setIsStatusEditOpen(false);
     } catch (e) { console.error(e); }
     finally { setIsUpdatingStatus(false); }
-  };
-
-  // ── Order Delete ────────────────────────────────────────────────
-  const handleDeleteOrder = async () => {
-    if (!order) return;
-    try {
-      setIsDeleting(true);
-      await deleteDoc(doc(db, 'orders', order.id));
-      router.push('/orders');
-    } catch (e) { console.error(e); setIsDeleting(false); }
   };
 
   // ── Helper to save payments array and update total & status ─────
@@ -666,15 +737,15 @@ export default function OrderDetailClient({ orderId }: Props) {
           >
             <Pencil size={14} /> Edit Status
           </button>
-          <Link
-            href={`/orders/create?editId=${order.id}`}
+          <button
+            onClick={handleEditOrderClick}
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
             title="Edit Order Details"
           >
             <Pencil size={14} /> Edit Order
-          </Link>
+          </button>
           <button
-            onClick={() => setIsDeleteOpen(true)}
+            onClick={handleDeleteClick}
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50/70 border border-red-200 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
           >
             <Trash2 size={14} /> Delete
@@ -2135,6 +2206,26 @@ export default function OrderDetailClient({ orderId }: Props) {
           </div>
         </div>
       )}
+
+      {/* ── OTP Authorization Modal for Non-Admin Edit / Delete ───── */}
+      <OrderActionOtpModal
+        isOpen={authModalState.isOpen}
+        onClose={() => setAuthModalState((prev) => ({ ...prev, isOpen: false }))}
+        order={
+          order
+            ? {
+                id: order.id,
+                code: order.code,
+                customerName: order.customerName,
+                totalAmount: order.totalAmount,
+                orderDate: order.orderDate,
+              }
+            : null
+        }
+        action={authModalState.action}
+        requestedBy={employeeProfile?.name || user?.email?.split('@')[0] || 'Staff'}
+        onAuthorized={handleAuthOtpSuccess}
+      />
 
     </div>
   );

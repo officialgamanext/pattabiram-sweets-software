@@ -388,3 +388,185 @@ export async function sendSlotLimitOverrideOtpEmail({
 
   return info;
 }
+
+export interface OrderActionAuthEmailParams {
+  otp: string;
+  orderCode: string;
+  action: 'edit' | 'delete';
+  customerName?: string;
+  totalAmount?: number;
+  requestedBy?: string;
+  orderDate?: string;
+}
+
+export async function sendOrderActionAuthOtpEmail({
+  otp,
+  orderCode,
+  action,
+  customerName = 'Valued Customer',
+  totalAmount = 0,
+  requestedBy = 'Staff Member',
+  orderDate,
+}: OrderActionAuthEmailParams) {
+  const isDelete = action === 'delete';
+  const actionTitle = isDelete ? 'Delete Order' : 'Edit Order';
+  const actionBadgeColor = isDelete ? '#dc2626' : '#d97706';
+  const actionBgColor = isDelete ? '#fef2f2' : '#fffbeb';
+  const actionBorderColor = isDelete ? '#fecaca' : '#fde68a';
+
+  const formattedDate = new Date().toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Authorization Code - ${actionTitle}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f1f5f9; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 560px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); border: 1px solid #e2e8f0;" cellspacing="0" cellpadding="0">
+          <!-- Header -->
+          <tr>
+            <td style="background-color: #0f172a; padding: 28px 32px; text-align: center;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center">
+                    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #ffffff; letter-spacing: 0.5px;">
+                      PATTABIRAM SWEETS
+                    </h1>
+                    <p style="margin: 4px 0 0; font-size: 13px; color: #94a3b8; font-weight: 500;">
+                      Security &amp; Authorization Gateway
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 32px;">
+              <div style="margin-bottom: 20px;">
+                <span style="display: inline-block; background-color: ${actionBgColor}; color: ${actionBadgeColor}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 4px 10px; border-radius: 9999px; border: 1px solid ${actionBorderColor};">
+                  Security Guard — ${actionTitle} Request
+                </span>
+              </div>
+
+              <h2 style="margin: 0 0 12px; font-size: 18px; font-weight: 700; color: #0f172a; line-height: 1.4;">
+                Authorization Required: ${actionTitle} #${orderCode}
+              </h2>
+
+              <p style="margin: 0 0 24px; font-size: 14px; line-height: 1.6; color: #475569;">
+                A staff member has initiated an action to <strong>${isDelete ? 'permanently DELETE' : 'EDIT'}</strong> order <strong>#${orderCode}</strong>. Please provide the one-time authorization code below to allow this operation.
+              </p>
+
+              <!-- OTP Highlight Box -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td align="center" style="background: linear-gradient(135deg, #02626D 0%, #034b54 100%); border-radius: 12px; padding: 24px 20px; box-shadow: 0 4px 12px rgba(2, 98, 109, 0.25);">
+                    <p style="margin: 0 0 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: #a5f3fc;">
+                      Your One-Time Authorization Code (OTP)
+                    </p>
+                    <div style="font-size: 38px; font-weight: 800; letter-spacing: 8px; color: #ffffff; font-family: monospace;">
+                      ${otp}
+                    </div>
+                    <p style="margin: 8px 0 0; font-size: 11px; color: #e0f2fe;">
+                      ⏱ Valid for 5 minutes only • Do not share with unauthorized staff
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Order Details Summary Table -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0;">
+                    <span style="font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Order Code:</span>
+                    <strong style="font-size: 14px; color: #0f172a; float: right;">#${orderCode}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0;">
+                    <span style="font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Customer:</span>
+                    <strong style="font-size: 14px; color: #0f172a; float: right;">${customerName}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0;">
+                    <span style="font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Order Amount:</span>
+                    <strong style="font-size: 14px; color: #0f172a; float: right;">₹${Number(totalAmount).toFixed(2)}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0;">
+                    <span style="font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Action Requested:</span>
+                    <strong style="font-size: 14px; color: ${actionBadgeColor}; float: right; text-transform: uppercase;">${actionTitle}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0;">
+                    <span style="font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Requested By:</span>
+                    <strong style="font-size: 14px; color: #0f172a; float: right;">${requestedBy}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <span style="font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Timestamp:</span>
+                    <span style="font-size: 13px; color: #475569; float: right;">${formattedDate}</span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Alert Warning -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: ${actionBgColor}; border-left: 4px solid ${actionBadgeColor}; border-radius: 0 6px 6px 0; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 12px 16px;">
+                    <p style="margin: 0; font-size: 12px; line-height: 1.5; color: ${actionBadgeColor};">
+                      <strong>Security Notice:</strong> ${isDelete ? 'Deleting an order is permanent and removes the order record, line items, and audit data.' : 'Editing an order modifies item quantities, billing totals, and production schedules.'}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.5;">
+                If you did not authorize this action, please do not share this OTP and inform management immediately.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 28px; text-align: center;">
+              <p style="margin: 0; font-size: 11px; color: #94a3b8; font-weight: 500;">
+                © ${new Date().getFullYear()} Pattabiram Sweets Management Software. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+
+  const info = await transporter.sendMail({
+    from: `"Pattabiram Sweets" <${smtpUser}>`,
+    to: alertEmail,
+    subject: `🔐 [${otp}] Authorization Code: ${actionTitle.toUpperCase()} #${orderCode}`,
+    html: htmlContent,
+    text: `Pattabiram Sweets - Order ${actionTitle} Authorization\n\nYour OTP is: ${otp}\nOrder: #${orderCode}\nCustomer: ${customerName}\nAmount: ₹${Number(totalAmount).toFixed(2)}\nRequested By: ${requestedBy}\nValid for 5 minutes.`,
+  });
+
+  return info;
+}
+

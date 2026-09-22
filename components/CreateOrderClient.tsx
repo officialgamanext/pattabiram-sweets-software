@@ -44,6 +44,7 @@ import CustomDatePicker from '@/components/CustomDatePicker';
 import { useAllowedTuesdays } from '@/lib/tuesdayOverrides';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 import SlotLimitOverrideModal, { SlotLimitOverrideData } from '@/components/SlotLimitOverrideModal';
+import { OrderActionOtpModal } from '@/components/OrderActionOtpModal';
 
 export type SlotTime =
   | '9:00 AM - 12:00 PM'
@@ -324,6 +325,20 @@ export default function CreateOrderClient() {
   const editId = searchParams.get('editId') || searchParams.get('id') || '';
   const isEditMode = Boolean(editId);
 
+  // Admin security check
+  const isAdmin = Boolean(
+    employeeProfile?.isSuperAdmin ||
+    (user?.email && !employeeProfile) ||
+    employeeProfile?.department === 'Management' ||
+    employeeProfile?.department === 'Admin'
+  );
+
+  const [isEditAuthorized, setIsEditAuthorized] = useState<boolean>(() => {
+    if (!editId) return true;
+    return false;
+  });
+  const [authModalOpen, setAuthModalOpen] = useState<boolean>(false);
+
   const { allowedDates: allowedTuesdays } = useAllowedTuesdays();
 
   const initialSlot = (searchParams.get('slot') as SlotTime) || '9:00 AM - 12:00 PM';
@@ -366,6 +381,23 @@ export default function CreateOrderClient() {
     shrinkPrice?: number;
     stickerPrice?: number;
   }>({});
+
+  // Verify if non-admin has a valid session token for this edit session
+  useEffect(() => {
+    if (!editId) {
+      setIsEditAuthorized(true);
+      return;
+    }
+    if (isAdmin) {
+      setIsEditAuthorized(true);
+      return;
+    }
+    const tokenInQuery = searchParams.get('auth');
+    const tokenInSession = typeof window !== 'undefined' ? sessionStorage.getItem(`order_auth_${editId}`) : null;
+    if (tokenInQuery || tokenInSession) {
+      setIsEditAuthorized(true);
+    }
+  }, [editId, isAdmin, searchParams]);
 
   // Customer State
   const [customersMaster, setCustomersMaster] = useState<CustomerOption[]>([]);
@@ -1482,6 +1514,22 @@ export default function CreateOrderClient() {
     if (isBlockedTuesdayDate(expDeliveryDate) && (!isEditMode || expDeliveryDate !== existingExpDeliveryDate)) {
       toast.warning('Tuesday Blocked', 'Expected Delivery Date cannot fall on Tuesday (Store Closed). To allow this date, enable it in Tuesday Overrides.');
       return;
+    }
+
+    // Guard: Non-admin editing an order requires OTP authorization
+    if (isEditMode && !isAdmin && !isEditAuthorized) {
+      const tokenInQuery = searchParams.get('auth');
+      const tokenInSession = typeof window !== 'undefined' ? sessionStorage.getItem(`order_auth_${editId}`) : null;
+      if (!tokenInQuery && !tokenInSession) {
+        setAuthModalOpen(true);
+        toast.warning(
+          'Admin Authorization Required',
+          'An administrator OTP code is required before saving changes to this order.'
+        );
+        return;
+      } else {
+        setIsEditAuthorized(true);
+      }
     }
 
     try {
@@ -3376,6 +3424,33 @@ export default function CreateOrderClient() {
         data={slotOverrideModalData}
         userIdentifier={employeeProfile ? `${employeeProfile.name} (${employeeProfile.empId || employeeProfile.mobile})` : 'Order Booking Staff'}
         onAuthorized={handleSlotOverrideAuthorized}
+      />
+
+      {/* Order Edit Authorization Modal (OTP Protected for non-admins) */}
+      <OrderActionOtpModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        order={
+          editId
+            ? {
+                id: editId,
+                code: existingOrderCode || editId,
+                customerName: selectedCustomer?.name,
+                totalAmount: grandTotal,
+                orderDate: mfgDate || existingMfgDate,
+              }
+            : null
+        }
+        action="edit"
+        requestedBy={employeeProfile?.name || user?.email?.split('@')[0] || 'Staff Member'}
+        onAuthorized={(verifiedToken) => {
+          setIsEditAuthorized(true);
+          try {
+            sessionStorage.setItem(`order_auth_${editId}`, verifiedToken);
+          } catch {}
+          setAuthModalOpen(false);
+          toast.success('Authorization Confirmed', 'Admin OTP verified. You can now save changes.');
+        }}
       />
 
     </div>

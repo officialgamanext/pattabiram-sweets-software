@@ -2391,50 +2391,69 @@ export default function OrdersClient() {
                                 </div>
                               )}
 
-                              {/* Fifth Row / Bottom Footer */}
+                              {/* Fifth Row / Info: Items Count & Delivery Date / Time */}
                               <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
-                                <div className="flex items-center gap-3">
-                                  <div className="flex items-center gap-1 font-medium text-slate-500">
-                                    <Package size={13} className="text-slate-400" />
-                                    <span>{order.totalItems || order.items?.length || 0} Items</span>
-                                  </div>
+                                <div className="flex items-center gap-1 font-medium text-slate-500">
+                                  <Package size={13} className="text-slate-400" />
+                                  <span>{order.totalItems || order.items?.length || 0} Items</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 font-medium text-slate-500">
+                                  {(order.expectedDeliveryDate || (selectedDate === 'All' && order.orderDate)) && (
+                                    <span className="text-[11px] text-slate-400 font-normal">
+                                      {(() => {
+                                        const dStr = order.expectedDeliveryDate || order.orderDate;
+                                        if (!dStr) return '';
+                                        const d = new Date(dStr + 'T00:00:00');
+                                        if (isNaN(d.getTime())) return dStr;
+                                        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                                      })()}
+                                    </span>
+                                  )}
                                   <div className="flex items-center gap-1 font-medium text-slate-500">
                                     <Clock size={13} className="text-slate-400" />
                                     <span>{(order as any).deliveryTime || order.orderTime || '10:00 AM'}</span>
                                   </div>
                                 </div>
+                              </div>
 
-                                {/* Action Buttons: View, Print, Edit */}
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); navigateToOrder(order.id); }}
-                                    className="flex items-center justify-center h-7 w-7 rounded-lg text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-200 shadow-2xs"
-                                    title="View Order Details"
-                                  >
-                                    <Eye size={13} />
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handlePrintOrderSlip(order); }}
-                                    className="flex items-center justify-center h-7 w-7 rounded-lg text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-200 shadow-2xs"
-                                    title="Print Thermal Receipt"
-                                  >
-                                    <Printer size={13} />
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}
-                                    className="flex items-center justify-center h-7 w-7 rounded-lg text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer border border-slate-200 shadow-2xs"
-                                    title="Edit Order"
-                                  >
-                                    <Pencil size={13} />
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteOrderClick(order); }}
-                                    className="flex items-center justify-center h-7 w-7 rounded-lg text-rose-600 bg-white hover:bg-rose-50 transition-colors cursor-pointer border border-rose-200 shadow-2xs"
-                                    title="Delete Order"
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
-                                </div>
+                              {/* Sixth Row: Action Buttons (View, Edit, Print - Delete removed) */}
+                              <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-slate-100/80">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigateToOrder(order.id);
+                                  }}
+                                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 hover:text-blue-800 border border-blue-200 transition-all shadow-2xs cursor-pointer whitespace-nowrap active:scale-[0.98]"
+                                  title="View Order Details"
+                                >
+                                  <Eye size={12} className="text-blue-600" />
+                                  <span>View</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEditOrderModal(order);
+                                  }}
+                                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 hover:text-amber-900 border border-amber-200 transition-all shadow-2xs cursor-pointer whitespace-nowrap active:scale-[0.98]"
+                                  title="Edit Order"
+                                >
+                                  <Pencil size={12} className="text-amber-600" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handlePrintOrderSlip(order);
+                                  }}
+                                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-800 border border-emerald-200 transition-all shadow-2xs cursor-pointer whitespace-nowrap active:scale-[0.98]"
+                                  title="Print Thermal Receipt"
+                                >
+                                  <Printer size={12} className="text-emerald-600" />
+                                  <span>Print</span>
+                                </button>
                               </div>
                             </div>
                           ))}

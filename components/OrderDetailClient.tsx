@@ -308,12 +308,17 @@ export default function OrderDetailClient({ orderId }: Props) {
       let total = parseFloat(it.amount || it.total || it.subTotal || it.itemTotal || 0) || 0;
       if (!total && price > 0) total = price * qty;
       if (!price && total > 0 && qty > 0) price = total / qty;
+      const mfgNote = (it.manufacturingDescription || it.mfgDesc || it.notes || it.note || '').trim();
+      const pckNote = (it.packingDescription || it.pckDesc || '').trim();
       return {
         name: it.itemName || it.name || it.item || 'Item',
         qty: qty,
         unit: it.unit || 'kg',
         price: price,
         total: total || (price * qty),
+        note: mfgNote,
+        manufacturingDescription: mfgNote,
+        packingDescription: pckNote,
       };
     });
 
@@ -352,7 +357,19 @@ export default function OrderDetailClient({ orderId }: Props) {
         advanceAmount: (order as any).advanceAmount !== undefined ? (order as any).advanceAmount : order.receivedAmount,
         balanceAmount: (order as any).balanceAmount !== undefined ? (order as any).balanceAmount : Math.max(0, order.totalAmount - (order.receivedAmount || 0)),
         isCustomisation: order.isCustomisation,
-        customisationDetails: order.customisationDetails as any,
+        customisationDetails: order.isCustomisation && order.customisationDetails
+          ? {
+              ...order.customisationDetails,
+              selectedSweets: (order.items || []).map((it: any) => ({
+                itemName: it.itemName || it.name || 'Sweet',
+                count: it.count,
+                weight: parseFloat(it.quantity || it.qty || 1) || 1,
+                unit: it.unit || 'kg',
+                manufacturingDescription: (it.manufacturingDescription || it.mfgDesc || it.notes || it.note || '').trim(),
+                packingDescription: (it.packingDescription || it.pckDesc || '').trim(),
+              })),
+            }
+          : (order.customisationDetails as any),
         remarks: (order as any).remarks || (order as any).notes || undefined,
         footerNote: 'Thank you for choosing Pattabiram Sweets! Visit again!',
       });
@@ -1099,12 +1116,26 @@ export default function OrderDetailClient({ orderId }: Props) {
                         {fmtCurrency(item.lineTotal || 0)}
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                          <FileText size={12} className="text-emerald-600 flex-shrink-0" />
-                          <span className="truncate max-w-[140px]">
-                            {item.packingDescription || item.manufacturingDescription || '24'}
-                          </span>
-                        </span>
+                        {item.manufacturingDescription || item.packingDescription ? (
+                          <div className="flex flex-col gap-1 max-w-[200px]">
+                            {item.manufacturingDescription && (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                <FileText size={11} className="text-amber-600 shrink-0" />
+                                <span className="font-bold">Mfg:</span>
+                                <span className="truncate" title={item.manufacturingDescription}>{item.manufacturingDescription}</span>
+                              </span>
+                            )}
+                            {item.packingDescription && (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                                <FileText size={11} className="text-blue-600 shrink-0" />
+                                <span className="font-bold">Pck:</span>
+                                <span className="truncate" title={item.packingDescription}>{item.packingDescription}</span>
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-normal">—</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <Link

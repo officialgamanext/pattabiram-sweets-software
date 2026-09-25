@@ -11,6 +11,8 @@ export interface ReceiptItem {
   price: number;
   total: number;
   note?: string;
+  manufacturingDescription?: string;
+  packingDescription?: string;
 }
 
 export interface ReceiptData {
@@ -52,7 +54,16 @@ export interface ReceiptData {
     hasSticker?: boolean;
     stickerType?: string;
     stickerPrice?: number;
-    selectedSweets?: Array<{ itemName?: string; name?: string; count?: number; weight?: number; unit?: string }>;
+    selectedSweets?: Array<{
+      itemName?: string;
+      name?: string;
+      count?: number;
+      weight?: number;
+      unit?: string;
+      manufacturingDescription?: string;
+      packingDescription?: string;
+      note?: string;
+    }>;
     remarks?: string;
   };
   items: ReceiptItem[];
@@ -509,6 +520,12 @@ export function generateReceiptEscPos(
         const sName = s.itemName || s.name || 'Sweet';
         const sQty = s.count ? `${s.count} pcs` : (s.weight ? `${s.weight} ${s.unit || 'g'}` : '');
         builder.textLine(`  - ${sName}${sQty ? ` (${sQty})` : ''}`);
+        const mfg = s.manufacturingDescription || s.note;
+        if (mfg && mfg.trim()) {
+          const cleanMfg = mfg.trim();
+          const displayMfg = cleanMfg.toLowerCase().startsWith('mfg') ? cleanMfg : `Mfg Note: ${cleanMfg}`;
+          builder.textLineWrapped(`    [${displayMfg}]`, 4);
+        }
       });
     }
     if (cd?.hasShrink) {
@@ -522,6 +539,23 @@ export function generateReceiptEscPos(
   // 4. ITEM TABLE HEADER
   builder.drawLine('-');
 
+  const renderItemNotes = (item: ReceiptItem) => {
+    const rawMfg = item.manufacturingDescription || item.note;
+    if (rawMfg && rawMfg.trim()) {
+      const cleanMfg = rawMfg.trim();
+      const displayMfg = cleanMfg.toLowerCase().startsWith('mfg') ? cleanMfg : `Mfg Note: ${cleanMfg}`;
+      builder.textLineWrapped(`  [${displayMfg}]`, 2);
+    }
+    if (item.packingDescription && item.packingDescription.trim()) {
+      const cleanPck = item.packingDescription.trim();
+      const displayPck =
+        cleanPck.toLowerCase().startsWith('pck') || cleanPck.toLowerCase().startsWith('pack')
+          ? cleanPck
+          : `Packing: ${cleanPck}`;
+      builder.textLineWrapped(`  [${displayPck}]`, 2);
+    }
+  };
+
   if (is2Inch) {
     // 2-inch Table Header: 2-line layout
     builder.bold(true).row2('ITEM / QTY & RATE', 'TOTAL').bold(false).drawLine('-');
@@ -534,9 +568,7 @@ export function generateReceiptEscPos(
       const qtyLine = `  ${item.qty}${unitStr}${priceStr}`;
       const totalStr = `Rs.${item.total.toFixed(2)}`;
       builder.row2(qtyLine, totalStr);
-      if (item.note) {
-        builder.textLine(`  * ${item.note}`);
-      }
+      renderItemNotes(item);
     });
   } else {
     // 3-inch (80mm) Table Header: 4-column layout (22 + 8 + 8 + 10 = 48 columns)
@@ -566,9 +598,7 @@ export function generateReceiptEscPos(
         const colN = item.name.padEnd(22).substring(0, 22);
         builder.textLine(`${colN}${colQ}${colR}${colT}`);
       }
-      if (item.note) {
-        builder.textLine(`  * ${item.note}`);
-      }
+      renderItemNotes(item);
     });
   }
 

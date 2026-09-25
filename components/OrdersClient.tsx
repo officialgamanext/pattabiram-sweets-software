@@ -430,12 +430,17 @@ export default function OrdersClient() {
       let total = parseFloat(it.amount || it.total || it.subTotal || it.itemTotal || 0) || 0;
       if (!total && price > 0) total = price * qty;
       if (!price && total > 0 && qty > 0) price = total / qty;
+      const mfgNote = (it.manufacturingDescription || it.mfgDesc || it.notes || it.note || '').trim();
+      const pckNote = (it.packingDescription || it.pckDesc || '').trim();
       return {
         name: it.itemName || it.name || it.item || 'Item',
         qty: qty,
         unit: it.unit || 'kg',
         price: price,
         total: total || (price * qty),
+        note: mfgNote,
+        manufacturingDescription: mfgNote,
+        packingDescription: pckNote,
       };
     });
 
@@ -474,7 +479,19 @@ export default function OrdersClient() {
         advanceAmount: (order as any).advanceAmount !== undefined ? (order as any).advanceAmount : order.receivedAmount,
         balanceAmount: (order as any).balanceAmount !== undefined ? (order as any).balanceAmount : Math.max(0, order.totalAmount - (order.receivedAmount || 0)),
         isCustomisation: order.isCustomisation,
-        customisationDetails: order.customisationDetails as any,
+        customisationDetails: order.isCustomisation && order.customisationDetails
+          ? {
+              ...order.customisationDetails,
+              selectedSweets: (order.items || []).map((it: any) => ({
+                itemName: it.itemName || it.name || 'Sweet',
+                count: it.count,
+                weight: parseFloat(it.quantity || it.qty || 1) || 1,
+                unit: it.unit || 'kg',
+                manufacturingDescription: (it.manufacturingDescription || it.mfgDesc || it.notes || it.note || '').trim(),
+                packingDescription: (it.packingDescription || it.pckDesc || '').trim(),
+              })),
+            }
+          : (order.customisationDetails as any),
         remarks: (order as any).remarks || (order as any).notes || undefined,
         footerNote: 'Thank you for choosing Pattabiram Sweets! Visit again!',
       });

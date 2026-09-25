@@ -7,11 +7,13 @@ import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 import { usePrinter } from '@/context/PrinterContext';
 import ThermalPrinterModal from '@/components/ThermalPrinterModal';
+import CalculatorModal from '@/components/CalculatorModal';
 import {
   Menu,
   X,
   Bell,
   Search,
+  Calculator as CalcIcon,
   ChevronDown,
   Home,
   ShoppingBag,
@@ -68,6 +70,19 @@ export default function Header() {
   const [isPrinterModalOpen, setIsPrinterModalOpen] = useState(false);
   const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
   const [appMenuSearch, setAppMenuSearch] = useState('');
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+
+  // Global hotkey: Alt+C to toggle calculator
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === 'c' || e.key === 'C')) {
+        e.preventDefault();
+        setIsCalculatorOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
   const printerMenuRef = useRef<HTMLDivElement>(null);
@@ -577,8 +592,24 @@ export default function Header() {
           </div>
         </div>
 
-        {/* Right: Actions (Thermal Printer, Notifications, User Pill) */}
+        {/* Right: Actions (Calculator, Thermal Printer, User Pill) */}
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Quick Calculator Button */}
+          <button
+            type="button"
+            onClick={() => setIsCalculatorOpen((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition-all ${
+              isCalculatorOpen
+                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-xs'
+                : 'bg-[#024f58] hover:bg-[#035b65] text-white border-[#01464e]'
+            }`}
+            title="Open Calculator (Alt+C)"
+            aria-label="Open Calculator"
+          >
+            <CalcIcon size={14} className={isCalculatorOpen ? 'text-slate-950' : 'text-teal-200'} />
+            <span className="hidden sm:inline-block text-[11px]">Calculator</span>
+          </button>
+
           {/* Thermal Printer Header Connector Dropdown */}
           <div className="relative" ref={printerMenuRef}>
             <button
@@ -1093,6 +1124,12 @@ export default function Header() {
           </div>
         </div>
       )}
+
+      {/* ── Quick Calculator Modal ─────────────────────────────────────── */}
+      <CalculatorModal
+        isOpen={isCalculatorOpen}
+        onClose={() => setIsCalculatorOpen(false)}
+      />
     </>
   );
 }

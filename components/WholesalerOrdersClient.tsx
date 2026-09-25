@@ -46,6 +46,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import type { ItemRecord } from './ItemsClient';
+import { useBusinessSettings, calculateTax } from '@/lib/businessSettings';
 
 export interface WholesalerItem {
   id: string;
@@ -101,6 +102,12 @@ export interface WholesalerOrderRecord {
   items: WholesalerOrderLineItem[];
   subtotal: number;
   tax: number;
+  taxableAmount?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  cgstPercent?: number;
+  sgstPercent?: number;
+  taxType?: 'inclusive' | 'exclusive';
   totalAmount: number;
   orderType: string;
   orderStatus?: string;
@@ -122,6 +129,7 @@ export default function WholesalerOrdersClient() {
   const [wholesalers, setWholesalers] = useState<WholesalerItem[]>([]);
   const [items, setItems] = useState<ItemRecord[]>([]);
   const [priceLists, setPriceLists] = useState<PriceListRecord[]>([]);
+  const { settings: businessSettings } = useBusinessSettings();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('All');
@@ -369,11 +377,12 @@ export default function WholesalerOrdersClient() {
     return Math.round(orderItems.reduce((sum, item) => sum + item.totalAmount, 0) * 100) / 100;
   }, [orderItems]);
 
-  const modalTax = 0; // Prices are inclusive of GST
+  const modalTaxCalc = useMemo(() => {
+    return calculateTax(modalSubtotal, businessSettings);
+  }, [modalSubtotal, businessSettings]);
 
-  const modalTotal = useMemo(() => {
-    return modalSubtotal;
-  }, [modalSubtotal]);
+  const modalTotal = modalTaxCalc.finalAmount;
+  const modalTax = modalTaxCalc.totalTax;
 
   // Submit Order Handler
   const handleSaveOrder = async (e: React.FormEvent) => {
@@ -431,8 +440,14 @@ export default function WholesalerOrdersClient() {
           mfgStatus: line.needsManufacturing === false ? 'Not Required' : 'Pending',
           pckStatus: 'Pending',
         })),
-        subtotal: Number(modalSubtotal) || 0,
+        subtotal: modalTaxCalc.taxType === 'inclusive' ? Number(modalTaxCalc.taxableAmount) : (Number(modalSubtotal) || 0),
         tax: Number(modalTax) || 0,
+        taxableAmount: modalTaxCalc.taxableAmount,
+        cgstAmount: modalTaxCalc.cgstAmount,
+        sgstAmount: modalTaxCalc.sgstAmount,
+        cgstPercent: modalTaxCalc.cgstPercent,
+        sgstPercent: modalTaxCalc.sgstPercent,
+        taxType: modalTaxCalc.taxType,
         totalAmount: Number(modalTotal) || 0,
         orderType: 'Wholesaler B2B',
         orderStatus: hasMfgItems ? 'Moved to Manufacturing' : 'Order Created',
@@ -551,11 +566,12 @@ export default function WholesalerOrdersClient() {
     return editOrderItems.reduce((sum, item) => sum + item.totalAmount, 0);
   }, [editOrderItems]);
 
-  const editModalTax = 0; // Prices are inclusive of GST
+  const editModalTaxCalc = useMemo(() => {
+    return calculateTax(editModalSubtotal, businessSettings);
+  }, [editModalSubtotal, businessSettings]);
 
-  const editModalTotal = useMemo(() => {
-    return editModalSubtotal;
-  }, [editModalSubtotal]);
+  const editModalTotal = editModalTaxCalc.finalAmount;
+  const editModalTax = editModalTaxCalc.totalTax;
 
   // Open Edit Order Modal
   const handleOpenEditOrder = (order: WholesalerOrderRecord) => {
@@ -717,8 +733,14 @@ export default function WholesalerOrdersClient() {
               : line.mfgStatus || 'Pending',
           pckStatus: line.pckStatus || 'Pending',
         })),
-        subtotal: Number(editModalSubtotal) || 0,
+        subtotal: editModalTaxCalc.taxType === 'inclusive' ? Number(editModalTaxCalc.taxableAmount) : (Number(editModalSubtotal) || 0),
         tax: Number(editModalTax) || 0,
+        taxableAmount: editModalTaxCalc.taxableAmount,
+        cgstAmount: editModalTaxCalc.cgstAmount,
+        sgstAmount: editModalTaxCalc.sgstAmount,
+        cgstPercent: editModalTaxCalc.cgstPercent,
+        sgstPercent: editModalTaxCalc.sgstPercent,
+        taxType: editModalTaxCalc.taxType,
         totalAmount: Number(editModalTotal) || 0,
         orderStatus: hasMfgItems
           ? editingOrder.orderStatus === 'Moved to Manufacturing' || editingOrder.orderStatus === 'Order Created'
@@ -1409,10 +1431,28 @@ export default function WholesalerOrdersClient() {
                       <span>Total Order Units:</span>
                       <span className="font-bold text-slate-800">{addTotalWeight}</span>
                     </div>
-                    <div className="flex justify-between text-slate-500 text-[11px]">
-                      <span>GST:</span>
-                      <span className="text-slate-400">Included in prices</span>
+                    <div className="flex justify-between text-slate-500">
+                      <span>{modalTaxCalc.taxType === 'inclusive' ? 'Subtotal (Base Price):' : 'Subtotal:'}</span>
+                      <span className="font-bold text-slate-800 font-mono">
+                        ₹{(modalTaxCalc.taxType === 'inclusive' ? modalTaxCalc.taxableAmount : modalSubtotal).toFixed(2)}
+                      </span>
                     </div>
+                    {modalTaxCalc.totalGstPercent > 0 && (
+                      <>
+                        <div className="flex justify-between text-slate-600 text-[11px]">
+                          <span>CGST ({modalTaxCalc.cgstPercent}%):</span>
+                          <span className="font-bold font-mono">
+                            {modalTaxCalc.taxType === 'exclusive' ? '+₹' : '₹'}{modalTaxCalc.cgstAmount.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-slate-600 text-[11px]">
+                          <span>SGST ({modalTaxCalc.sgstPercent}%):</span>
+                          <span className="font-bold font-mono">
+                            {modalTaxCalc.taxType === 'exclusive' ? '+₹' : '₹'}{modalTaxCalc.sgstAmount.toFixed(2)}
+                          </span>
+                        </div>
+                      </>
+                    )}
                     <div className="flex items-baseline justify-between pt-2 border-t border-slate-200">
                       <span className="text-sm font-bold text-slate-900">Grand Total:</span>
                       <span className="text-xl font-black text-[#02626D]">
@@ -1645,12 +1685,16 @@ export default function WholesalerOrdersClient() {
             {/* Totals */}
             <div className="border-t border-slate-200 pt-3 text-xs space-y-1 font-mono">
               <div className="flex justify-between">
-                <span>Subtotal:</span>
-                <span>₹{viewingOrder.subtotal}</span>
+                <span>{viewingOrder.taxType === 'inclusive' ? 'Subtotal (Base Price):' : 'Subtotal:'}</span>
+                <span>₹{viewingOrder.taxableAmount ?? viewingOrder.subtotal}</span>
               </div>
-              <div className="flex justify-between text-[11px] text-slate-400">
-                <span>Tax:</span>
-                <span>GST Inclusive</span>
+              <div className="flex justify-between text-[11px] text-slate-600">
+                <span>CGST ({viewingOrder.cgstPercent ?? 2.5}%):</span>
+                <span>{viewingOrder.taxType === 'exclusive' ? '+₹' : '₹'}{viewingOrder.cgstAmount ?? 0}</span>
+              </div>
+              <div className="flex justify-between text-[11px] text-slate-600">
+                <span>SGST ({viewingOrder.sgstPercent ?? 2.5}%):</span>
+                <span>{viewingOrder.taxType === 'exclusive' ? '+₹' : '₹'}{viewingOrder.sgstAmount ?? 0}</span>
               </div>
               <div className="flex justify-between text-sm font-bold text-slate-900 border-t border-slate-100 pt-1">
                 <span>Total Amount:</span>
@@ -2058,10 +2102,28 @@ export default function WholesalerOrdersClient() {
                       <span>Total Order Units:</span>
                       <span className="font-bold text-slate-800">{editTotalWeight}</span>
                     </div>
-                    <div className="flex justify-between text-slate-500 text-[11px]">
-                      <span>GST:</span>
-                      <span className="text-slate-400">Included in prices</span>
+                    <div className="flex justify-between text-slate-500">
+                      <span>{editModalTaxCalc.taxType === 'inclusive' ? 'Subtotal (Base Price):' : 'Subtotal:'}</span>
+                      <span className="font-bold text-slate-800 font-mono">
+                        ₹{(editModalTaxCalc.taxType === 'inclusive' ? editModalTaxCalc.taxableAmount : editModalSubtotal).toFixed(2)}
+                      </span>
                     </div>
+                    {editModalTaxCalc.totalGstPercent > 0 && (
+                      <>
+                        <div className="flex justify-between text-slate-600 text-[11px]">
+                          <span>CGST ({editModalTaxCalc.cgstPercent}%):</span>
+                          <span className="font-bold font-mono">
+                            {editModalTaxCalc.taxType === 'exclusive' ? '+₹' : '₹'}{editModalTaxCalc.cgstAmount.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-slate-600 text-[11px]">
+                          <span>SGST ({editModalTaxCalc.sgstPercent}%):</span>
+                          <span className="font-bold font-mono">
+                            {editModalTaxCalc.taxType === 'exclusive' ? '+₹' : '₹'}{editModalTaxCalc.sgstAmount.toFixed(2)}
+                          </span>
+                        </div>
+                      </>
+                    )}
                     <div className="flex items-baseline justify-between pt-2 border-t border-slate-200">
                       <span className="text-sm font-bold text-slate-900">Grand Total:</span>
                       <span className="text-xl font-black text-[#02626D]">

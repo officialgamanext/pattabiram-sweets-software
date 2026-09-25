@@ -56,6 +56,7 @@ import {
 import type { OrderRecord, OrderStatus, PaymentStatus } from './OrdersClient';
 import CustomSelect from '@/components/CustomSelect';
 import { OrderActionOtpModal } from '@/components/OrderActionOtpModal';
+import { useBusinessSettings, calculateTax } from '@/lib/businessSettings';
 
 // ── Types ────────────────────────────────────────────────────────
 export interface PaymentEntry {
@@ -299,6 +300,7 @@ export default function OrderDetailClient({ orderId }: Props) {
   }, [orderId]);
 
   const { isConnected: isPrinterConnected, printerType, printReceipt, printWindow } = usePrinter();
+  const { settings: businessSettings } = useBusinessSettings();
 
   const handleThermalPrint = async () => {
     if (!order) return;
@@ -341,9 +343,15 @@ export default function OrderDetailClient({ orderId }: Props) {
         paymentMode: order.paymentMode,
         paymentStatus: order.paymentStatus,
         items: orderItems,
-        subtotal: order.subTotal || order.totalAmount,
+        subtotal: order.taxType === 'inclusive' ? (order.taxableAmount ?? order.subTotal ?? order.totalAmount) : (order.subTotal || order.totalAmount),
         discount: order.discountAmount || 0,
-        tax: 0,
+        tax: order.tax !== undefined ? order.tax : 0,
+        taxableAmount: order.taxableAmount,
+        cgstAmount: order.cgstAmount,
+        sgstAmount: order.sgstAmount,
+        cgstPercent: order.cgstPercent,
+        sgstPercent: order.sgstPercent,
+        taxType: order.taxType,
         boxCharges: order.boxChargesTotal || 0,
         boxDetails: order.isCustomisation && order.customisationDetails?.noOfBoxes ? `${order.customisationDetails.noOfBoxes}xRs.${order.customisationDetails.boxPrice || 0}` : undefined,
         stickerCharges: order.stickerChargesTotal || 0,
@@ -1428,9 +1436,9 @@ export default function OrderDetailClient({ orderId }: Props) {
               {/* Itemized charges */}
               <div className="space-y-2 text-xs border-b border-slate-100 pb-3">
                 <div className="flex justify-between items-center text-slate-600">
-                  <span>Sub Total</span>
+                  <span>Sub Total (Base Price)</span>
                   <span className="font-semibold text-slate-800">
-                    {fmtCurrency(order.subTotal || 0)}
+                    {fmtCurrency(order.taxableAmount ?? order.subTotal ?? 0)}
                   </span>
                 </div>
 
@@ -1523,6 +1531,49 @@ export default function OrderDetailClient({ orderId }: Props) {
                     <span className="font-bold">- {fmtCurrency(order.discountAmount || 0)}</span>
                   </div>
                 )}
+
+                {/* GST Tax Breakdown */}
+                {(() => {
+                  const taxInfo = (order.cgstAmount !== undefined && order.sgstAmount !== undefined && order.taxType)
+                    ? {
+                        taxType: order.taxType,
+                        taxableAmount: order.taxableAmount ?? (order.totalAmount - (order.tax || 0)),
+                        cgstPercent: order.cgstPercent ?? 2.5,
+                        sgstPercent: order.sgstPercent ?? 2.5,
+                        cgstAmount: order.cgstAmount,
+                        sgstAmount: order.sgstAmount,
+                        totalTax: order.tax ?? (order.cgstAmount + order.sgstAmount),
+                      }
+                    : calculateTax(
+                        Math.max(0, (order.subTotal || order.totalAmount || 0) - (order.discountAmount || 0)),
+                        businessSettings
+                      );
+
+                  if (!taxInfo || (taxInfo.cgstAmount <= 0 && taxInfo.sgstAmount <= 0)) return null;
+
+                  return (
+                    <div className="py-2 px-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1 text-[11px] my-1">
+                      <div className="flex justify-between text-slate-500 font-medium">
+                        <span>GST Mode:</span>
+                        <span className="font-bold text-slate-700 uppercase tracking-wide">
+                          {taxInfo.taxType === 'inclusive' ? 'Inclusive in Prices' : 'Exclusive (Added to Bill)'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>CGST ({taxInfo.cgstPercent}%):</span>
+                        <span className="font-bold text-slate-800">
+                          {taxInfo.taxType === 'exclusive' ? '+ ' : ''}{fmtCurrency(taxInfo.cgstAmount)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>SGST ({taxInfo.sgstPercent}%):</span>
+                        <span className="font-bold text-slate-800">
+                          {taxInfo.taxType === 'exclusive' ? '+ ' : ''}{fmtCurrency(taxInfo.sgstAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Totals */}

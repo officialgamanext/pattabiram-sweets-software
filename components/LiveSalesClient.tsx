@@ -45,7 +45,7 @@ import { db } from '@/lib/firebase';
 import { usePrinter } from '@/context/PrinterContext';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from '@/context/ToastContext';
-import { useBusinessSettings, formatStoreAddress, formatStorePhone } from '@/lib/businessSettings';
+import { useBusinessSettings, formatStoreAddress, formatStorePhone, calculateTax } from '@/lib/businessSettings';
 import {
   collection,
   onSnapshot,
@@ -92,6 +92,12 @@ export interface LiveSaleRecord {
   splitCard?: number;
   subtotal: number;
   tax: number;
+  taxableAmount?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  cgstPercent?: number;
+  sgstPercent?: number;
+  taxType?: 'inclusive' | 'exclusive';
   discount: number;
   total: number;
   grandTotal?: number;
@@ -337,9 +343,12 @@ export default function LiveSalesClient() {
     return cart.reduce((acc, cur) => acc + cur.totalAmount, 0);
   }, [cart]);
 
-  const grandTotal = useMemo(() => {
-    return Math.max(0, subtotal - discountAmount);
-  }, [subtotal, discountAmount]);
+  const taxCalculation = useMemo(() => {
+    const net = Math.max(0, subtotal - discountAmount);
+    return calculateTax(net, businessSettings);
+  }, [subtotal, discountAmount, businessSettings]);
+
+  const grandTotal = taxCalculation.finalAmount;
 
   // Received Amount and Credit Due Calculations
   const receivedAmount = useMemo(() => {
@@ -557,8 +566,14 @@ export default function LiveSalesClient() {
         splitCash: splitCashNum,
         splitUpi: splitUpiNum,
         splitCard: splitCardNum,
-        subtotal,
-        tax: 0,
+        subtotal: taxCalculation.taxType === 'inclusive' ? taxCalculation.taxableAmount : subtotal,
+        tax: taxCalculation.totalTax,
+        taxableAmount: taxCalculation.taxableAmount,
+        cgstAmount: taxCalculation.cgstAmount,
+        sgstAmount: taxCalculation.sgstAmount,
+        cgstPercent: taxCalculation.cgstPercent,
+        sgstPercent: taxCalculation.sgstPercent,
+        taxType: taxCalculation.taxType,
         discount: discountAmount,
         total: grandTotal,
         grandTotal,
@@ -626,7 +641,13 @@ export default function LiveSalesClient() {
               total: i.totalAmount,
             })),
             subtotal,
-            tax: 0,
+            tax: taxCalculation.totalTax,
+            taxableAmount: taxCalculation.taxableAmount,
+            cgstAmount: taxCalculation.cgstAmount,
+            sgstAmount: taxCalculation.sgstAmount,
+            cgstPercent: taxCalculation.cgstPercent,
+            sgstPercent: taxCalculation.sgstPercent,
+            taxType: taxCalculation.taxType,
             discount: discountAmount,
             roundOff: 0,
             grandTotal,
@@ -1139,8 +1160,10 @@ export default function LiveSalesClient() {
             {/* Bill Financial Summary */}
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-2">
               <div className="flex justify-between text-slate-500">
-                <span>Subtotal ({cart.length} items):</span>
-                <span className="font-bold text-slate-800 font-mono">₹{subtotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                <span>{taxCalculation.taxType === 'inclusive' ? 'Subtotal (Base Price):' : `Subtotal (${cart.length} items):`}</span>
+                <span className="font-bold text-slate-800 font-mono">
+                  ₹{(taxCalculation.taxType === 'inclusive' ? taxCalculation.taxableAmount : subtotal).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </span>
               </div>
               <div className="flex justify-between items-center text-slate-500">
                 <span>Discount (₹):</span>
@@ -1152,6 +1175,25 @@ export default function LiveSalesClient() {
                   className="w-20 h-6 px-2 text-right border border-slate-300 rounded text-xs font-bold text-slate-800 bg-white"
                 />
               </div>
+
+              {/* Tax Breakdown */}
+              {taxCalculation.totalGstPercent > 0 && (
+                <div className="pt-1 border-t border-slate-200/80 space-y-1">
+                  <div className="flex justify-between text-slate-600 text-xs">
+                    <span>CGST ({taxCalculation.cgstPercent}%):</span>
+                    <span className="font-bold font-mono text-slate-800">
+                      {taxCalculation.taxType === 'exclusive' ? '+ ' : ''}₹{taxCalculation.cgstAmount.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600 text-xs">
+                    <span>SGST ({taxCalculation.sgstPercent}%):</span>
+                    <span className="font-bold font-mono text-slate-800">
+                      {taxCalculation.taxType === 'exclusive' ? '+ ' : ''}₹{taxCalculation.sgstAmount.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className="pt-2 border-t border-slate-200 flex justify-between items-baseline">
                 <span className="font-extrabold text-slate-900 text-sm">Grand Total:</span>
                 <span className="font-black text-xl text-[#02626D] font-mono">
@@ -1392,6 +1434,20 @@ export default function LiveSalesClient() {
               </div>
 
               <div className="pt-2 border-t border-slate-200 flex justify-between font-black text-xs text-slate-700">
+                <span>{lastSettledBill.taxType === 'inclusive' ? 'Subtotal (Base Price):' : 'Subtotal:'}</span>
+                <span className="font-mono">₹{(lastSettledBill.taxableAmount ?? lastSettledBill.subtotal).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+              </div>
+
+              <div className="flex justify-between text-[11px] text-slate-600">
+                <span>CGST ({lastSettledBill.cgstPercent ?? 2.5}%):</span>
+                <span className="font-mono">{lastSettledBill.taxType === 'exclusive' ? '+₹' : '₹'}{(lastSettledBill.cgstAmount ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between text-[11px] text-slate-600">
+                <span>SGST ({lastSettledBill.sgstPercent ?? 2.5}%):</span>
+                <span className="font-mono">{lastSettledBill.taxType === 'exclusive' ? '+₹' : '₹'}{(lastSettledBill.sgstAmount ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+              </div>
+
+              <div className="pt-1 border-t border-slate-100 flex justify-between font-black text-xs text-slate-900">
                 <span>Net Total:</span>
                 <span className="font-mono">₹{lastSettledBill.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
               </div>
@@ -1441,7 +1497,13 @@ export default function LiveSalesClient() {
                         total: i.totalAmount,
                       })),
                       subtotal: lastSettledBill.subtotal,
-                      tax: 0,
+                      tax: lastSettledBill.tax || 0,
+                      taxableAmount: lastSettledBill.taxableAmount,
+                      cgstAmount: lastSettledBill.cgstAmount,
+                      sgstAmount: lastSettledBill.sgstAmount,
+                      cgstPercent: lastSettledBill.cgstPercent,
+                      sgstPercent: lastSettledBill.sgstPercent,
+                      taxType: lastSettledBill.taxType,
                       discount: lastSettledBill.discount,
                       roundOff: (lastSettledBill as any).roundOff || 0,
                       grandTotal: lastSettledBill.total,

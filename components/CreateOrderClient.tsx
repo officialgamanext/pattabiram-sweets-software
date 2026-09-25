@@ -45,6 +45,7 @@ import { useAllowedTuesdays } from '@/lib/tuesdayOverrides';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 import SlotLimitOverrideModal, { SlotLimitOverrideData } from '@/components/SlotLimitOverrideModal';
 import { OrderActionOtpModal } from '@/components/OrderActionOtpModal';
+import { useBusinessSettings, calculateTax } from '@/lib/businessSettings';
 
 export type SlotTime =
   | '9:00 AM - 12:00 PM'
@@ -321,6 +322,7 @@ export default function CreateOrderClient() {
   const searchParams = useSearchParams();
   const { user, employeeProfile } = useAuth();
   const { isConnected: isPrinterConnected, printerType, printReceipt } = usePrinter();
+  const { settings: businessSettings } = useBusinessSettings();
 
   const editId = searchParams.get('editId') || searchParams.get('id') || '';
   const isEditMode = Boolean(editId);
@@ -1304,9 +1306,12 @@ export default function CreateOrderClient() {
   const transportChargesVal = isTransportRequired ? (parseFloat(String(transportCharges)) || 0) : 0;
   const discountVal = parseFloat(String(discountAmount)) || 0;
 
-  const grandTotal = isCustomisation
+  const baseBeforeTax = isCustomisation
     ? Math.max(0, subTotal + boxChargesTotal + customPackingBoxesTotal + stickerChargesTotal + shrinkChargesTotal + packetChargesTotal + transportChargesVal + addCharges - discountVal)
     : Math.max(0, subTotal + pCharges + addCharges + transportChargesVal - discountVal);
+
+  const taxCalculation = calculateTax(baseBeforeTax, businessSettings);
+  const grandTotal = taxCalculation.finalAmount;
 
   // Compute total received from splits
   const splitTotalReceived = useMemo(() => {
@@ -1642,7 +1647,8 @@ export default function CreateOrderClient() {
             pckStatus: item.pckStatus || 'Pending',
           })),
           totalItems: validItems.length,
-          subTotal: subTotal,
+          subTotal: taxCalculation.taxType === 'inclusive' ? taxCalculation.taxableAmount : subTotal,
+          itemsTotal: subTotal,
           noOfBoxes: savedNoOfBoxes,
           packingBoxesCount: isCustomisation ? numericPackingBoxesCount : savedNoOfBoxes,
           globalPackingBoxPrice: globalSettings.globalPackingBoxPrice || 0,
@@ -1654,6 +1660,14 @@ export default function CreateOrderClient() {
           packingCharges: isCustomisation ? customPackingBoxesTotal : pCharges,
           additionalCharges: addCharges,
           discountAmount: discountVal,
+          taxableAmount: taxCalculation.taxableAmount,
+          tax: taxCalculation.totalTax,
+          cgstAmount: taxCalculation.cgstAmount,
+          sgstAmount: taxCalculation.sgstAmount,
+          cgstPercent: taxCalculation.cgstPercent,
+          sgstPercent: taxCalculation.sgstPercent,
+          totalGstPercent: taxCalculation.totalGstPercent,
+          taxType: taxCalculation.taxType,
           totalAmount: grandTotal,
           receivedAmount: recv,
           paymentMode: finalPaymentMode,
@@ -1706,7 +1720,8 @@ export default function CreateOrderClient() {
         deliveryAddress: isTransportRequired ? deliveryAddress : (selectedCustomer.address || ''),
         items: validItems,
         totalItems: validItems.length,
-        subTotal: subTotal,
+        subTotal: taxCalculation.taxType === 'inclusive' ? taxCalculation.taxableAmount : subTotal,
+        itemsTotal: subTotal,
         noOfBoxes: savedNoOfBoxes,
         packingBoxesCount: isCustomisation ? numericPackingBoxesCount : savedNoOfBoxes,
         globalPackingBoxPrice: globalSettings.globalPackingBoxPrice || 0,
@@ -1718,6 +1733,14 @@ export default function CreateOrderClient() {
         packingCharges: isCustomisation ? customPackingBoxesTotal : pCharges,
         additionalCharges: addCharges,
         discountAmount: discountVal,
+        taxableAmount: taxCalculation.taxableAmount,
+        tax: taxCalculation.totalTax,
+        cgstAmount: taxCalculation.cgstAmount,
+        sgstAmount: taxCalculation.sgstAmount,
+        cgstPercent: taxCalculation.cgstPercent,
+        sgstPercent: taxCalculation.sgstPercent,
+        totalGstPercent: taxCalculation.totalGstPercent,
+        taxType: taxCalculation.taxType,
         totalAmount: grandTotal,
         receivedAmount: recv,
         paymentMode: finalPaymentMode,
@@ -2763,8 +2786,12 @@ export default function CreateOrderClient() {
               {/* Pricing Breakdown */}
               <div className="space-y-1.5 text-xs text-slate-600">
                 <div className="flex justify-between py-0.5">
-                  <span className="text-slate-500">Items Subtotal:</span>
-                  <span className="font-bold text-slate-900">₹ {subTotal.toFixed(2)}</span>
+                  <span className="text-slate-500">
+                    {taxCalculation.taxType === 'inclusive' ? 'Subtotal (Base Price):' : 'Items Subtotal:'}
+                  </span>
+                  <span className="font-bold text-slate-900">
+                    ₹ {taxCalculation.taxType === 'inclusive' ? taxCalculation.taxableAmount.toFixed(2) : subTotal.toFixed(2)}
+                  </span>
                 </div>
 
                 {isCustomisation ? (
@@ -2851,6 +2878,24 @@ export default function CreateOrderClient() {
                     />
                   </div>
                 </div>
+
+                {/* Tax Breakdown */}
+                {taxCalculation.totalGstPercent > 0 && (
+                  <div className="pt-1.5 border-t border-slate-100 space-y-1">
+                    <div className="flex justify-between py-0.5 text-slate-600 text-xs">
+                      <span>CGST ({taxCalculation.cgstPercent}%):</span>
+                      <span className="font-bold text-slate-800">
+                        {taxCalculation.taxType === 'exclusive' ? '+ ' : ''}₹ {taxCalculation.cgstAmount.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-0.5 text-slate-600 text-xs">
+                      <span>SGST ({taxCalculation.sgstPercent}%):</span>
+                      <span className="font-bold text-slate-800">
+                        {taxCalculation.taxType === 'exclusive' ? '+ ' : ''}₹ {taxCalculation.sgstAmount.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Grand Total */}
                 <div className="pt-2.5 border-t-2 border-slate-200 flex justify-between items-baseline">

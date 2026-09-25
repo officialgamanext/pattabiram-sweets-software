@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { generateTestReceipt, generateReceiptEscPos, ReceiptData } from '@/lib/escpos';
-import { getBusinessSettingsSync, formatStoreAddress, formatStorePhone } from '@/lib/businessSettings';
+import { getBusinessSettingsSync, formatStoreAddress, formatStorePhone, calculateTax } from '@/lib/businessSettings';
 import { toast } from '@/context/ToastContext';
 
 export type PrinterType = 'USB' | 'Bluetooth' | 'None';
@@ -538,8 +538,19 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const printReceipt = useCallback(
     async (data: ReceiptData): Promise<boolean> => {
       const s = getBusinessSettingsSync();
+      const isInclusive = (data.taxType || s.gstType) !== 'exclusive';
+      const baseForTax = isInclusive ? (data.grandTotal || data.subtotal) : (data.taxableAmount || data.subtotal);
+      const taxCalc = calculateTax(baseForTax, s);
       const enrichedData: ReceiptData = {
         ...data,
+        taxType: data.taxType || taxCalc.taxType,
+        tax: data.tax !== undefined && data.tax > 0 ? data.tax : taxCalc.totalTax,
+        cgstAmount: data.cgstAmount !== undefined ? data.cgstAmount : taxCalc.cgstAmount,
+        sgstAmount: data.sgstAmount !== undefined ? data.sgstAmount : taxCalc.sgstAmount,
+        cgstPercent: data.cgstPercent !== undefined ? data.cgstPercent : taxCalc.cgstPercent,
+        sgstPercent: data.sgstPercent !== undefined ? data.sgstPercent : taxCalc.sgstPercent,
+        taxableAmount: data.taxableAmount !== undefined ? data.taxableAmount : taxCalc.taxableAmount,
+        subtotal: isInclusive ? (data.taxableAmount !== undefined ? data.taxableAmount : taxCalc.taxableAmount) : data.subtotal,
         storeName: (data.storeName && data.storeName !== 'PATTABIRAM SWEETS') ? data.storeName : (s.businessName || 'PATTABIRAM SWEETS'),
         storeTagline: data.storeTagline || s.tagline,
         storeAddress: (data.storeAddress && !data.storeAddress.includes('12, Main Road, Pattabiram')) ? data.storeAddress : formatStoreAddress(s),

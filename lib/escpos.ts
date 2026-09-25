@@ -69,6 +69,12 @@ export interface ReceiptData {
   items: ReceiptItem[];
   subtotal: number;
   tax?: number;
+  cgstPercent?: number;
+  sgstPercent?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  taxableAmount?: number;
+  taxType?: 'inclusive' | 'exclusive';
   discount?: number;
   roundOff?: number;
   boxCharges?: number;
@@ -605,7 +611,12 @@ export function generateReceiptEscPos(
   // 5. TOTALS & CHARGES BREAKDOWN
   builder.drawLine('-');
 
-  builder.row2('Sub Total:', `Rs.${data.subtotal.toFixed(2)}`);
+  if (data.taxType === 'inclusive') {
+    const baseSubtotal = data.taxableAmount && data.taxableAmount > 0 ? data.taxableAmount : data.subtotal;
+    builder.row2('Sub Total (Base):', `Rs.${baseSubtotal.toFixed(2)}`);
+  } else {
+    builder.row2('Sub Total:', `Rs.${data.subtotal.toFixed(2)}`);
+  }
 
   if (data.boxCharges && data.boxCharges > 0) {
     const boxLbl = data.boxDetails ? `Box Charges (${data.boxDetails}):` : 'Box Charges:';
@@ -641,7 +652,21 @@ export function generateReceiptEscPos(
   }
 
   if (data.tax && data.tax > 0) {
-    builder.row2('Tax / GST:', `+Rs.${data.tax.toFixed(2)}`);
+    const cPct = data.cgstPercent !== undefined ? data.cgstPercent : 2.5;
+    const sPct = data.sgstPercent !== undefined ? data.sgstPercent : 2.5;
+    const isExcl = data.taxType === 'exclusive';
+    const sign = isExcl ? '+Rs.' : 'Rs.';
+    const suffix = isExcl ? '' : ' (Incl)';
+
+    if (data.cgstAmount !== undefined && data.sgstAmount !== undefined) {
+      const cgstVal = cPct === sPct ? data.cgstAmount : data.cgstAmount;
+      const sgstVal = cPct === sPct ? data.cgstAmount : data.sgstAmount;
+      builder.row2(`CGST (${cPct}%)${suffix}:`, `${sign}${cgstVal.toFixed(2)}`);
+      builder.row2(`SGST (${sPct}%)${suffix}:`, `${sign}${sgstVal.toFixed(2)}`);
+    } else {
+      const label = isExcl ? `Tax / GST (${(cPct + sPct).toFixed(1)}%):` : `GST Included (${(cPct + sPct).toFixed(1)}%):`;
+      builder.row2(label, `${sign}${data.tax.toFixed(2)}`);
+    }
   }
 
   if (data.roundOff !== undefined && data.roundOff !== 0) {

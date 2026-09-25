@@ -36,7 +36,7 @@ import { db } from '@/lib/firebase';
 import { usePrinter } from '@/context/PrinterContext';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from '@/context/ToastContext';
-import { useBusinessSettings, formatStoreAddress, formatStorePhone } from '@/lib/businessSettings';
+import { useBusinessSettings, formatStoreAddress, formatStorePhone, calculateTax } from '@/lib/businessSettings';
 import {
   collection,
   onSnapshot,
@@ -73,6 +73,12 @@ export interface SavedBill {
   tax: number;
   discount: number;
   total: number;
+  taxableAmount?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  cgstPercent?: number;
+  sgstPercent?: number;
+  taxType?: 'inclusive' | 'exclusive';
   savedAt: string;
 }
 
@@ -345,11 +351,13 @@ export default function PosClient() {
     return cart.reduce((sum, item) => sum + item.totalAmount, 0);
   }, [cart]);
 
-  const cartTax = 0; // Prices are inclusive of GST
+  const cartTaxCalculation = useMemo(() => {
+    const net = Math.max(0, cartSubtotal - discountAmount);
+    return calculateTax(net, businessSettings);
+  }, [cartSubtotal, discountAmount, businessSettings]);
 
-  const cartGrandTotal = useMemo(() => {
-    return Math.max(0, cartSubtotal - discountAmount);
-  }, [cartSubtotal, discountAmount]);
+  const cartGrandTotal = cartTaxCalculation.finalAmount;
+  const cartTax = cartTaxCalculation.totalTax;
 
   const totalItemCount = useMemo(() => {
     return cart.reduce((sum, i) => sum + (i.isWeight ? 1 : i.quantity), 0);
@@ -530,8 +538,14 @@ export default function PosClient() {
       customerPhone: selectedCustomer ? selectedCustomer.phone : customCustomerPhone || '-',
       items: cart,
       paymentMode: selectedPayment,
-      subtotal: cartSubtotal,
+      subtotal: cartTaxCalculation.taxType === 'inclusive' ? cartTaxCalculation.taxableAmount : cartSubtotal,
       tax: cartTax,
+      taxableAmount: cartTaxCalculation.taxableAmount,
+      cgstAmount: cartTaxCalculation.cgstAmount,
+      sgstAmount: cartTaxCalculation.sgstAmount,
+      cgstPercent: cartTaxCalculation.cgstPercent,
+      sgstPercent: cartTaxCalculation.sgstPercent,
+      taxType: cartTaxCalculation.taxType,
       discount: discountAmount,
       total: cartGrandTotal,
       savedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -601,8 +615,14 @@ export default function PosClient() {
       customerPhone: selectedCustomer ? selectedCustomer.phone : customCustomerPhone || '-',
       items: cart,
       paymentMode: finalPaymentMode,
-      subtotal: cartSubtotal,
+      subtotal: cartTaxCalculation.taxType === 'inclusive' ? cartTaxCalculation.taxableAmount : cartSubtotal,
       tax: cartTax,
+      taxableAmount: cartTaxCalculation.taxableAmount,
+      cgstAmount: cartTaxCalculation.cgstAmount,
+      sgstAmount: cartTaxCalculation.sgstAmount,
+      cgstPercent: cartTaxCalculation.cgstPercent,
+      sgstPercent: cartTaxCalculation.sgstPercent,
+      taxType: cartTaxCalculation.taxType,
       discount: discountAmount,
       total: cartGrandTotal,
       savedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -626,6 +646,12 @@ export default function PosClient() {
         receivedAmount: settledBill.total,
         subtotal: settledBill.subtotal,
         tax: settledBill.tax,
+        taxableAmount: settledBill.taxableAmount,
+        cgstAmount: settledBill.cgstAmount,
+        sgstAmount: settledBill.sgstAmount,
+        cgstPercent: settledBill.cgstPercent,
+        sgstPercent: settledBill.sgstPercent,
+        taxType: settledBill.taxType,
         discount: settledBill.discount,
         paymentMode: settledBill.paymentMode,
         paymentStatus: 'Completed',
@@ -673,6 +699,12 @@ export default function PosClient() {
         })),
         subtotal: settledBill.subtotal,
         tax: settledBill.tax,
+        taxableAmount: settledBill.taxableAmount,
+        cgstAmount: settledBill.cgstAmount,
+        sgstAmount: settledBill.sgstAmount,
+        cgstPercent: settledBill.cgstPercent,
+        sgstPercent: settledBill.sgstPercent,
+        taxType: settledBill.taxType,
         discount: settledBill.discount,
         grandTotal: settledBill.total,
         footerNote: businessSettings.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!',
@@ -719,6 +751,12 @@ export default function PosClient() {
         })),
         subtotal: lastSettledBill.subtotal,
         tax: lastSettledBill.tax,
+        taxableAmount: lastSettledBill.taxableAmount,
+        cgstAmount: lastSettledBill.cgstAmount,
+        sgstAmount: lastSettledBill.sgstAmount,
+        cgstPercent: lastSettledBill.cgstPercent,
+        sgstPercent: lastSettledBill.sgstPercent,
+        taxType: lastSettledBill.taxType,
         discount: lastSettledBill.discount,
         grandTotal: lastSettledBill.total,
         footerNote: businessSettings.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!',
@@ -1086,8 +1124,10 @@ export default function PosClient() {
             {/* Calculation Totals */}
             <div className="space-y-1.5 text-xs text-slate-600">
               <div className="flex items-center justify-between">
-                <span>Subtotal:</span>
-                <span className="font-semibold text-slate-800 font-mono">₹{cartSubtotal}</span>
+                <span>{cartTaxCalculation.taxType === 'inclusive' ? 'Subtotal (Base Price):' : 'Subtotal:'}</span>
+                <span className="font-semibold text-slate-800 font-mono">
+                  ₹{cartTaxCalculation.taxType === 'inclusive' ? cartTaxCalculation.taxableAmount.toFixed(2) : cartSubtotal}
+                </span>
               </div>
               {discountAmount > 0 && (
                 <div className="flex items-center justify-between text-emerald-600">
@@ -1095,10 +1135,22 @@ export default function PosClient() {
                   <span className="font-semibold font-mono">-₹{discountAmount}</span>
                 </div>
               )}
-              <div className="flex items-center justify-between text-[11px] text-slate-400">
-                <span>GST:</span>
-                <span className="italic">Inclusive in prices</span>
-              </div>
+              {cartTaxCalculation.totalGstPercent > 0 && (
+                <>
+                  <div className="flex items-center justify-between text-xs text-slate-600">
+                    <span>CGST ({cartTaxCalculation.cgstPercent}%):</span>
+                    <span className="font-semibold font-mono text-slate-800">
+                      {cartTaxCalculation.taxType === 'exclusive' ? '+ ' : ''}₹{cartTaxCalculation.cgstAmount.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-600">
+                    <span>SGST ({cartTaxCalculation.sgstPercent}%):</span>
+                    <span className="font-semibold font-mono text-slate-800">
+                      {cartTaxCalculation.taxType === 'exclusive' ? '+ ' : ''}₹{cartTaxCalculation.sgstAmount.toFixed(2)}
+                    </span>
+                  </div>
+                </>
+              )}
 
               <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-base font-bold text-slate-900">
                 <span>Net Payable:</span>
@@ -1414,8 +1466,10 @@ export default function PosClient() {
               {/* Pricing Summary */}
               <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
                 <div className="flex items-center justify-between">
-                  <span>Subtotal:</span>
-                  <span className="font-semibold text-slate-800 font-mono">₹{cartSubtotal}</span>
+                  <span>{cartTaxCalculation.taxType === 'inclusive' ? 'Subtotal (Base Price):' : 'Subtotal:'}</span>
+                  <span className="font-semibold text-slate-800 font-mono">
+                    ₹{cartTaxCalculation.taxType === 'inclusive' ? cartTaxCalculation.taxableAmount.toFixed(2) : cartSubtotal}
+                  </span>
                 </div>
                 {discountAmount > 0 && (
                   <div className="flex items-center justify-between text-emerald-600">
@@ -1423,10 +1477,22 @@ export default function PosClient() {
                     <span className="font-semibold font-mono">-₹{discountAmount}</span>
                   </div>
                 )}
-                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <span>GST:</span>
-                  <span className="italic">Inclusive in prices</span>
-                </div>
+                {cartTaxCalculation.totalGstPercent > 0 && (
+                  <>
+                    <div className="flex items-center justify-between text-xs text-slate-600">
+                      <span>CGST ({cartTaxCalculation.cgstPercent}%):</span>
+                      <span className="font-semibold font-mono text-slate-800">
+                        {cartTaxCalculation.taxType === 'exclusive' ? '+ ' : ''}₹{cartTaxCalculation.cgstAmount.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-600">
+                      <span>SGST ({cartTaxCalculation.sgstPercent}%):</span>
+                      <span className="font-semibold font-mono text-slate-800">
+                        {cartTaxCalculation.taxType === 'exclusive' ? '+ ' : ''}₹{cartTaxCalculation.sgstAmount.toFixed(2)}
+                      </span>
+                    </div>
+                  </>
+                )}
                 <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-sm font-bold text-slate-900">
                   <span>Net Payable:</span>
                   <span className="text-[#02626D] font-mono text-base">₹{cartGrandTotal}</span>
@@ -1747,8 +1813,8 @@ export default function PosClient() {
 
               <div className="border-t border-slate-300 pt-2 text-[11px] font-bold space-y-1">
                 <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span>₹{lastSettledBill.subtotal}</span>
+                  <span>{lastSettledBill.taxType === 'inclusive' ? 'Subtotal (Base Price):' : 'Subtotal:'}</span>
+                  <span>₹{lastSettledBill.taxableAmount ?? lastSettledBill.subtotal}</span>
                 </div>
                 {lastSettledBill.discount > 0 && (
                   <div className="flex justify-between text-emerald-700">
@@ -1756,9 +1822,13 @@ export default function PosClient() {
                     <span>-₹{lastSettledBill.discount}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-[10px] text-slate-500 font-normal">
-                  <span>Tax:</span>
-                  <span>GST Inclusive</span>
+                <div className="flex justify-between text-[10px] text-slate-600">
+                  <span>CGST ({lastSettledBill.cgstPercent ?? 2.5}%):</span>
+                  <span>{lastSettledBill.taxType === 'exclusive' ? '+₹' : '₹'}{lastSettledBill.cgstAmount ?? 0}</span>
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-600">
+                  <span>SGST ({lastSettledBill.sgstPercent ?? 2.5}%):</span>
+                  <span>{lastSettledBill.taxType === 'exclusive' ? '+₹' : '₹'}{lastSettledBill.sgstAmount ?? 0}</span>
                 </div>
                 <div className="flex justify-between text-xs border-t border-slate-200 pt-1 text-slate-900">
                   <span>TOTAL PAID:</span>

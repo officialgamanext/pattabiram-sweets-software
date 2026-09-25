@@ -158,6 +158,14 @@ export interface OrderRecord {
   transportCharges?: number;
   deliveryAddress?: string;
   discountAmount?: number;
+  taxableAmount?: number;
+  tax?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  cgstPercent?: number;
+  sgstPercent?: number;
+  totalGstPercent?: number;
+  taxType?: 'inclusive' | 'exclusive';
   totalAmount: number;
   receivedAmount: number;
   paymentMode: 'Cash' | 'Card' | 'UPI';
@@ -465,7 +473,13 @@ export default function OrdersClient() {
         items: orderItems,
         subtotal: order.subTotal || order.totalAmount,
         discount: order.discountAmount || 0,
-        tax: 0,
+        tax: order.tax !== undefined ? order.tax : 0,
+        taxableAmount: order.taxableAmount,
+        cgstAmount: order.cgstAmount,
+        sgstAmount: order.sgstAmount,
+        cgstPercent: order.cgstPercent,
+        sgstPercent: order.sgstPercent,
+        taxType: order.taxType,
         boxCharges: order.boxChargesTotal || 0,
         boxDetails: order.isCustomisation && order.customisationDetails?.noOfBoxes ? `${order.customisationDetails.noOfBoxes}xRs.${order.customisationDetails.boxPrice || 0}` : undefined,
         stickerCharges: order.stickerChargesTotal || 0,

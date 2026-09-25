@@ -23,7 +23,7 @@ import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import CustomDatePicker from '@/components/CustomDatePicker';
 import { usePrinter } from '@/context/PrinterContext';
-import { useBusinessSettings, formatStoreAddress, formatStorePhone } from '@/lib/businessSettings';
+import { useBusinessSettings, formatStoreAddress, formatStorePhone, calculateTax } from '@/lib/businessSettings';
 
 export interface WalkInOrder {
   id: string;
@@ -41,6 +41,12 @@ export interface WalkInOrder {
   totalAmount: number;
   subtotal: number;
   tax: number;
+  taxableAmount?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  cgstPercent?: number;
+  sgstPercent?: number;
+  taxType?: 'inclusive' | 'exclusive';
   discount: number;
   paymentMode: 'Cash' | 'UPI' | 'Card';
   orderType: string;
@@ -231,6 +237,12 @@ export default function WalkInSalesClient() {
         subtotal: targetSale.subtotal || targetSale.totalAmount,
         discount: targetSale.discount || 0,
         tax: targetSale.tax || 0,
+        taxableAmount: targetSale.taxableAmount,
+        cgstAmount: targetSale.cgstAmount,
+        sgstAmount: targetSale.sgstAmount,
+        cgstPercent: targetSale.cgstPercent,
+        sgstPercent: targetSale.sgstPercent,
+        taxType: targetSale.taxType,
         grandTotal: targetSale.totalAmount,
         footerNote: businessSettings.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!',
       });
@@ -489,16 +501,58 @@ export default function WalkInSalesClient() {
               </div>
 
               <div className="border-t border-slate-300 pt-2 text-[11px] font-bold space-y-1">
-                <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span>₹{activeOrderModal.subtotal || activeOrderModal.totalAmount}</span>
-                </div>
-                {activeOrderModal.tax > 0 && (
-                  <div className="flex justify-between">
-                    <span>GST (5%):</span>
-                    <span>₹{activeOrderModal.tax}</span>
-                  </div>
-                )}
+                {(() => {
+                  const netAmount = Math.max(0, (activeOrderModal.subtotal || activeOrderModal.totalAmount) - (activeOrderModal.discount || 0));
+                  const taxCalc = (activeOrderModal.cgstAmount !== undefined && activeOrderModal.sgstAmount !== undefined && activeOrderModal.taxType)
+                    ? {
+                        taxType: activeOrderModal.taxType,
+                        taxableAmount: activeOrderModal.taxableAmount ?? (activeOrderModal.taxType === 'inclusive' ? Math.round((activeOrderModal.totalAmount - (activeOrderModal.tax || (activeOrderModal.cgstAmount + activeOrderModal.sgstAmount))) * 100) / 100 : activeOrderModal.totalAmount),
+                        cgstPercent: activeOrderModal.cgstPercent ?? 2.5,
+                        sgstPercent: activeOrderModal.sgstPercent ?? 2.5,
+                        cgstAmount: activeOrderModal.cgstPercent === activeOrderModal.sgstPercent ? activeOrderModal.cgstAmount : activeOrderModal.cgstAmount,
+                        sgstAmount: activeOrderModal.cgstPercent === activeOrderModal.sgstPercent ? activeOrderModal.cgstAmount : activeOrderModal.sgstAmount,
+                        totalTax: activeOrderModal.tax ?? (activeOrderModal.cgstAmount + activeOrderModal.sgstAmount),
+                      }
+                    : calculateTax(netAmount, businessSettings);
+
+                  const isInclusive = taxCalc.taxType === 'inclusive';
+                  const displaySubtotal = isInclusive ? taxCalc.taxableAmount : (activeOrderModal.subtotal || activeOrderModal.totalAmount);
+
+                  return (
+                    <>
+                      <div className="flex justify-between">
+                        <span>{isInclusive ? 'Subtotal (Base Price):' : 'Subtotal:'}</span>
+                        <span>₹{displaySubtotal.toFixed(2)}</span>
+                      </div>
+
+                      {taxCalc.totalTax > 0 && (
+                        taxCalc.taxType === 'exclusive' ? (
+                          <>
+                            <div className="flex justify-between text-emerald-800">
+                              <span>CGST ({taxCalc.cgstPercent}%):</span>
+                              <span>+₹{taxCalc.cgstAmount.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-emerald-800">
+                              <span>SGST ({taxCalc.sgstPercent}%):</span>
+                              <span>+₹{taxCalc.sgstAmount.toFixed(2)}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex justify-between text-slate-500 font-normal">
+                              <span>CGST ({taxCalc.cgstPercent}%):</span>
+                              <span>₹{taxCalc.cgstAmount.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-slate-500 font-normal">
+                              <span>SGST ({taxCalc.sgstPercent}%):</span>
+                              <span>₹{taxCalc.sgstAmount.toFixed(2)}</span>
+                            </div>
+                          </>
+                        )
+                      )}
+                    </>
+                  );
+                })()}
                 <div className="flex justify-between text-xs border-t border-slate-200 pt-1 text-slate-900">
                   <span>TOTAL PAID:</span>
                   <span>₹{activeOrderModal.totalAmount}</span>

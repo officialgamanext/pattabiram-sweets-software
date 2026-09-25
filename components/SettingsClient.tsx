@@ -20,13 +20,15 @@ import {
   Globe,
   Store,
   Printer,
+  Percent,
+  ShieldCheck,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from '@/context/ToastContext';
 import { logAuditEvent } from '@/lib/auditLogger';
-import { BusinessSettings, DEFAULT_BUSINESS_SETTINGS } from '@/lib/businessSettings';
+import { BusinessSettings, DEFAULT_BUSINESS_SETTINGS, calculateTax } from '@/lib/businessSettings';
 
 export default function SettingsClient() {
   const { user, employeeProfile } = useAuth();
@@ -82,7 +84,7 @@ export default function SettingsClient() {
     return JSON.stringify(formData) !== JSON.stringify(savedData);
   }, [formData, savedData]);
 
-  const handleChange = (field: keyof BusinessSettings, value: string) => {
+  const handleChange = (field: keyof BusinessSettings, value: any) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -143,6 +145,17 @@ export default function SettingsClient() {
       }
     }
 
+    // GST percentage validations
+    const cgstVal = parseFloat(String(formData.cgstPercent ?? 2.5));
+    if (isNaN(cgstVal) || cgstVal < 0 || cgstVal > 100) {
+      newErrors.cgstPercent = 'CGST must be between 0% and 100%';
+    }
+
+    const sgstVal = parseFloat(String(formData.sgstPercent ?? 2.5));
+    if (isNaN(sgstVal) || sgstVal < 0 || sgstVal > 100) {
+      newErrors.sgstPercent = 'SGST must be between 0% and 100%';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -176,6 +189,9 @@ export default function SettingsClient() {
         state: formData.state?.trim() || '',
         pincode: formData.pincode?.trim() || '',
         gstNumber: formData.gstNumber.trim().toUpperCase(),
+        cgstPercent: Math.max(0, parseFloat(String(formData.cgstPercent ?? 2.5)) || 0),
+        sgstPercent: Math.max(0, parseFloat(String(formData.sgstPercent ?? 2.5)) || 0),
+        gstType: formData.gstType === 'exclusive' ? 'exclusive' : 'inclusive',
         email: formData.email.trim(),
         tagline: formData.tagline?.trim() || '',
         fssaiNumber: formData.fssaiNumber?.trim() || '',
@@ -489,6 +505,205 @@ export default function SettingsClient() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* GST & TAX CONFIGURATION CARD */}
+            <div className="bg-white rounded-lg border border-slate-200 shadow-2xs p-6 space-y-5">
+              <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Percent className="w-4 h-4 text-[#02626D]" />
+                    GST Tax Rates & Pricing Mode
+                  </h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Configure CGST, SGST percentages and whether item prices are tax inclusive or exclusive.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-50 border border-teal-200 text-teal-800 text-[11px] font-bold">
+                  <span>Total GST:</span>
+                  <span className="font-mono">
+                    {(Math.max(0, parseFloat(String(formData.cgstPercent ?? 2.5)) || 0) +
+                      Math.max(0, parseFloat(String(formData.sgstPercent ?? 2.5)) || 0)).toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Pricing Mode Selection (Inclusive vs Exclusive) */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-800 block">
+                  GST Calculation Mode <span className="text-rose-600">*</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* INCLUSIVE OPTION */}
+                  <div
+                    onClick={() => canEdit && handleChange('gstType', 'inclusive')}
+                    className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer select-none ${
+                      (formData.gstType || 'inclusive') === 'inclusive'
+                        ? 'border-[#02626D] bg-[#02626D]/5 shadow-2xs'
+                        : 'border-slate-200 hover:border-slate-300 bg-white opacity-70'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
+                          (formData.gstType || 'inclusive') === 'inclusive'
+                            ? 'border-[#02626D] bg-[#02626D]'
+                            : 'border-slate-300 bg-white'
+                        }`}>
+                          {(formData.gstType || 'inclusive') === 'inclusive' && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                          )}
+                        </span>
+                        GST Inclusive (MRP)
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        Recommended
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Prices on products already <strong>include GST</strong>. In thermal receipts and order bills, the system automatically breaks down the Taxable Base Amount, CGST, and SGST.
+                    </p>
+                  </div>
+
+                  {/* EXCLUSIVE OPTION */}
+                  <div
+                    onClick={() => canEdit && handleChange('gstType', 'exclusive')}
+                    className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer select-none ${
+                      formData.gstType === 'exclusive'
+                        ? 'border-[#02626D] bg-[#02626D]/5 shadow-2xs'
+                        : 'border-slate-200 hover:border-slate-300 bg-white opacity-70'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
+                          formData.gstType === 'exclusive'
+                            ? 'border-[#02626D] bg-[#02626D]'
+                            : 'border-slate-300 bg-white'
+                        }`}>
+                          {formData.gstType === 'exclusive' && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                          )}
+                        </span>
+                        GST Exclusive (Add-on)
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                        + Tax Added
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Product prices <strong>exclude GST</strong>. The system will calculate and add CGST and SGST on top of the items subtotal to compute the final payable amount.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* CGST and SGST Percentage Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                {/* CGST % */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                    <span>CGST Percentage (%)</span>
+                    <span className="text-[10px] text-slate-400">Central GST</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={formData.cgstPercent ?? 2.5}
+                      onChange={(e) => handleChange('cgstPercent', e.target.value)}
+                      disabled={!canEdit}
+                      placeholder="2.5"
+                      className={`w-full h-9 px-3 text-xs font-bold rounded-md border bg-white focus:outline-none focus:ring-1 transition-all ${
+                        errors.cgstPercent
+                          ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200'
+                          : 'border-slate-300 focus:border-[#02626D] focus:ring-[#02626D]/20'
+                      }`}
+                    />
+                    <span className="absolute right-3 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                  </div>
+                  {errors.cgstPercent ? (
+                    <p className="text-[11px] text-rose-600 flex items-center gap-1">
+                      <AlertCircle size={12} /> {errors.cgstPercent}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-slate-400">Standard for sweets: 2.5% CGST.</p>
+                  )}
+                </div>
+
+                {/* SGST % */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                    <span>SGST Percentage (%)</span>
+                    <span className="text-[10px] text-slate-400">State GST</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={formData.sgstPercent ?? 2.5}
+                      onChange={(e) => handleChange('sgstPercent', e.target.value)}
+                      disabled={!canEdit}
+                      placeholder="2.5"
+                      className={`w-full h-9 px-3 text-xs font-bold rounded-md border bg-white focus:outline-none focus:ring-1 transition-all ${
+                        errors.sgstPercent
+                          ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200'
+                          : 'border-slate-300 focus:border-[#02626D] focus:ring-[#02626D]/20'
+                      }`}
+                    />
+                    <span className="absolute right-3 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                  </div>
+                  {errors.sgstPercent ? (
+                    <p className="text-[11px] text-rose-600 flex items-center gap-1">
+                      <AlertCircle size={12} /> {errors.sgstPercent}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-slate-400">Standard for sweets: 2.5% SGST.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Real-time Calculation Simulation Preview Box */}
+              {(() => {
+                const sampleAmount = 1000;
+                const sim = calculateTax(sampleAmount, formData);
+                return (
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/90 text-xs space-y-2">
+                    <div className="flex items-center justify-between font-bold text-slate-700">
+                      <span className="flex items-center gap-1.5">
+                        <ShieldCheck size={14} className="text-[#02626D]" />
+                        Tax Calculation Preview (on ₹1,000 Bill)
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-200 text-[#02626D]">
+                        Mode: {formData.gstType === 'exclusive' ? 'Exclusive (Add-on)' : 'Inclusive (Embedded)'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-200/60 font-mono text-[11px]">
+                      <div>
+                        <span className="text-slate-400 text-[10px] block font-sans">Taxable Base</span>
+                        <span className="font-bold text-slate-800">₹{sim.taxableAmount.toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 text-[10px] block font-sans">CGST ({sim.cgstPercent}%)</span>
+                        <span className="font-bold text-emerald-700">₹{sim.cgstAmount.toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 text-[10px] block font-sans">SGST ({sim.sgstPercent}%)</span>
+                        <span className="font-bold text-emerald-700">₹{sim.sgstAmount.toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 text-[10px] block font-sans">Final Total</span>
+                        <span className="font-black text-[#02626D] text-xs">₹{sim.finalAmount.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Contact & Communication Card */}
@@ -943,17 +1158,39 @@ export default function SettingsClient() {
                 </div>
               </div>
 
-              {/* Total */}
-              <div className="space-y-1 text-[11px] py-1 border-b border-dashed border-slate-400">
-                <div className="flex justify-between font-extrabold text-xs">
-                  <span>TOTAL AMOUNT</span>
-                  <span>₹1,050.00</span>
-                </div>
-                <div className="flex justify-between text-slate-600 text-[10px]">
-                  <span>PAYMENT MODE:</span>
-                  <span>UPI / CASH</span>
-                </div>
-              </div>
+              {/* Total & Tax Breakdown */}
+              {(() => {
+                const sampleSubtotal = 1050;
+                const calc = calculateTax(sampleSubtotal, formData);
+                return (
+                  <div className="space-y-1 text-[11px] py-1 border-b border-dashed border-slate-400">
+                    <div className="flex justify-between text-slate-700">
+                      <span>{calc.taxType === 'inclusive' ? 'Taxable Amount:' : 'Sub Total:'}</span>
+                      <span>₹{calc.taxableAmount.toFixed(2)}</span>
+                    </div>
+                    {calc.totalTax > 0 && (
+                      <>
+                        <div className="flex justify-between text-slate-600 text-[10px]">
+                          <span>CGST ({calc.cgstPercent}%{calc.taxType === 'inclusive' ? ' Incl' : ''}):</span>
+                          <span>{calc.taxType === 'exclusive' ? '+' : ''}₹{calc.cgstAmount.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-600 text-[10px]">
+                          <span>SGST ({calc.sgstPercent}%{calc.taxType === 'inclusive' ? ' Incl' : ''}):</span>
+                          <span>{calc.taxType === 'exclusive' ? '+' : ''}₹{calc.sgstAmount.toFixed(2)}</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex justify-between font-extrabold text-xs pt-1 border-t border-slate-200">
+                      <span>TOTAL AMOUNT</span>
+                      <span>₹{calc.finalAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600 text-[10px]">
+                      <span>PAYMENT MODE:</span>
+                      <span>UPI / CASH</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Footer */}
               <div className="text-center pt-2 text-[10px] text-slate-600 space-y-0.5">

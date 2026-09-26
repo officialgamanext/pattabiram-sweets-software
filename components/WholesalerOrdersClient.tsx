@@ -346,8 +346,8 @@ export default function WholesalerOrdersClient() {
           assignedPrice: customRate,
           quantity: 0,
           totalAmount: 0,
-          needsManufacturing: true,
-          mfgStatus: 'Pending',
+          needsManufacturing: false,
+          mfgStatus: 'Not Required',
           pckStatus: 'Pending',
         };
       });
@@ -379,9 +379,11 @@ export default function WholesalerOrdersClient() {
     setOrderItems((prev) =>
       prev.map((line) => {
         if (line.itemId === itemId) {
+          const isNowMfg = !line.needsManufacturing;
           return {
             ...line,
-            needsManufacturing: line.needsManufacturing === false,
+            needsManufacturing: isNowMfg,
+            mfgStatus: isNowMfg ? 'Pending' : 'Not Required',
           };
         }
         return line;
@@ -467,7 +469,7 @@ export default function WholesalerOrdersClient() {
     const priceListName = selectedWholesaler.priceListName || 'Standard';
 
     try {
-      const hasMfgItems = selectedLines.some((l) => l.needsManufacturing !== false);
+      const hasMfgItems = selectedLines.some((l) => Boolean(l.needsManufacturing));
 
       await addDoc(collection(db, 'orders'), {
         orderId: newOrderId,
@@ -490,8 +492,8 @@ export default function WholesalerOrdersClient() {
           assignedPrice: Number(line.assignedPrice) || 0,
           quantity: Number(line.quantity) || 0,
           totalAmount: Number(line.totalAmount) || 0,
-          needsManufacturing: line.needsManufacturing !== false,
-          mfgStatus: line.needsManufacturing === false ? 'Not Required' : 'Pending',
+          needsManufacturing: Boolean(line.needsManufacturing),
+          mfgStatus: line.needsManufacturing ? 'Pending' : 'Not Required',
           pckStatus: 'Pending',
         })),
         subtotal: modalTaxCalc.taxType === 'inclusive' ? Number(modalTaxCalc.taxableAmount) : (Number(modalSubtotal) || 0),
@@ -667,8 +669,8 @@ export default function WholesalerOrdersClient() {
       const customRate = existing?.assignedPrice || priceMap.get(item.id) || item.price;
       const qty = existing?.quantity || 0;
       const needsMfg = existing
-        ? existing.needsManufacturing !== false && existing.mfgStatus !== 'Not Required'
-        : true;
+        ? existing.needsManufacturing === true && existing.mfgStatus !== 'Not Required'
+        : false;
 
       return {
         itemId: item.id,
@@ -716,9 +718,11 @@ export default function WholesalerOrdersClient() {
     setEditOrderItems((prev) =>
       prev.map((line) => {
         if (line.itemId === itemId) {
+          const isNowMfg = !line.needsManufacturing;
           return {
             ...line,
-            needsManufacturing: line.needsManufacturing === false,
+            needsManufacturing: isNowMfg,
+            mfgStatus: isNowMfg ? 'Pending' : 'Not Required',
           };
         }
         return line;
@@ -767,7 +771,7 @@ export default function WholesalerOrdersClient() {
 
     try {
       setIsUpdatingOrder(true);
-      const hasMfgItems = selectedLines.some((l) => l.needsManufacturing !== false);
+      const hasMfgItems = selectedLines.some((l) => Boolean(l.needsManufacturing));
 
       await updateDoc(doc(db, 'orders', editingOrder.id), {
         orderDate: editOrderDate || getTodayDateStr(),
@@ -782,9 +786,9 @@ export default function WholesalerOrdersClient() {
           assignedPrice: Number(line.assignedPrice) || 0,
           quantity: Number(line.quantity) || 0,
           totalAmount: Number(line.totalAmount) || 0,
-          needsManufacturing: line.needsManufacturing !== false,
+          needsManufacturing: Boolean(line.needsManufacturing),
           mfgStatus:
-            line.needsManufacturing === false
+            !line.needsManufacturing
               ? 'Not Required'
               : line.mfgStatus === 'Moved to Packing'
               ? 'Moved to Packing'
@@ -2071,7 +2075,7 @@ export default function WholesalerOrdersClient() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
                         {filteredAddItems.map((line) => {
                           const isAdded = (line.quantity || 0) > 0;
-                          const isMfg = line.needsManufacturing !== false;
+                          const isMfg = Boolean(line.needsManufacturing);
                           const hasCustomPrice = line.assignedPrice !== line.standardPrice;
 
                           return (
@@ -2279,11 +2283,11 @@ export default function WholesalerOrdersClient() {
                             <div className="flex items-center justify-between pt-0.5">
                               <div className="flex items-center gap-1.5">
                                 <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded border ${
-                                  item.needsManufacturing !== false
+                                  item.needsManufacturing
                                     ? 'bg-teal-50 text-teal-800 border-teal-200'
                                     : 'bg-slate-100 text-slate-600 border-slate-200'
                                 }`}>
-                                  {item.needsManufacturing !== false ? 'To Mfg' : 'In Stock'}
+                                  {item.needsManufacturing ? 'To Mfg' : 'In Stock'}
                                 </span>
 
                                 <span className="text-xs font-bold text-slate-800">
@@ -2777,7 +2781,7 @@ export default function WholesalerOrdersClient() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
                       {filteredEditItems.map((line) => {
                         const isAdded = (line.quantity || 0) > 0;
-                        const isMfg = line.needsManufacturing !== false;
+                        const isMfg = Boolean(line.needsManufacturing);
                         const hasCustomPrice = line.assignedPrice !== line.standardPrice;
 
                         return (
@@ -2974,11 +2978,11 @@ export default function WholesalerOrdersClient() {
                             <div className="flex items-center justify-between pt-0.5">
                               <div className="flex items-center gap-1.5">
                                 <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded border ${
-                                  item.needsManufacturing !== false
+                                  item.needsManufacturing
                                     ? 'bg-teal-50 text-teal-800 border-teal-200'
                                     : 'bg-slate-100 text-slate-600 border-slate-200'
                                 }`}>
-                                  {item.needsManufacturing !== false ? 'To Mfg' : 'In Stock'}
+                                  {item.needsManufacturing ? 'To Mfg' : 'In Stock'}
                                 </span>
 
                                 <span className="text-xs font-bold text-slate-800">

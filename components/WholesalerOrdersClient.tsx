@@ -1278,7 +1278,13 @@ export default function WholesalerOrdersClient() {
                       return (
                         <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
                           <td className="py-3 px-4">
-                            <span className="font-mono font-bold text-slate-900">{order.orderId}</span>
+                            <Link
+                              href={`/wholesaler-orders/${order.id}`}
+                              className="font-mono font-bold text-slate-900 hover:text-[#02626D] hover:underline"
+                              title="View Order Details Page"
+                            >
+                              {order.orderId}
+                            </Link>
                           </td>
 
                           <td className="py-3 px-4 text-slate-600 whitespace-nowrap font-medium">
@@ -1390,13 +1396,13 @@ export default function WholesalerOrdersClient() {
                               </button>
 
                               {/* View Order Details Action Button */}
-                              <button
-                                onClick={() => setViewingOrder(order)}
+                              <Link
+                                href={`/wholesaler-orders/${order.id}`}
                                 className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                                title="View Order Details"
+                                title="View Full Order Details Page"
                               >
                                 <Eye size={15} />
-                              </button>
+                              </Link>
 
                               {/* Edit Order Action Button */}
                               <button
@@ -1725,8 +1731,14 @@ export default function WholesalerOrdersClient() {
 
                                     return (
                                       <tr key={ord.id} className="hover:bg-slate-50/60 transition-colors">
-                                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
-                                          {ord.orderId}
+                                        <td className="py-2.5 px-3">
+                                          <Link
+                                            href={`/wholesaler-orders/${ord.id}`}
+                                            className="font-mono font-bold text-slate-900 hover:text-[#02626D] hover:underline"
+                                            title="View Order Details Page"
+                                          >
+                                            {ord.orderId}
+                                          </Link>
                                         </td>
                                         <td className="py-2.5 px-3 text-slate-600 font-medium">
                                           {ord.orderDate || '—'}
@@ -1828,7 +1840,14 @@ export default function WholesalerOrdersClient() {
 
                         return (
                           <tr key={ord.id} className="hover:bg-slate-50/60 transition-colors">
-                            <td className="py-3 px-4 font-mono font-bold text-slate-900">{ord.orderId}</td>
+                            <td className="py-3 px-4 font-mono font-bold">
+                              <Link
+                                href={`/wholesaler-orders/${ord.id}`}
+                                className="text-[#02626D] hover:underline"
+                              >
+                                {ord.orderId}
+                              </Link>
+                            </td>
                             <td className="py-3 px-4 text-slate-600 whitespace-nowrap">{ord.orderDate || '—'}</td>
                             <td className="py-3 px-4">
                               <p className="font-semibold text-slate-900">{ord.wholesalerName}</p>

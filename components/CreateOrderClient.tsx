@@ -34,6 +34,7 @@ import {
   Minus,
   Pencil,
   Layers,
+  Printer,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp, onSnapshot, query } from 'firebase/firestore';
@@ -45,7 +46,7 @@ import { useAllowedTuesdays } from '@/lib/tuesdayOverrides';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 import SlotLimitOverrideModal, { SlotLimitOverrideData } from '@/components/SlotLimitOverrideModal';
 import { OrderActionOtpModal } from '@/components/OrderActionOtpModal';
-import { useBusinessSettings, calculateTax } from '@/lib/businessSettings';
+import { useBusinessSettings, calculateTax, formatStoreAddress, formatStorePhone } from '@/lib/businessSettings';
 
 export type SlotTime =
   | '9:00 AM - 12:00 PM'
@@ -321,8 +322,9 @@ export default function CreateOrderClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, employeeProfile } = useAuth();
-  const { isConnected: isPrinterConnected, printerType, printReceipt } = usePrinter();
+  const { isConnected: isPrinterConnected, printerType, printReceipt, printWindow } = usePrinter();
   const { settings: businessSettings } = useBusinessSettings();
+  const [createdOrderForPrint, setCreatedOrderForPrint] = useState<any | null>(null);
 
   const editId = searchParams.get('editId') || searchParams.get('id') || '';
   const isEditMode = Boolean(editId);
@@ -1684,7 +1686,7 @@ export default function CreateOrderClient() {
         return;
       }
 
-      await addDoc(collection(db, 'orders'), sanitizeForFirestore({
+      const docRef = await addDoc(collection(db, 'orders'), sanitizeForFirestore({
         code: orderCode,
         customerName: selectedCustomer.name,
         customerMobile: selectedCustomer.mobile,
@@ -1753,13 +1755,178 @@ export default function CreateOrderClient() {
         createdAt: serverTimestamp(),
       }));
 
+      const createdOrderData = {
+        id: docRef.id,
+        code: orderCode,
+        customerName: selectedCustomer.name,
+        customerMobile: selectedCustomer.mobile,
+        customerId: selectedCustomer.id,
+        customerType: selectedCustomer.type,
+        customerAddress: selectedCustomer.address || '',
+        slot: orderSlot,
+        orderTime: deliveryTime || timeStr,
+        deliveryTime: deliveryTime || timeStr,
+        orderDate: targetOrderDate,
+        manufacturingDate: mfgDate,
+        expectedDeliveryDate: expDeliveryDate,
+        isCustomisation: isCustomisation,
+        customisationDetails: isCustomisation
+          ? {
+              noOfBoxes: savedNoOfBoxes,
+              packingBoxesCount: numericPackingBoxesCount,
+              packingBoxPrice: globalSettings.globalPackingBoxPrice || 0,
+              packingBoxesTotal: customPackingBoxesTotal,
+              boxType: selectedBoxObj?.name || boxType,
+              boxPrice: selectedBoxPrice,
+              boxImageUrl: finalBoxImageUrl,
+              shrinkType: shrinkType,
+              shrinkPrice: selectedShrinkPrice,
+              hasShrink: shrinkType !== 'None' && selectedShrinkPrice > 0,
+              stickerType: stickerType,
+              stickerPrice: selectedStickerPrice,
+              hasSticker: stickerType !== 'None' && selectedStickerPrice > 0,
+            }
+          : null,
+        isTransportRequired: isTransportRequired,
+        transportCharges: transportChargesVal,
+        deliveryAddress: isTransportRequired ? deliveryAddress : (selectedCustomer.address || ''),
+        items: validItems,
+        totalItems: validItems.length,
+        subTotal: taxCalculation.taxType === 'inclusive' ? taxCalculation.taxableAmount : subTotal,
+        itemsTotal: subTotal,
+        noOfBoxes: savedNoOfBoxes,
+        packingBoxesCount: isCustomisation ? numericPackingBoxesCount : savedNoOfBoxes,
+        globalPackingBoxPrice: globalSettings.globalPackingBoxPrice || 0,
+        boxChargesTotal: isCustomisation ? boxChargesTotal : 0,
+        customPackingBoxesTotal: isCustomisation ? customPackingBoxesTotal : 0,
+        stickerChargesTotal: isCustomisation ? stickerChargesTotal : 0,
+        shrinkChargesTotal: isCustomisation ? shrinkChargesTotal : 0,
+        packetChargesTotal: packetChargesTotal,
+        packingCharges: isCustomisation ? customPackingBoxesTotal : pCharges,
+        additionalCharges: addCharges,
+        discountAmount: discountVal,
+        taxableAmount: taxCalculation.taxableAmount,
+        tax: taxCalculation.totalTax,
+        cgstAmount: taxCalculation.cgstAmount,
+        sgstAmount: taxCalculation.sgstAmount,
+        cgstPercent: taxCalculation.cgstPercent,
+        sgstPercent: taxCalculation.sgstPercent,
+        totalGstPercent: taxCalculation.totalGstPercent,
+        taxType: taxCalculation.taxType,
+        totalAmount: grandTotal,
+        receivedAmount: recv,
+        advanceAmount: recv,
+        balanceAmount: Math.max(0, grandTotal - recv),
+        paymentMode: finalPaymentMode,
+        paymentStatus: paymentStatus,
+        payments: finalPayments,
+        orderStatus: orderStatus,
+        createdBy: creatorName,
+      };
+
       toast.success('Order Created', `New order ${orderCode} recorded successfully.`);
-      router.push('/orders');
+      setCreatedOrderForPrint(createdOrderData);
     } catch (err: any) {
       console.error('Failed to save order:', err);
       toast.error('Order Save Failed', err?.message || 'Failed to save order to Firebase.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleCloseSuccessModal = () => {
+    setCreatedOrderForPrint(null);
+    router.push('/orders');
+  };
+
+  const handlePrintOrderReceipt = async (orderToPrint: any) => {
+    if (!orderToPrint) return;
+    const orderItems = (orderToPrint.items || []).map((it: any) => {
+      const qty = parseFloat(it.quantity || it.qty || 1) || 1;
+      let price = parseFloat(it.unitPrice || it.price || it.rate || it.itemPrice || 0) || 0;
+      let total = parseFloat(it.lineTotal || it.amount || it.total || it.subTotal || it.itemTotal || 0) || 0;
+      if (!total && price > 0) total = price * qty;
+      if (!price && total > 0 && qty > 0) price = total / qty;
+      const mfgNote = (it.manufacturingDescription || it.mfgDesc || it.notes || it.note || '').trim();
+      const pckNote = (it.packingDescription || it.pckDesc || '').trim();
+      return {
+        name: it.itemName || it.name || it.item || 'Item',
+        qty: qty,
+        unit: it.unit || 'kg',
+        price: price,
+        total: total || (price * qty),
+        note: mfgNote,
+        manufacturingDescription: mfgNote,
+        packingDescription: pckNote,
+      };
+    });
+
+    if (isPrinterConnected && (printerType === 'USB' || printerType === 'Bluetooth')) {
+      try {
+        await printReceipt({
+          billNo: orderToPrint.code || orderToPrint.id,
+          customerName: orderToPrint.customerName,
+          customerPhone: orderToPrint.customerMobile,
+          customerEmail: orderToPrint.customerEmail || undefined,
+          customerAddress: orderToPrint.customerAddress || orderToPrint.deliveryAddress || undefined,
+          cashierName: orderToPrint.createdBy || undefined,
+          dateStr: orderToPrint.orderDate,
+          timeStr: orderToPrint.orderTime,
+          slot: orderToPrint.slot,
+          deliveryDate: orderToPrint.expectedDeliveryDate || orderToPrint.manufacturingDate,
+          deliveryTime: orderToPrint.deliveryTime || undefined,
+          deliveryAddress: orderToPrint.deliveryAddress || undefined,
+          orderType: orderToPrint.isCustomisation ? 'Custom Box Order' : 'Standard Order',
+          orderStatus: orderToPrint.orderStatus,
+          paymentMode: orderToPrint.paymentMode,
+          paymentStatus: orderToPrint.paymentStatus,
+          items: orderItems,
+          subtotal: orderToPrint.taxType === 'inclusive' ? (orderToPrint.taxableAmount ?? orderToPrint.subTotal ?? orderToPrint.totalAmount) : (orderToPrint.subTotal || orderToPrint.totalAmount),
+          discount: orderToPrint.discountAmount || 0,
+          tax: orderToPrint.tax !== undefined ? orderToPrint.tax : 0,
+          taxableAmount: orderToPrint.taxableAmount,
+          cgstAmount: orderToPrint.cgstAmount,
+          sgstAmount: orderToPrint.sgstAmount,
+          cgstPercent: orderToPrint.cgstPercent,
+          sgstPercent: orderToPrint.sgstPercent,
+          taxType: orderToPrint.taxType,
+          boxCharges: orderToPrint.boxChargesTotal || 0,
+          boxDetails: orderToPrint.isCustomisation && orderToPrint.customisationDetails?.noOfBoxes ? `${orderToPrint.customisationDetails.noOfBoxes}xRs.${orderToPrint.customisationDetails.boxPrice || 0}` : undefined,
+          stickerCharges: orderToPrint.stickerChargesTotal || 0,
+          shrinkCharges: orderToPrint.shrinkChargesTotal || 0,
+          packetCharges: orderToPrint.packetChargesTotal || 0,
+          packingCharges: orderToPrint.packingCharges || 0,
+          additionalCharges: orderToPrint.additionalCharges || 0,
+          transportCharges: orderToPrint.transportCharges || 0,
+          grandTotal: orderToPrint.totalAmount,
+          receivedAmount: orderToPrint.receivedAmount,
+          advanceAmount: orderToPrint.advanceAmount !== undefined ? orderToPrint.advanceAmount : orderToPrint.receivedAmount,
+          balanceAmount: orderToPrint.balanceAmount !== undefined ? orderToPrint.balanceAmount : Math.max(0, orderToPrint.totalAmount - (orderToPrint.receivedAmount || 0)),
+          isCustomisation: orderToPrint.isCustomisation,
+          customisationDetails: orderToPrint.isCustomisation && orderToPrint.customisationDetails
+            ? {
+                ...orderToPrint.customisationDetails,
+                selectedSweets: (orderToPrint.items || []).map((it: any) => ({
+                  itemName: it.itemName || it.name || 'Sweet',
+                  count: it.count,
+                  weight: parseFloat(it.quantity || it.qty || 1) || 1,
+                  unit: it.unit || 'kg',
+                  manufacturingDescription: (it.manufacturingDescription || it.mfgDesc || it.notes || it.note || '').trim(),
+                  packingDescription: (it.packingDescription || it.pckDesc || '').trim(),
+                })),
+              }
+            : (orderToPrint.customisationDetails as any),
+          remarks: orderToPrint.remarks || orderToPrint.notes || undefined,
+          footerNote: 'Thank you for choosing Pattabiram Sweets! Visit again!',
+        });
+        toast.success('Receipt Printed', `Sent to ${printerType} printer successfully.`);
+      } catch (err: any) {
+        console.error('Thermal print error:', err);
+        toast.error('Print Error', err?.message || 'Failed to print receipt.');
+        printWindow();
+      }
+    } else {
+      printWindow();
     }
   };
 
@@ -3497,6 +3664,225 @@ export default function CreateOrderClient() {
           toast.success('Authorization Confirmed', 'Admin OTP verified. You can now save changes.');
         }}
       />
+
+      {/* ── MODAL: ORDER CREATED SUCCESS & PRINT / CLOSE ────────────────────── */}
+      {createdOrderForPrint && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-sm sm:max-w-md p-4 sm:p-5 space-y-3.5 max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 size={20} />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 truncate">Order Created Successfully!</h3>
+                  <p className="text-xs text-slate-500 font-mono font-medium truncate">
+                    Order ID: <span className="font-bold text-[#02626D]">{createdOrderForPrint.code}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseSuccessModal}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors flex-shrink-0"
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Scrollable Receipt Preview Card */}
+            <div className="flex-1 overflow-y-auto pr-1">
+              <div
+                id="receipt-print-area"
+                className="p-3.5 bg-white font-mono text-slate-900 text-xs space-y-2 border border-slate-200 rounded-xl shadow-2xs"
+              >
+                {/* Store Branding */}
+                <div className="text-center border-b border-slate-200 pb-2">
+                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wide truncate">
+                    {businessSettings.businessName || 'Pattabiram Sweets'}
+                  </h2>
+                  {businessSettings.tagline && (
+                    <p className="text-[10px] text-slate-500 italic">{businessSettings.tagline}</p>
+                  )}
+                  <p className="text-[10px] text-slate-500">{formatStoreAddress(businessSettings)}</p>
+                  <p className="text-[10px] text-slate-500">Ph: {formatStorePhone(businessSettings)}</p>
+                  {businessSettings.gstNumber && (
+                    <p className="text-[10px] font-semibold text-slate-700">GSTIN: {businessSettings.gstNumber}</p>
+                  )}
+                  {businessSettings.fssaiNumber && (
+                    <p className="text-[9px] text-slate-500">FSSAI: {businessSettings.fssaiNumber}</p>
+                  )}
+                </div>
+
+                {/* Order Information */}
+                <div className="text-[10px] space-y-0.5 border-b border-slate-200 pb-1.5">
+                  <div className="flex justify-between">
+                    <span className="font-bold">Bill No: {createdOrderForPrint.code}</span>
+                    <span className="text-slate-500">{createdOrderForPrint.orderDate}</span>
+                  </div>
+                  <div>Customer: <span className="font-semibold">{createdOrderForPrint.customerName}</span></div>
+                  <div>Mobile: <span>{createdOrderForPrint.customerMobile}</span></div>
+                  <div>Delivery: <span>{createdOrderForPrint.expectedDeliveryDate || createdOrderForPrint.orderDate} ({createdOrderForPrint.deliveryTime || createdOrderForPrint.slot})</span></div>
+                  <div>Order Type: <span>{createdOrderForPrint.isCustomisation ? 'Custom Box Order' : 'Standard Order'}</span></div>
+                  <div>Payment Mode: <span className="font-semibold">{createdOrderForPrint.paymentMode}</span></div>
+                </div>
+
+                {/* Items List */}
+                <div className="divide-y divide-slate-100 text-[10px] py-1">
+                  {createdOrderForPrint.items?.map((item: any, idx: number) => {
+                    const qty = parseFloat(item.quantity || item.qty || 1) || 1;
+                    const price = parseFloat(item.unitPrice || item.price || 0) || 0;
+                    const lineTotal = parseFloat(item.lineTotal || item.amount || 0) || (qty * price);
+                    return (
+                      <div key={idx} className="py-1 flex justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{item.itemName || item.name}</div>
+                          <div className="text-slate-500 text-[9px]">
+                            {qty} {item.unit || 'kg'} x ₹{price}
+                            {item.hasPacket && item.packetCharge ? ` (+₹${item.packetCharge} pkt)` : ''}
+                          </div>
+                          {item.manufacturingDescription && (
+                            <div className="text-[9px] text-amber-800 italic">Mfg: {item.manufacturingDescription}</div>
+                          )}
+                          {item.packingDescription && (
+                            <div className="text-[9px] text-purple-800 italic">Pack: {item.packingDescription}</div>
+                          )}
+                        </div>
+                        <div className="font-bold text-right flex-shrink-0">₹{lineTotal.toFixed(2)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Cost Breakdown */}
+                <div className="border-t border-slate-300 pt-2 text-[10px] space-y-1">
+                  <div className="flex justify-between">
+                    <span>Subtotal:</span>
+                    <span>₹{(createdOrderForPrint.subTotal || 0).toFixed(2)}</span>
+                  </div>
+
+                  {createdOrderForPrint.discountAmount > 0 && (
+                    <div className="flex justify-between text-emerald-700">
+                      <span>Discount:</span>
+                      <span>-₹{createdOrderForPrint.discountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {createdOrderForPrint.boxChargesTotal > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Box Charges:</span>
+                      <span>₹{createdOrderForPrint.boxChargesTotal.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {createdOrderForPrint.customPackingBoxesTotal > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Packing Boxes:</span>
+                      <span>₹{createdOrderForPrint.customPackingBoxesTotal.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {createdOrderForPrint.stickerChargesTotal > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Sticker Charges:</span>
+                      <span>₹{createdOrderForPrint.stickerChargesTotal.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {createdOrderForPrint.shrinkChargesTotal > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Shrink Charges:</span>
+                      <span>₹{createdOrderForPrint.shrinkChargesTotal.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {createdOrderForPrint.packetChargesTotal > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Packet Charges:</span>
+                      <span>₹{createdOrderForPrint.packetChargesTotal.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {createdOrderForPrint.transportCharges > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Transport Charges:</span>
+                      <span>₹{createdOrderForPrint.transportCharges.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {createdOrderForPrint.additionalCharges > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Additional Charges:</span>
+                      <span>₹{createdOrderForPrint.additionalCharges.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {createdOrderForPrint.tax > 0 && (
+                    <>
+                      <div className="flex justify-between text-slate-600">
+                        <span>CGST ({createdOrderForPrint.cgstPercent || 2.5}%):</span>
+                        <span>₹{(createdOrderForPrint.cgstAmount || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>SGST ({createdOrderForPrint.sgstPercent || 2.5}%):</span>
+                        <span>₹{(createdOrderForPrint.sgstAmount || 0).toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="flex justify-between text-xs font-bold border-t border-slate-200 pt-1 text-slate-900">
+                    <span>GRAND TOTAL:</span>
+                    <span>₹{(createdOrderForPrint.totalAmount || 0).toFixed(2)}</span>
+                  </div>
+
+                  <div className="flex justify-between text-[11px] font-semibold text-emerald-700">
+                    <span>Received / Advance:</span>
+                    <span>₹{(createdOrderForPrint.receivedAmount || 0).toFixed(2)}</span>
+                  </div>
+
+                  {createdOrderForPrint.balanceAmount > 0 ? (
+                    <div className="flex justify-between text-[11px] font-semibold text-rose-700">
+                      <span>Balance Due:</span>
+                      <span>₹{(createdOrderForPrint.balanceAmount || 0).toFixed(2)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between text-[10px] text-emerald-800 font-semibold">
+                      <span>Payment Status:</span>
+                      <span className="uppercase">PAID</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-center text-[9px] text-slate-500 pt-2 border-t border-slate-200">
+                  {businessSettings.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!'}
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Actions: Close / Cancel or Print */}
+            <div className="grid grid-cols-2 gap-2.5 pt-1 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleCloseSuccessModal}
+                className="h-9 px-4 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                Close
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePrintOrderReceipt(createdOrderForPrint)}
+                className="h-9 px-4 text-xs font-bold rounded-xl bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Printer size={15} />
+                <span>Print Receipt</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

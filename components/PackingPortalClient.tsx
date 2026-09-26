@@ -17,7 +17,18 @@ import {
   Building2,
   ShieldAlert,
   Lock,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Truck,
+  Phone,
+  MapPin,
+  Calendar,
+  CreditCard,
+  IndianRupee,
+  FileText,
+  Eye,
+  X,
+  User,
+  AlertCircle
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, updateDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
@@ -57,12 +68,17 @@ export interface AggregatedPackingSummary {
     orderId: string;
     orderCode: string;
     customerName: string;
+    customerMobile?: string;
+    customerAddress?: string;
     slot: string;
     quantity: number;
     pckStatus: 'Pending' | 'Packing Started' | 'Moved to Store';
     packingDescription?: string;
     isCustomisation?: boolean;
     customisationDetails?: CustomisationData | null;
+    isTransportRequired?: boolean;
+    deliveryAddress?: string;
+    transportCharges?: number;
     hasPacket?: boolean;
   }[];
 }
@@ -81,12 +97,17 @@ export interface SlotWisePackingItemSummary {
     orderId: string;
     orderCode: string;
     customerName: string;
+    customerMobile?: string;
+    customerAddress?: string;
     slot: string;
     quantity: number;
     pckStatus: 'Pending' | 'Packing Started' | 'Moved to Store';
     packingDescription?: string;
     isCustomisation?: boolean;
     customisationDetails?: CustomisationData | null;
+    isTransportRequired?: boolean;
+    deliveryAddress?: string;
+    transportCharges?: number;
     hasPacket?: boolean;
   }[];
 }
@@ -117,6 +138,21 @@ export function isOrderEligibleForPacking(order: OrderRecord): boolean {
   }
 
   return true;
+}
+
+/**
+ * Helper to identify if an order has reached or passed the "Moved to Packing" status.
+ * Packing actions must only be enabled from "Moved to Packing" status onwards.
+ */
+export function isOrderFromMovedToPacking(orderStatus?: string): boolean {
+  if (!orderStatus) return false;
+  const validPackingStatuses = [
+    'Moved to Packing',
+    'Packing Started',
+    'Packing Completed',
+    'Moved to Store',
+  ];
+  return validPackingStatuses.includes(orderStatus);
 }
 
 /**
@@ -263,6 +299,7 @@ export default function PackingPortalClient() {
   const [selectedUnit, setSelectedUnit] = useState('all');
   const [activeTab, setActiveTab] = useState<'item_wise' | 'slot_wise' | 'order_wise'>('item_wise');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // Switch Packing Unit Modal State
   const [switchModalData, setSwitchModalData] = useState<{
@@ -456,11 +493,12 @@ export default function PackingPortalClient() {
 
     orders.forEach((order) => {
       if (!isOrderEligibleForPacking(order)) return;
+      // An order's items only enter active packing queue if order status has reached Moved to Packing
+      if (!isOrderFromMovedToPacking(order.orderStatus)) return;
 
       (order.items || []).forEach((item) => {
-        const isWholesale = isWholesaleOrder(order);
         const itemMfgStatus = item.mfgStatus || (
-          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store' || isWholesale
+          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
             ? 'Moved to Packing'
             : 'Pending'
         );
@@ -473,8 +511,8 @@ export default function PackingPortalClient() {
             : 'Pending'
         );
 
-        // Item must have finished manufacturing (or wholesale order / not required) AND not yet moved to store!
-        const isMfgReady = isWholesale || itemMfgStatus === 'Moved to Packing' || itemMfgStatus === 'Not Required';
+        // Item must have finished manufacturing AND not yet moved to store!
+        const isMfgReady = itemMfgStatus === 'Moved to Packing' || itemMfgStatus === 'Not Required' || item.needsManufacturing === false;
         if (!isMfgReady || itemPckStatus === 'Moved to Store') return;
 
         const rawName = item.itemName || 'Unknown Item';
@@ -507,12 +545,17 @@ export default function PackingPortalClient() {
             orderId: order.id,
             orderCode: order.code,
             customerName: order.customerName,
+            customerMobile: order.customerMobile,
+            customerAddress: order.customerAddress,
             slot: order.slot,
             quantity: item.quantity || 0,
             pckStatus: itemPckStatus,
             packingDescription: item.packingDescription,
             isCustomisation: Boolean(order.isCustomisation),
             customisationDetails: order.customisationDetails || null,
+            isTransportRequired: Boolean(order.isTransportRequired),
+            deliveryAddress: order.deliveryAddress,
+            transportCharges: order.transportCharges || 0,
             hasPacket: Boolean(item.hasPacket)
           });
         } else {
@@ -531,12 +574,17 @@ export default function PackingPortalClient() {
                 orderId: order.id,
                 orderCode: order.code,
                 customerName: order.customerName,
+                customerMobile: order.customerMobile,
+                customerAddress: order.customerAddress,
                 slot: order.slot,
                 quantity: item.quantity || 0,
                 pckStatus: itemPckStatus,
                 packingDescription: item.packingDescription,
                 isCustomisation: Boolean(order.isCustomisation),
                 customisationDetails: order.customisationDetails || null,
+                isTransportRequired: Boolean(order.isTransportRequired),
+                deliveryAddress: order.deliveryAddress,
+                transportCharges: order.transportCharges || 0,
                 hasPacket: Boolean(item.hasPacket)
               }
             ]
@@ -559,36 +607,30 @@ export default function PackingPortalClient() {
   }, [orders, itemInfoMap, selectedUnit, searchTerm, isAllUnitsAllowed, accessiblePckUnits, pckUnits]);
 
   // Order-wise active packing list - sorted with earliest slot / time at top
+  // Order-wise active packing list - sorted with orders ready for packing at top
   const filteredOrderWiseList = useMemo(() => {
     const list = orders.filter((order) => {
       if (!isOrderEligibleForPacking(order)) return false;
 
-      // Order must have at least 1 item accessible and pending packing
-      const hasPendingPackingItem = order.items?.some((item) => {
+      // Filter out orders that have completely moved to store or delivered
+      const allItemsMovedToStore = Boolean(
+        order.items &&
+        order.items.length > 0 &&
+        order.items.every((it) => it.pckStatus === 'Moved to Store')
+      );
+      if (allItemsMovedToStore || order.orderStatus === 'Moved to Store' || order.orderStatus === 'Packing Completed') {
+        return false;
+      }
+
+      // Order must have at least 1 item accessible under selected packing unit filter
+      const hasAccessibleItem = order.items?.some((item) => {
         const key = (item.itemName || (item as any).name || '').toLowerCase().trim();
         const masterInfo = itemInfoMap.get(key);
         const pckUnit = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
-
-        if (!isItemAllowedForPacking(order, item, pckUnit)) return false;
-
-        const isWholesale = isWholesaleOrder(order);
-        const itemMfgStatus = item.mfgStatus || (
-          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store' || isWholesale
-            ? 'Moved to Packing'
-            : 'Pending'
-        );
-        const itemPckStatus = item.pckStatus || (
-          order.orderStatus === 'Moved to Store'
-            ? 'Moved to Store'
-            : order.orderStatus === 'Packing Started'
-            ? 'Packing Started'
-            : 'Pending'
-        );
-        const isMfgReady = isWholesale || itemMfgStatus === 'Moved to Packing' || itemMfgStatus === 'Not Required';
-        return isMfgReady && itemPckStatus !== 'Moved to Store';
+        return isItemAllowedForPacking(order, item, pckUnit);
       });
 
-      if (!hasPendingPackingItem) return false;
+      if (!hasAccessibleItem) return false;
 
       if (searchTerm) {
         return (
@@ -602,6 +644,11 @@ export default function PackingPortalClient() {
     });
 
     return list.sort((a, b) => {
+      // Prioritize orders ready for packing over orders still in manufacturing
+      const aReady = a.orderStatus === 'Moved to Packing' || a.orderStatus === 'Packing Started' || isWholesaleOrder(a);
+      const bReady = b.orderStatus === 'Moved to Packing' || b.orderStatus === 'Packing Started' || isWholesaleOrder(b);
+      if (aReady !== bReady) return aReady ? -1 : 1;
+
       const aWeight = getSlotOrderWeight(a.slot);
       const bWeight = getSlotOrderWeight(b.slot);
       if (aWeight !== bWeight) return aWeight - bWeight;
@@ -616,13 +663,13 @@ export default function PackingPortalClient() {
 
     orders.forEach((order) => {
       if (!isOrderEligibleForPacking(order)) return;
+      if (!isOrderFromMovedToPacking(order.orderStatus)) return;
 
       const slot = (order.slot || 'Regular / General Slot').trim();
 
       (order.items || []).forEach((item) => {
-        const isWholesale = isWholesaleOrder(order);
         const itemMfgStatus = item.mfgStatus || (
-          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store' || isWholesale
+          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
             ? 'Moved to Packing'
             : 'Pending'
         );
@@ -635,7 +682,7 @@ export default function PackingPortalClient() {
             : 'Pending'
         );
 
-        const isMfgReady = isWholesale || itemMfgStatus === 'Moved to Packing' || itemMfgStatus === 'Not Required';
+        const isMfgReady = itemMfgStatus === 'Moved to Packing' || itemMfgStatus === 'Not Required' || item.needsManufacturing === false;
         if (!isMfgReady || itemPckStatus === 'Moved to Store') return;
 
         const rawName = item.itemName || (item as any).name || 'Unknown Item';
@@ -674,12 +721,17 @@ export default function PackingPortalClient() {
           orderId: order.id,
           orderCode: order.code,
           customerName: order.customerName,
+          customerMobile: order.customerMobile,
+          customerAddress: order.customerAddress,
           slot: slot,
           quantity: item.quantity || 0,
           pckStatus: itemPckStatus,
           packingDescription: item.packingDescription,
           isCustomisation: Boolean(order.isCustomisation),
           customisationDetails: order.customisationDetails || null,
+          isTransportRequired: Boolean(order.isTransportRequired),
+          deliveryAddress: order.deliveryAddress,
+          transportCharges: order.transportCharges || 0,
           hasPacket: Boolean(item.hasPacket),
         };
 
@@ -1232,6 +1284,14 @@ export default function PackingPortalClient() {
                                     </span>
                                   </div>
                                   <p className="text-[11px] text-slate-500 mt-0.5">{ord.customerName}</p>
+                                  {ord.customerMobile && (
+                                    <a
+                                      href={`tel:${ord.customerMobile}`}
+                                      className="text-[10px] text-slate-500 hover:text-violet-700 flex items-center gap-1 font-medium w-fit mt-0.5"
+                                    >
+                                      <Phone size={9} /> {ord.customerMobile}
+                                    </a>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                   <span className="font-mono font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded border border-violet-100">
@@ -1256,6 +1316,14 @@ export default function PackingPortalClient() {
                                   </button>
                                 </div>
                               </div>
+
+                              {/* Transport Badge if applicable */}
+                              {ord.isTransportRequired && (
+                                <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 text-[10px] font-bold">
+                                  <Truck size={10} className="text-teal-600 shrink-0" />
+                                  <span className="truncate max-w-[180px]">Dest: {ord.deliveryAddress || 'Transport Delivery'}</span>
+                                </div>
+                              )}
 
                               {/* Customisation Badge if applicable */}
                               {ord.isCustomisation && ord.customisationDetails && (
@@ -1283,12 +1351,25 @@ export default function PackingPortalClient() {
                                   </div>
                                   {ord.customisationDetails.boxImageUrl && (
                                     <div className="pt-1 flex items-center gap-2">
-                                      <img
-                                        src={ord.customisationDetails.boxImageUrl}
-                                        alt="Custom Box"
-                                        className="w-8 h-8 rounded border border-amber-300 object-cover shadow-2xs"
-                                      />
-                                      <span className="text-[10px] text-amber-800 font-semibold">Custom Design</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewImage(ord.customisationDetails!.boxImageUrl!)}
+                                        className="cursor-pointer group"
+                                        title="Click to view custom artwork"
+                                      >
+                                        <img
+                                          src={ord.customisationDetails.boxImageUrl}
+                                          alt="Custom Box"
+                                          className="w-8 h-8 rounded border border-amber-300 object-cover shadow-2xs group-hover:scale-105 transition-transform"
+                                        />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewImage(ord.customisationDetails!.boxImageUrl!)}
+                                        className="text-[10px] text-amber-800 font-semibold hover:underline cursor-pointer flex items-center gap-1"
+                                      >
+                                        <Eye size={10} /> View Design
+                                      </button>
                                     </div>
                                   )}
                                 </div>
@@ -1466,6 +1547,19 @@ export default function PackingPortalClient() {
                                       </span>
                                     </div>
                                     <p className="text-slate-500 text-[10px] truncate">{ord.customerName}</p>
+                                    {ord.customerMobile && (
+                                      <a
+                                        href={`tel:${ord.customerMobile}`}
+                                        className="text-[9px] text-slate-500 hover:text-violet-700 flex items-center gap-0.5 font-medium"
+                                      >
+                                        <Phone size={8} /> {ord.customerMobile}
+                                      </a>
+                                    )}
+                                    {ord.isTransportRequired && (
+                                      <p className="text-teal-800 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200 text-[9px] font-bold truncate">
+                                        🚚 {ord.deliveryAddress || 'Transport Delivery'}
+                                      </p>
+                                    )}
                                     {ord.packingDescription && (
                                       <p className="text-orange-900 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200 text-[10px]">
                                         <strong>Note:</strong> {ord.packingDescription}
@@ -1497,28 +1591,645 @@ export default function PackingPortalClient() {
           ) : (
             <div className="divide-y divide-slate-100">
               {filteredOrderWiseList.map((order) => {
+                const isCustom = Boolean(order.isCustomisation);
+                const isTransport = Boolean(order.isTransportRequired);
+                const isCustomOrTransport = isCustom || isTransport;
+
+                // STRICT: An order is only enabled for packing actions if status is from "Moved to Packing" onwards
+                const isOrderReadyForPacking = isOrderFromMovedToPacking(order.orderStatus) && order.orderStatus !== 'Moved to Store';
+
+                // Precompute financial & customisation charges
+                const totalBoxes = order.customisationDetails?.noOfBoxes || order.noOfBoxes || 1;
+                const boxCharges = order.boxChargesTotal ?? ((order.customisationDetails?.boxPrice || 0) * totalBoxes);
+                const stickerCharges = order.stickerChargesTotal ?? (order.customisationDetails?.hasSticker ? (order.customisationDetails?.stickerPrice || 0) * totalBoxes : 0);
+                const shrinkCharges = order.shrinkChargesTotal ?? (order.customisationDetails?.hasShrink ? (order.customisationDetails?.shrinkPrice || 0) * totalBoxes : 0);
+                const packingBoxCharges = order.customPackingBoxesTotal ?? ((order.customisationDetails?.packingBoxesCount || 0) * (order.customisationDetails?.packingBoxPrice || order.globalPackingBoxPrice || 0));
+                const packetCharges = order.packetChargesTotal || 0;
+                const packagingTotalCharges = boxCharges + stickerCharges + shrinkCharges + packingBoxCharges + packetCharges + (order.packingCharges || 0);
+                const transportCharges = order.transportCharges || 0;
+                const balanceDue = Math.max(0, (order.totalAmount || 0) - (order.receivedAmount || 0));
+                const orderRemarks = (order as any).remarks || (order as any).notes || (order as any).specialInstructions;
+
+                if (isCustomOrTransport) {
+                  return (
+                    <div
+                      key={order.id}
+                      className={`p-5 md:p-6 transition-all border-b border-slate-200 space-y-4 ${
+                        isOrderReadyForPacking
+                          ? 'bg-gradient-to-b from-white via-white to-slate-50/70 hover:to-slate-50'
+                          : 'bg-slate-100/70 border-dashed border-slate-300 opacity-80'
+                      }`}
+                    >
+                      {/* READINESS / ACTIONABLE STATUS BANNER */}
+                      {!isOrderReadyForPacking ? (
+                        <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs shadow-2xs">
+                          <div className="flex items-center gap-2.5">
+                            <Clock size={16} className="text-amber-600 shrink-0 animate-pulse" />
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-extrabold uppercase tracking-wider text-[10px] text-amber-800">
+                                  Disabled — Not Ready for Packing
+                                </span>
+                                <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-amber-200 text-amber-900 border border-amber-300">
+                                  Current Status: {order.orderStatus}
+                                </span>
+                              </div>
+                              <p className="text-slate-700 text-xs mt-0.5">
+                                Order must reach <strong>&quot;Moved to Packing&quot;</strong> status before packing actions are enabled.
+                              </p>
+                            </div>
+                          </div>
+                          <span className="px-2.5 py-1 rounded-md bg-amber-200/80 text-amber-900 text-[10px] font-black uppercase flex items-center gap-1 shrink-0">
+                            <Lock size={11} /> Actions Disabled
+                          </span>
+                        </div>
+                      ) : order.orderStatus === 'Packing Started' ? (
+                        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-950 text-xs font-semibold">
+                          <Play size={13} className="text-violet-600 fill-violet-600 shrink-0" />
+                          <span><strong>Packing In Progress:</strong> Order is currently being packed for dispatch.</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs font-semibold">
+                          <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                          <span><strong>Ready for Packing:</strong> Status is &quot;Moved to Packing&quot;. All packing actions are enabled.</span>
+                        </div>
+                      )}
+
+                      {/* 1. TOP HEADER STRIP */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <span className="font-mono font-extrabold text-sm text-violet-700 bg-violet-50 px-3 py-1 rounded-lg border border-violet-200 shadow-2xs">
+                            {order.code}
+                          </span>
+
+                          {isCustom && (
+                            <span className="text-xs font-extrabold px-3 py-1 rounded-lg bg-amber-100/80 text-amber-950 border border-amber-300 flex items-center gap-1.5 shadow-2xs">
+                              <Boxes size={14} className="text-amber-700" />
+                              Customisation Order ({totalBoxes} {totalBoxes === 1 ? 'Box' : 'Boxes'})
+                            </span>
+                          )}
+
+                          {isTransport && (
+                            <span className="text-xs font-extrabold px-3 py-1 rounded-lg bg-teal-100/80 text-teal-950 border border-teal-300 flex items-center gap-1.5 shadow-2xs">
+                              <Truck size={14} className="text-teal-700" />
+                              Transport Dispatch Required
+                            </span>
+                          )}
+
+                          {isWholesaleOrder(order) && (
+                            <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200">
+                              Wholesale B2B
+                            </span>
+                          )}
+
+                          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                            {order.customerType || 'Retail Customer'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {isOrderReadyForPacking ? (
+                            <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-800 border border-slate-200">
+                              Overall Status: <strong className="text-violet-700">{order.orderStatus}</strong>
+                            </span>
+                          ) : (
+                            <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5">
+                              <Lock size={12} className="text-amber-700" />
+                              Awaiting Kitchen ({order.orderStatus})
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            disabled={!isOrderReadyForPacking}
+                            onClick={() => {
+                              const currentUnit = (order as any).packingUnitOverride || (order.items?.[0] as any)?.packingUnitOverride || (order.items?.[0] as any)?.packingUnitName || 'General Packing';
+                              setSwitchModalData({
+                                isOpen: true,
+                                orderId: order.id,
+                                orderCode: order.code,
+                                targetType: 'order',
+                                currentUnitName: currentUnit,
+                              });
+                            }}
+                            className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 shadow-2xs ${
+                              isOrderReadyForPacking
+                                ? 'bg-teal-50 hover:bg-teal-100 text-[#02626D] border-teal-200 cursor-pointer'
+                                : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                            }`}
+                            title={isOrderReadyForPacking ? "Switch entire order to another packing unit (Requires OTP)" : "Order not ready for packing yet"}
+                          >
+                            <ArrowRightLeft size={13} />
+                            <span>Send to other unit</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 2. ORDER CORE INFO GRID: Customer & Delivery Scheduling */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {/* Customer Information Card */}
+                        <div className="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs space-y-1.5">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                            <User size={12} className="text-slate-500" /> Customer Information
+                          </p>
+                          <h4 className="text-sm font-bold text-slate-900">{order.customerName}</h4>
+                          <div className="flex items-center gap-2 text-xs">
+                            <a
+                              href={`tel:${order.customerMobile}`}
+                              className="font-bold text-violet-700 hover:text-violet-900 hover:underline flex items-center gap-1 bg-violet-50 px-2 py-0.5 rounded-md border border-violet-100"
+                              title="Call customer"
+                            >
+                              <Phone size={12} /> {order.customerMobile || 'No phone'}
+                            </a>
+                          </div>
+                          {order.customerAddress && (
+                            <p className="text-[11px] text-slate-500 line-clamp-2">
+                              <strong>Registered / Bill Address:</strong> {order.customerAddress}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Timing & Schedule Card */}
+                        <div className="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs space-y-1.5">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                            <Calendar size={12} className="text-slate-500" /> Schedule & Timing
+                          </p>
+                          <div className="space-y-1 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500">Delivery Slot:</span>
+                              <span className="font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1">
+                                <Clock size={11} className="text-amber-600" /> {order.slot || 'Regular Slot'}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500">Exp. Delivery Date:</span>
+                              <span className="font-bold text-slate-800">{order.expectedDeliveryDate || order.orderDate || 'Today'}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="text-slate-400">Order Placed:</span>
+                              <span className="font-medium text-slate-600">{order.orderDate} {order.orderTime ? `(${order.orderTime})` : ''}</span>
+                            </div>
+                            {order.manufacturingDate && (
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-slate-400">Mfg Cooking Date:</span>
+                                <span className="font-medium text-slate-600">{order.manufacturingDate}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Transport Dispatch Card */}
+                        <div className={`p-3.5 rounded-xl border shadow-2xs space-y-1.5 ${
+                          isTransport
+                            ? 'bg-teal-50/70 border-teal-300'
+                            : 'bg-white border-slate-200/90'
+                        }`}>
+                          <p className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 text-teal-900">
+                            <Truck size={12} className="text-teal-700" /> Transport &amp; Delivery Logistics
+                          </p>
+                          {isTransport ? (
+                            <div className="space-y-1.5 text-xs">
+                              <div className="flex items-start gap-1.5">
+                                <MapPin size={15} className="text-teal-700 shrink-0 mt-0.5" />
+                                <div>
+                                  <p className="text-[10px] font-bold text-teal-800 uppercase">Destination Delivery Address</p>
+                                  <p className="font-extrabold text-teal-950 text-xs leading-snug">
+                                    {order.deliveryAddress || 'No destination address specified'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="pt-1 border-t border-teal-200/80 flex items-center justify-between">
+                                <span className="text-teal-800 font-semibold text-[11px]">Transport Charges:</span>
+                                <span className="font-extrabold text-teal-950 font-mono">₹{transportCharges}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-xs space-y-1">
+                              <span className="font-bold text-slate-700">In-Store Customer Pickup</span>
+                              <p className="text-[11px] text-slate-500">Customer will collect the packaged order at store counter.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 3. FULL CUSTOMISATION ORDER SPECIFICATIONS PANEL */}
+                      {isCustom && (
+                        <div className="p-4 rounded-xl bg-gradient-to-r from-amber-50/95 to-orange-50/70 border border-amber-200 shadow-2xs space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="p-1 rounded-md bg-amber-200 text-amber-900">
+                                <Boxes size={16} />
+                              </span>
+                              <div>
+                                <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider">
+                                  Full Customisation Specifications
+                                </h4>
+                                <p className="text-[11px] text-amber-900/80">Packaging material &amp; branding requirements</p>
+                              </div>
+                            </div>
+                            <span className="text-xs font-black px-3 py-1 rounded-lg bg-amber-200 text-amber-950 border border-amber-300 shadow-2xs">
+                              📦 Total Custom Boxes: {totalBoxes}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
+                            {/* Box Type */}
+                            <div className="bg-white/90 p-2.5 rounded-lg border border-amber-200 space-y-0.5">
+                              <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Box Type &amp; Rate</p>
+                              <p className="font-extrabold text-slate-800">{order.customisationDetails?.boxType || 'Standard Custom Box'}</p>
+                              <p className="text-[11px] text-slate-600 font-mono">
+                                @ ₹{order.customisationDetails?.boxPrice || 0} = <strong className="text-slate-900">₹{boxCharges}</strong>
+                              </p>
+                            </div>
+
+                            {/* Sticker */}
+                            <div className="bg-white/90 p-2.5 rounded-lg border border-amber-200 space-y-0.5">
+                              <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Sticker Specification</p>
+                              <p className="font-extrabold text-slate-800">
+                                {order.customisationDetails?.hasSticker
+                                  ? (order.customisationDetails.stickerType || 'Custom Sticker')
+                                  : 'No Sticker'}
+                              </p>
+                              <p className="text-[11px] text-slate-600 font-mono">
+                                {order.customisationDetails?.hasSticker ? `@ ₹${order.customisationDetails?.stickerPrice || 0} = ₹${stickerCharges}` : 'None'}
+                              </p>
+                            </div>
+
+                            {/* Shrink Wrap */}
+                            <div className="bg-white/90 p-2.5 rounded-lg border border-amber-200 space-y-0.5">
+                              <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Shrink Wrap Spec</p>
+                              <p className="font-extrabold text-slate-800">
+                                {order.customisationDetails?.hasShrink
+                                  ? (order.customisationDetails.shrinkType || 'Shrink Wrap')
+                                  : 'No Shrink Wrap'}
+                              </p>
+                              <p className="text-[11px] text-slate-600 font-mono">
+                                {order.customisationDetails?.hasShrink ? `@ ₹${order.customisationDetails?.shrinkPrice || 0} = ₹${shrinkCharges}` : 'None'}
+                              </p>
+                            </div>
+
+                            {/* Master Packing Boxes */}
+                            <div className="bg-white/90 p-2.5 rounded-lg border border-amber-200 space-y-0.5">
+                              <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Master Outer Boxes</p>
+                              <p className="font-extrabold text-slate-800">
+                                {order.customisationDetails?.packingBoxesCount || 0} Boxes
+                              </p>
+                              <p className="text-[11px] text-slate-600 font-mono">
+                                @ ₹{order.customisationDetails?.packingBoxPrice || order.globalPackingBoxPrice || 0} = <strong className="text-slate-900">₹{packingBoxCharges}</strong>
+                              </p>
+                            </div>
+
+                            {/* Packet Charges */}
+                            <div className="bg-white/90 p-2.5 rounded-lg border border-amber-200 space-y-0.5">
+                              <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Packet Charges</p>
+                              <p className="font-extrabold text-slate-800">🛍️ Items Total</p>
+                              <p className="text-[11px] text-slate-600 font-mono">
+                                Total: <strong className="text-slate-900">₹{packetCharges}</strong>
+                              </p>
+                            </div>
+
+                            {/* Box Artwork Preview Thumbnail */}
+                            <div className="bg-white/90 p-2.5 rounded-lg border border-amber-200 flex flex-col justify-between">
+                              <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Custom Box Artwork</p>
+                              {order.customisationDetails?.boxImageUrl ? (
+                                <div className="flex items-center gap-2 pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewImage(order.customisationDetails!.boxImageUrl!)}
+                                    className="relative group cursor-pointer"
+                                    title="Click to view full box artwork"
+                                  >
+                                    <img
+                                      src={order.customisationDetails.boxImageUrl}
+                                      alt="Box Design"
+                                      className="w-10 h-10 rounded border border-amber-300 object-cover shadow-2xs group-hover:scale-105 transition-transform"
+                                    />
+                                    <div className="absolute inset-0 bg-black/30 rounded opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                                      <Eye size={12} />
+                                    </div>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewImage(order.customisationDetails!.boxImageUrl!)}
+                                    className="text-[11px] font-bold text-violet-700 hover:underline flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Eye size={12} /> View Artwork
+                                  </button>
+                                </div>
+                              ) : (
+                                <p className="text-slate-400 text-[11px] italic">No image uploaded</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 4. FINANCIAL & BILLING BREAKDOWN STRIP */}
+                      <div className="p-3.5 rounded-xl bg-slate-900 text-white shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-4 flex-wrap">
+                          <div>
+                            <span className="text-slate-400 text-[10px] uppercase font-bold">Items Subtotal</span>
+                            <p className="font-mono font-bold text-slate-200">₹{order.subTotal || 0}</p>
+                          </div>
+                          {packagingTotalCharges > 0 && (
+                            <div>
+                              <span className="text-slate-400 text-[10px] uppercase font-bold">Packaging / Custom Charges</span>
+                              <p className="font-mono font-bold text-amber-400">+₹{packagingTotalCharges}</p>
+                            </div>
+                          )}
+                          {transportCharges > 0 && (
+                            <div>
+                              <span className="text-slate-400 text-[10px] uppercase font-bold">Transport</span>
+                              <p className="font-mono font-bold text-teal-400">+₹{transportCharges}</p>
+                            </div>
+                          )}
+                          {Number(order.discountAmount || 0) > 0 && (
+                            <div>
+                              <span className="text-slate-400 text-[10px] uppercase font-bold">Discount</span>
+                              <p className="font-mono font-bold text-emerald-400">-₹{order.discountAmount}</p>
+                            </div>
+                          )}
+                          {Number(order.tax || 0) > 0 && (
+                            <div>
+                              <span className="text-slate-400 text-[10px] uppercase font-bold">Tax / GST</span>
+                              <p className="font-mono font-bold text-slate-300">+₹{order.tax}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-4 flex-wrap">
+                          <div>
+                            <span className="text-slate-400 text-[10px] uppercase font-bold">Grand Total</span>
+                            <p className="font-mono font-extrabold text-sm text-white">₹{order.totalAmount || 0}</p>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 text-[10px] uppercase font-bold">Advance / Paid</span>
+                            <p className="font-mono font-bold text-emerald-400">₹{order.receivedAmount || 0}</p>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 text-[10px] uppercase font-bold">Balance Due</span>
+                            <p className={`font-mono font-black text-sm ${balanceDue > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              ₹{balanceDue}
+                            </p>
+                          </div>
+                          <div className="pl-2 border-l border-slate-800 flex items-center gap-1.5">
+                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                              order.paymentStatus === 'Paid'
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : order.paymentStatus === 'Partial'
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                            }`}>
+                              {order.paymentStatus || 'Pending'} ({order.paymentMode || 'UPI'})
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 5. ORDER REMARKS / SPECIAL INSTRUCTIONS BANNER */}
+                      {orderRemarks && (
+                        <div className="p-3 rounded-xl bg-orange-50 border border-orange-200 text-xs text-orange-950 flex items-start gap-2">
+                          <FileText size={15} className="text-orange-600 shrink-0 mt-0.5" />
+                          <div>
+                            <strong className="font-bold uppercase tracking-wider text-[10px] text-orange-800">
+                              Order Special Instructions / Remarks:
+                            </strong>
+                            <p className="font-medium text-slate-800 mt-0.5">{orderRemarks}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 6. COMPLETE ITEMS CHECKLIST FOR THIS ORDER */}
+                      <div className="bg-slate-50/90 rounded-xl p-4 border border-slate-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <Package size={14} className="text-violet-600" />
+                            Order Items &amp; Packing Checklist ({order.items?.length || 0} Total Items)
+                          </h4>
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            Verify quantities &amp; packing notes before dispatch
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                          {order.items?.map((item, idx) => {
+                            const key = (item.itemName || '').toLowerCase().trim();
+                            const masterInfo = itemInfoMap.get(key);
+                            const pckUnit = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
+                            const effectiveUnit = getEffectivePackingUnitName(order, item, pckUnit, pckUnits);
+
+                            const itemMfgStatus = item.mfgStatus || (
+                              isOrderReadyForPacking
+                                ? 'Moved to Packing'
+                                : 'Pending'
+                            );
+
+                            const itemPckStatus = item.pckStatus || (
+                              order.orderStatus === 'Moved to Store'
+                                ? 'Moved to Store'
+                                : order.orderStatus === 'Packing Started'
+                                ? 'Packing Started'
+                                : 'Pending'
+                            );
+
+                            const isMfgReady = isOrderReadyForPacking && (
+                              itemMfgStatus === 'Moved to Packing' ||
+                              itemMfgStatus === 'Not Required' ||
+                              item.needsManufacturing === false
+                            );
+                            const isMovedToStore = itemPckStatus === 'Moved to Store';
+                            const isUpdatingSingle = updatingId === `${order.id}_${item.itemName}`;
+
+                            return (
+                              <div
+                                key={idx}
+                                className={`rounded-xl p-3 border text-xs space-y-2 flex flex-col justify-between transition-all ${
+                                  isMovedToStore
+                                    ? 'bg-emerald-50/50 border-emerald-200'
+                                    : !isMfgReady
+                                    ? 'bg-amber-50/40 border-amber-200/80'
+                                    : 'bg-white border-slate-200 shadow-2xs'
+                                }`}
+                              >
+                                <div className="space-y-1.5">
+                                  {/* Item Name & Quantity */}
+                                  <div className="flex justify-between items-start font-bold text-slate-900 gap-2">
+                                    <div className="min-w-0">
+                                      <p className="font-extrabold truncate" title={item.itemName}>{item.itemName}</p>
+                                      <p className="text-[10px] text-slate-400 font-mono font-normal">
+                                        {item.itemCode || 'ITEM'} • {item.category || 'General'}
+                                      </p>
+                                    </div>
+                                    <span className="font-mono font-black text-sm text-violet-700 whitespace-nowrap">
+                                      {item.quantity} {item.unit}
+                                    </span>
+                                  </div>
+
+                                  {/* Pricing & Packet line */}
+                                  <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
+                                    <span>Rate: ₹{item.unitPrice}/{item.unit}</span>
+                                    <span className="font-bold text-slate-700 font-mono">₹{item.lineTotal}</span>
+                                  </div>
+
+                                  {/* Badges strip: Packet & Unit */}
+                                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                    <span className="text-[9.5px] text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                      <Building2 size={10} className="text-violet-600" /> {effectiveUnit}
+                                    </span>
+                                    {item.hasPacket && (
+                                      <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-md border border-emerald-300">
+                                        🛍️ Packet Required {item.packetCharge ? `(₹${item.packetCharge})` : ''}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Cooking & Packing Status Badges */}
+                                  <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-100">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-[9.5px] text-slate-400">Cooking:</span>
+                                      <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded ${
+                                        isMfgReady
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : itemMfgStatus === 'Manufacturing Started'
+                                          ? 'bg-orange-100 text-orange-800'
+                                          : 'bg-amber-100 text-amber-800'
+                                      }`}>
+                                        {itemMfgStatus}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-[9.5px] text-slate-400">Packing:</span>
+                                      <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded ${
+                                        isMovedToStore
+                                          ? 'bg-emerald-100 text-emerald-700'
+                                          : itemPckStatus === 'Packing Started'
+                                          ? 'bg-violet-100 text-violet-700'
+                                          : 'bg-slate-100 text-slate-700'
+                                      }`}>
+                                        {itemPckStatus}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Kitchen / Mfg Note if present */}
+                                  {item.manufacturingDescription && (
+                                    <p className="text-[11px] font-medium text-amber-950 bg-amber-50 px-2 py-1 rounded-md border border-amber-200">
+                                      🍳 <strong>Kitchen Note:</strong> {item.manufacturingDescription}
+                                    </p>
+                                  )}
+
+                                  {/* Packing Note if present */}
+                                  {item.packingDescription && (
+                                    <p className="text-[11px] font-medium text-orange-950 bg-orange-50 px-2 py-1 rounded-md border border-orange-200">
+                                      📦 <strong>Packing Note:</strong> {item.packingDescription}
+                                    </p>
+                                  )}
+                                </div>
+
+                                {/* Item Actions */}
+                                <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                                  {isMovedToStore ? (
+                                    <div className="py-1 text-[11px] font-extrabold text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2.5 rounded-lg border border-emerald-200 w-full justify-center">
+                                      <CheckCircle2 size={13} /> Packed &amp; Moved to Store
+                                    </div>
+                                  ) : !isOrderReadyForPacking ? (
+                                    <div className="w-full text-center py-1.5 text-[11px] font-semibold text-slate-500 bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center gap-1.5 cursor-not-allowed">
+                                      <Lock size={12} className="text-slate-400" /> Actions Disabled (Awaiting Packing Stage)
+                                    </div>
+                                  ) : isMfgReady ? (
+                                    <>
+                                      <button
+                                        disabled={isUpdatingSingle}
+                                        onClick={() => handleSingleItemPckStatusUpdate(order.id, item.itemName, 'Packing Started')}
+                                        className="flex-1 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                                      >
+                                        {isUpdatingSingle ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />} Start
+                                      </button>
+
+                                      <button
+                                        disabled={isUpdatingSingle}
+                                        onClick={() => handleSingleItemPckStatusUpdate(order.id, item.itemName, 'Moved to Store')}
+                                        className="flex-1 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                                      >
+                                        {isUpdatingSingle ? <Loader2 size={11} className="animate-spin" /> : <Store size={11} />} Complete
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSwitchModalData({
+                                            isOpen: true,
+                                            orderId: order.id,
+                                            orderCode: order.code,
+                                            targetType: 'item',
+                                            itemName: item.itemName,
+                                            currentUnitName: effectiveUnit,
+                                          });
+                                        }}
+                                        className="p-1.5 text-slate-400 hover:text-[#02626D] hover:bg-teal-50 rounded-lg transition-colors cursor-pointer border border-slate-200 hover:border-teal-200"
+                                        title={`Send ${item.itemName} to another packing unit (Requires OTP)`}
+                                      >
+                                        <ArrowRightLeft size={13} />
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <div className="w-full text-center py-1 text-[11px] font-semibold text-amber-800 bg-amber-50 rounded-lg border border-amber-200">
+                                      ⏳ Awaiting Cooking Completion in Kitchen
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Standard non-customisation and non-transport order card
                 return (
-                  <div key={order.id} className="p-5 hover:bg-slate-50/50 transition-colors space-y-3">
+                  <div
+                    key={order.id}
+                    className={`p-5 transition-colors space-y-3 border-b border-slate-200 ${
+                      isOrderReadyForPacking
+                        ? 'hover:bg-slate-50/50 bg-white'
+                        : 'bg-slate-100/70 border-dashed border-slate-300 opacity-80'
+                    }`}
+                  >
+                    {/* Readiness Banner for standard order */}
+                    {!isOrderReadyForPacking && (
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs">
+                        <div className="flex items-center gap-2">
+                          <Clock size={15} className="text-amber-600 shrink-0 animate-pulse" />
+                          <span>
+                            <strong>Disabled — Not Ready for Packing:</strong> Current status is <u>{order.orderStatus}</u>. Order must reach &quot;Moved to Packing&quot; status before actions can be enabled.
+                          </span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-amber-200/80 text-amber-900 text-[10px] font-bold uppercase flex items-center gap-1 shrink-0">
+                          <Lock size={10} /> Disabled
+                        </span>
+                      </div>
+                    )}
+
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5 flex-wrap">
                         <span className="font-mono font-bold text-xs text-violet-700 bg-violet-50 px-2.5 py-1 rounded-lg border border-violet-100">
                           {order.code}
                         </span>
                         <h3 className="text-sm font-bold text-slate-900">{order.customerName}</h3>
+                        {order.customerMobile && (
+                          <a
+                            href={`tel:${order.customerMobile}`}
+                            className="text-xs text-slate-500 hover:text-violet-700 flex items-center gap-1 font-medium"
+                          >
+                            <Phone size={11} /> {order.customerMobile}
+                          </a>
+                        )}
                         <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1.5 shadow-2xs">
                           <Clock size={13} className="text-amber-600 shrink-0" />
                           <span>Slot: {order.slot || 'Regular Slot'}</span>
                         </span>
-                        {order.isCustomisation && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
-                            Customisation
-                          </span>
-                        )}
-                        {order.isTransportRequired && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
-                            Transport
-                          </span>
-                        )}
                         {isWholesaleOrder(order) && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
                             Wholesale B2B
@@ -1527,11 +2238,18 @@ export default function PackingPortalClient() {
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
-                          Overall Status: {order.orderStatus}
-                        </span>
+                        {isOrderReadyForPacking ? (
+                          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                            Overall Status: {order.orderStatus}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                            <Lock size={11} /> Awaiting Kitchen ({order.orderStatus})
+                          </span>
+                        )}
                         <button
                           type="button"
+                          disabled={!isOrderReadyForPacking}
                           onClick={() => {
                             const currentUnit = (order as any).packingUnitOverride || (order.items?.[0] as any)?.packingUnitOverride || (order.items?.[0] as any)?.packingUnitName || 'General Packing';
                             setSwitchModalData({
@@ -1542,82 +2260,18 @@ export default function PackingPortalClient() {
                               currentUnitName: currentUnit,
                             });
                           }}
-                          className="px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-[#02626D] text-xs font-bold border border-teal-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                          title="Switch entire order to another packing unit (Requires OTP authorization)"
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 shadow-2xs ${
+                            isOrderReadyForPacking
+                              ? 'bg-teal-50 hover:bg-teal-100 text-[#02626D] border-teal-200 cursor-pointer'
+                              : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                          }`}
+                          title={isOrderReadyForPacking ? "Switch entire order to another packing unit" : "Order not ready for packing yet"}
                         >
                           <ArrowRightLeft size={13} />
                           <span>Send to other unit</span>
                         </button>
                       </div>
                     </div>
-
-                    {/* Customisation Box Banner if present */}
-                    {order.isCustomisation && order.customisationDetails && (
-                      <div className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-200/90 shadow-2xs space-y-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="p-1 rounded-md bg-amber-200/70 text-amber-900">
-                              <Boxes size={14} />
-                            </span>
-                            <span className="text-xs font-extrabold text-amber-950 uppercase tracking-wider">
-                              Customisation Order Details
-                            </span>
-                          </div>
-                          <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-950 border border-amber-300">
-                            📦 {order.customisationDetails.noOfBoxes} {order.customisationDetails.noOfBoxes === 1 ? 'Box' : 'Boxes'}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-white/80 p-2.5 rounded-lg border border-amber-200/70">
-                          <div>
-                            <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Box Type</p>
-                            <p className="font-extrabold text-slate-800">{order.customisationDetails.boxType || 'Standard Box'}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Sticker</p>
-                            <p className="font-extrabold text-slate-800">
-                              {order.customisationDetails.hasSticker ? (order.customisationDetails.stickerType || 'Yes (Custom Sticker)') : 'No'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Shrink Wrap</p>
-                            <p className="font-extrabold text-slate-800">
-                              {order.customisationDetails.hasShrink ? (order.customisationDetails.shrinkType || 'Yes (Shrink Wrap)') : 'No'}
-                            </p>
-                          </div>
-                          {order.customisationDetails.boxImageUrl && (
-                            <div className="flex items-center gap-2">
-                              <img
-                                src={order.customisationDetails.boxImageUrl}
-                                alt="Custom Box"
-                                className="w-9 h-9 rounded-md border border-amber-300 object-cover shadow-2xs"
-                              />
-                              <div>
-                                <p className="text-[10px] text-amber-900/70 font-bold uppercase tracking-wider">Box Preview</p>
-                                <p className="text-[11px] font-bold text-amber-900">Custom Box</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Transport Details Banner if present */}
-                    {order.isTransportRequired && (
-                      <div className="p-3 rounded-xl bg-teal-50/90 border border-teal-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-teal-800">🚚</span>
-                          <span className="text-xs font-extrabold text-teal-950 uppercase tracking-wider">
-                            Transport &amp; Delivery Logistics
-                          </span>
-                        </div>
-                        {order.deliveryAddress && (
-                          <span className="text-xs font-semibold text-teal-900">
-                            <strong className="text-teal-950">Destination:</strong> {order.deliveryAddress}
-                          </span>
-                        )}
-                      </div>
-                    )}
 
                     {/* Items List for this order */}
                     <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-200/80">
@@ -1634,8 +2288,9 @@ export default function PackingPortalClient() {
                           const pckUnit = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
                           const effectiveUnit = getEffectivePackingUnitName(order, item, pckUnit, pckUnits);
 
+                          const isWholesale = isWholesaleOrder(order);
                           const itemMfgStatus = item.mfgStatus || (
-                            order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
+                            order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store' || isWholesale
                               ? 'Moved to Packing'
                               : 'Pending'
                           );
@@ -1648,9 +2303,7 @@ export default function PackingPortalClient() {
                               : 'Pending'
                           );
 
-                          // Only render items that have finished cooking and are not yet moved to store
-                          if (itemMfgStatus !== 'Moved to Packing') return null;
-
+                          const isMfgReady = isWholesale || itemMfgStatus === 'Moved to Packing' || itemMfgStatus === 'Not Required';
                           const isUpdatingSingle = updatingId === `${order.id}_${item.itemName}`;
                           const isMovedToStore = itemPckStatus === 'Moved to Store';
 
@@ -1684,7 +2337,6 @@ export default function PackingPortalClient() {
                                   </span>
                                 </div>
 
-                                {/* Packing Description / Notes */}
                                 {item.packingDescription && (
                                   <p className="text-[11px] font-medium text-orange-900 bg-orange-50/90 px-2 py-1 rounded-md border border-orange-200 flex items-start gap-1">
                                     <span>📦</span>
@@ -1693,9 +2345,16 @@ export default function PackingPortalClient() {
                                 )}
                               </div>
 
-                              {/* Action Row */}
                               <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
-                                {!isMovedToStore ? (
+                                {isMovedToStore ? (
+                                  <div className="pt-1 text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                                    <CheckCircle2 size={12} /> Moved to Store
+                                  </div>
+                                ) : !isOrderReadyForPacking ? (
+                                  <div className="w-full text-center py-1 text-[10px] font-semibold text-slate-400 bg-slate-100 rounded border border-slate-200 flex items-center justify-center gap-1 cursor-not-allowed">
+                                    <Lock size={10} className="text-slate-400" /> Actions Disabled
+                                  </div>
+                                ) : isMfgReady ? (
                                   <>
                                     <button
                                       disabled={isUpdatingSingle}
@@ -1712,33 +2371,31 @@ export default function PackingPortalClient() {
                                     >
                                       {isUpdatingSingle ? <Loader2 size={11} className="animate-spin" /> : <Store size={11} />} Complete
                                     </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSwitchModalData({
+                                          isOpen: true,
+                                          orderId: order.id,
+                                          orderCode: order.code,
+                                          targetType: 'item',
+                                          itemName: item.itemName,
+                                          currentUnitName: effectiveUnit,
+                                        });
+                                      }}
+                                      className="p-1.5 text-slate-400 hover:text-[#02626D] hover:bg-teal-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-teal-200"
+                                      title={`Send ${item.itemName} to another packing unit (Requires OTP)`}
+                                    >
+                                      <ArrowRightLeft size={13} />
+                                    </button>
                                   </>
                                 ) : (
-                                  <div className="pt-1 text-[10px] font-bold text-emerald-600 flex items-center gap-1">
-                                    <CheckCircle2 size={12} /> Moved to Store
+                                  <div className="w-full text-center py-1 text-[10px] font-semibold text-amber-800 bg-amber-50 rounded border border-amber-200">
+                                    ⏳ In Kitchen
                                   </div>
                                 )}
-
-                                {/* Switch Item Unit Button */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSwitchModalData({
-                                      isOpen: true,
-                                      orderId: order.id,
-                                      orderCode: order.code,
-                                      targetType: 'item',
-                                      itemName: item.itemName,
-                                      currentUnitName: effectiveUnit,
-                                    });
-                                  }}
-                                  className="p-1.5 text-slate-400 hover:text-[#02626D] hover:bg-teal-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-teal-200"
-                                  title={`Send ${item.itemName} to another packing unit (Requires OTP)`}
-                                >
-                                  <ArrowRightLeft size={13} />
-                                </button>
                               </div>
-
                             </div>
                           );
                         })}
@@ -1764,6 +2421,56 @@ export default function PackingPortalClient() {
         pckUnits={pckUnits}
         userEmail={employeeProfile ? `${employeeProfile.name} (${employeeProfile.empId || employeeProfile.mobile})` : 'Packing Portal Manager'}
       />
+
+      {/* Custom Box Artwork Zoom Preview Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="relative max-w-3xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-purple-100 text-purple-700">
+                  <Eye size={18} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">Custom Box Artwork / Design Reference</h4>
+                  <p className="text-xs text-slate-500">Visual specification for packing custom order</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-center bg-slate-50 rounded-xl p-3 max-h-[75vh] overflow-hidden border border-slate-200">
+              <img
+                src={previewImage}
+                alt="Custom Box Full Design"
+                className="max-h-[70vh] w-auto max-w-full object-contain rounded-lg shadow-sm"
+              />
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

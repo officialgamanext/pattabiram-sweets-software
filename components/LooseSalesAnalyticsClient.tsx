@@ -31,6 +31,7 @@ import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { LooseSaleRecord, useLooseSales } from '@/lib/looseSales';
 import CustomDatePicker from '@/components/CustomDatePicker';
 import { toast } from '@/context/ToastContext';
+import { useAuth } from '@/context/AuthContext';
 
 interface EmployeeMeta {
   id: string;
@@ -41,7 +42,18 @@ interface EmployeeMeta {
 }
 
 export default function LooseSalesAnalyticsClient() {
+  const { user, employeeProfile } = useAuth();
   const { sales, isLoading, error } = useLooseSales();
+
+  // Admin security check
+  const isAdmin = Boolean(
+    employeeProfile?.isSuperAdmin ||
+    (user?.email && !employeeProfile) ||
+    employeeProfile?.department === 'Management' ||
+    employeeProfile?.department === 'Admin' ||
+    (employeeProfile as any)?.role === 'Admin' ||
+    (employeeProfile as any)?.role === 'SuperAdmin'
+  );
 
   // Employee list from Firestore
   const [employees, setEmployees] = useState<EmployeeMeta[]>([]);
@@ -49,6 +61,32 @@ export default function LooseSalesAnalyticsClient() {
 
   // Selected Employee Filter (id or 'ALL')
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('ALL');
+
+  // Match logged-in employee profile
+  const loggedInEmployee = useMemo(() => {
+    if (!employeeProfile) return null;
+    return (
+      employees.find(
+        (e) =>
+          e.id === employeeProfile.id ||
+          (e.empId && e.empId === employeeProfile.empId) ||
+          e.name.toLowerCase().trim() === employeeProfile.name.toLowerCase().trim()
+      ) || {
+        id: employeeProfile.id,
+        empId: employeeProfile.empId || '',
+        name: employeeProfile.name,
+        department: employeeProfile.department || '',
+        role: employeeProfile.department || 'Staff',
+      }
+    );
+  }, [employeeProfile, employees]);
+
+  // If non-admin employee, lock to their own data
+  useEffect(() => {
+    if (!isAdmin && loggedInEmployee) {
+      setSelectedEmployeeId(loggedInEmployee.id);
+    }
+  }, [isAdmin, loggedInEmployee]);
 
   // Payment Mode, Date & Search Filters
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<string>('ALL');
@@ -91,9 +129,17 @@ export default function LooseSalesAnalyticsClient() {
   // Filtered sales
   const filteredSales = useMemo(() => {
     return sales.filter((s) => {
-      // Employee filter
-      if (selectedEmployeeId !== 'ALL' && s.employeeId !== selectedEmployeeId) {
-        return false;
+      // If non-admin employee, strictly display ONLY their own sales
+      if (!isAdmin) {
+        const isMyRecord =
+          (loggedInEmployee && (s.employeeId === loggedInEmployee.id || (loggedInEmployee.empId && s.employeeId === loggedInEmployee.empId))) ||
+          (employeeProfile && (s.employeeId === employeeProfile.id || s.employeeId === employeeProfile.empId || s.employeeName?.toLowerCase().trim() === employeeProfile.name?.toLowerCase().trim()));
+        if (!isMyRecord) return false;
+      } else {
+        // Admin: Employee filter
+        if (selectedEmployeeId !== 'ALL' && s.employeeId !== selectedEmployeeId) {
+          return false;
+        }
       }
       // Payment mode filter
       if (selectedPaymentMode !== 'ALL' && s.paymentMode !== selectedPaymentMode) {
@@ -114,7 +160,7 @@ export default function LooseSalesAnalyticsClient() {
       }
       return true;
     });
-  }, [sales, selectedEmployeeId, selectedPaymentMode, selectedDate, searchQuery]);
+  }, [sales, isAdmin, loggedInEmployee, employeeProfile, selectedEmployeeId, selectedPaymentMode, selectedDate, searchQuery]);
 
   // Aggregate Metrics for currently selected employee & date filter
   const metrics = useMemo(() => {
@@ -161,9 +207,10 @@ export default function LooseSalesAnalyticsClient() {
 
   // Active employee object
   const selectedEmployeeObj = useMemo(() => {
+    if (!isAdmin) return loggedInEmployee;
     if (selectedEmployeeId === 'ALL') return null;
     return employees.find((e) => e.id === selectedEmployeeId) || null;
-  }, [selectedEmployeeId, employees]);
+  }, [isAdmin, loggedInEmployee, selectedEmployeeId, employees]);
 
   // Paginated records
   const totalPages = Math.ceil(filteredSales.length / pageSize) || 1;
@@ -224,7 +271,9 @@ export default function LooseSalesAnalyticsClient() {
                 </span>
               </h1>
               <p className="text-xs text-slate-500">
-                Staff-wise loose counter transactions, Cash, UPI, and Card analytics
+                {isAdmin
+                  ? 'Staff-wise loose counter transactions, Cash, UPI, and Card analytics'
+                  : 'Your individual loose counter transactions, Cash, UPI, and Card analytics'}
               </p>
             </div>
           </div>
@@ -257,26 +306,36 @@ export default function LooseSalesAnalyticsClient() {
             {/* Left Controls: Employee Dropdown & Date Picker */}
             <div className="flex items-center gap-2.5 flex-wrap flex-1">
               
-              {/* Employee Selector Dropdown */}
-              <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 text-xs min-w-[240px]">
-                <Users size={14} className="text-[#02626D] shrink-0" />
-                <span className="text-[11px] font-bold text-slate-500 shrink-0">Staff:</span>
-                <select
-                  value={selectedEmployeeId}
-                  onChange={(e) => {
-                    setSelectedEmployeeId(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer w-full text-xs"
-                >
-                  <option value="ALL">All Staff Members ({employees.length})</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} {emp.department ? `(${emp.department})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Employee Selector: Dropdown for Admin, Locked Badge for Employee */}
+              {!isAdmin ? (
+                <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 text-xs">
+                  <User size={14} className="text-[#02626D] shrink-0" />
+                  <span className="text-[11px] font-bold text-slate-500 shrink-0">Staff Member:</span>
+                  <span className="font-bold text-slate-800 text-xs truncate">
+                    {loggedInEmployee?.name || employeeProfile?.name || 'My Sales'}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 text-xs min-w-[240px]">
+                  <Users size={14} className="text-[#02626D] shrink-0" />
+                  <span className="text-[11px] font-bold text-slate-500 shrink-0">Staff:</span>
+                  <select
+                    value={selectedEmployeeId}
+                    onChange={(e) => {
+                      setSelectedEmployeeId(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer w-full text-xs"
+                  >
+                    <option value="ALL">All Staff Members ({employees.length})</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} {emp.department ? `(${emp.department})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Date Picker */}
               <div className="w-44">
@@ -302,7 +361,7 @@ export default function LooseSalesAnalyticsClient() {
                 </button>
               )}
 
-              {selectedEmployeeId !== 'ALL' && (
+              {isAdmin && selectedEmployeeId !== 'ALL' && (
                 <button
                   onClick={() => {
                     setSelectedEmployeeId('ALL');

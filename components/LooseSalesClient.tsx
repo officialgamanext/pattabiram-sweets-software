@@ -108,6 +108,41 @@ export default function LooseSalesClient() {
     return () => unsub();
   }, []);
 
+  // Admin security check
+  const isAdmin = Boolean(
+    employeeProfile?.isSuperAdmin ||
+    (user?.email && !employeeProfile) ||
+    employeeProfile?.department === 'Management' ||
+    employeeProfile?.department === 'Admin' ||
+    (employeeProfile as any)?.role === 'Admin' ||
+    (employeeProfile as any)?.role === 'SuperAdmin'
+  );
+
+  // Match logged in employee profile
+  const loggedInEmployee = useMemo(() => {
+    if (!employeeProfile) return null;
+    return (
+      employees.find(
+        (e) =>
+          e.id === employeeProfile.id ||
+          (e.employeeId && e.employeeId === employeeProfile.empId) ||
+          e.name.toLowerCase().trim() === employeeProfile.name.toLowerCase().trim()
+      ) || {
+        id: employeeProfile.id,
+        name: employeeProfile.name,
+        role: employeeProfile.department || 'Staff',
+        employeeId: employeeProfile.empId || '',
+      }
+    );
+  }, [employeeProfile, employees]);
+
+  // Auto-select logged-in employee if non-admin
+  useEffect(() => {
+    if (!isAdmin && loggedInEmployee) {
+      setSelectedEmployeeId(loggedInEmployee.id);
+    }
+  }, [isAdmin, loggedInEmployee]);
+
   // Quick Amount presets
   const quickPresets = [10, 20, 50, 100, 200, 500, 1000];
   const handleQuickAdd = (val: number) => {
@@ -119,7 +154,11 @@ export default function LooseSalesClient() {
   const openNewModal = () => {
     setEditingSale(null);
     setAmount('');
-    setSelectedEmployeeId(employees[0]?.id || '');
+    if (!isAdmin && loggedInEmployee) {
+      setSelectedEmployeeId(loggedInEmployee.id);
+    } else {
+      setSelectedEmployeeId(employees[0]?.id || '');
+    }
     setPaymentMode('Cash');
     setSplitCash('');
     setSplitUpi('');
@@ -162,7 +201,11 @@ export default function LooseSalesClient() {
       return;
     }
 
-    const emp = employees.find((e) => e.id === selectedEmployeeId);
+    const emp =
+      employees.find((e) => e.id === selectedEmployeeId) ||
+      (loggedInEmployee
+        ? { id: loggedInEmployee.id, name: loggedInEmployee.name, role: loggedInEmployee.role }
+        : null);
     if (!emp) {
       toast.error('Please select an employee');
       return;
@@ -732,16 +775,25 @@ export default function LooseSalesClient() {
                     value={selectedEmployeeId}
                     onChange={(e) => setSelectedEmployeeId(e.target.value)}
                     required
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:bg-white transition max-h-[34px]"
+                    disabled={!isAdmin}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#02626D] focus:bg-white transition max-h-[34px] disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                   >
-                    <option value="" disabled>
-                      -- Choose Employee --
-                    </option>
-                    {employees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.name} {emp.role ? `(${emp.role})` : ''}
+                    {!isAdmin ? (
+                      <option value={loggedInEmployee?.id || employeeProfile?.id || ''}>
+                        {loggedInEmployee?.name || employeeProfile?.name || 'Staff Member'} {loggedInEmployee?.role ? `(${loggedInEmployee.role})` : ''}
                       </option>
-                    ))}
+                    ) : (
+                      <>
+                        <option value="" disabled>
+                          -- Choose Employee --
+                        </option>
+                        {employees.map((emp) => (
+                          <option key={emp.id} value={emp.id}>
+                            {emp.name} {emp.role ? `(${emp.role})` : ''}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
               </div>

@@ -31,6 +31,13 @@ import {
   ShoppingBag,
   Minus,
   Sparkles,
+  WalletCards,
+  ChevronDown,
+  ChevronRight,
+  Phone,
+  Receipt,
+  CreditCard,
+  TrendingUp,
 } from 'lucide-react';
 import Pagination from '@/components/Pagination';
 import CustomDatePicker from '@/components/CustomDatePicker';
@@ -89,12 +96,21 @@ export interface WholesalerOrderLineItem {
   pckStatus?: 'Pending' | 'Packing Started' | 'Moved to Store';
 }
 
+export interface PaymentEntry {
+  id: string;
+  amount: number;
+  mode: string;
+  note: string;
+  paidAt: string;
+}
+
 export interface WholesalerOrderRecord {
   id: string;
   orderId: string;
   wholesalerId: string;
   wholesalerName: string;
   wholesalerMobile: string;
+  companyName?: string;
   priceListName: string;
   orderDate?: string;
   manufacturingDate?: string;
@@ -109,10 +125,29 @@ export interface WholesalerOrderRecord {
   sgstPercent?: number;
   taxType?: 'inclusive' | 'exclusive';
   totalAmount: number;
+  receivedAmount?: number;
+  paymentMode?: string;
+  paymentStatus?: 'Paid' | 'Partial' | 'Pending';
+  payments?: PaymentEntry[];
   orderType: string;
   orderStatus?: string;
   status: 'Pending' | 'Approved' | 'Processing' | 'Delivered' | 'Cancelled';
   createdAt?: any;
+}
+
+export interface WholesalerCreditSummary {
+  key: string;
+  wholesalerId: string;
+  wholesalerName: string;
+  companyName: string;
+  wholesalerMobile: string;
+  totalOrdersCount: number;
+  pendingOrdersCount: number;
+  totalBilled: number;
+  totalPaid: number;
+  outstandingBalance: number;
+  latestOrderDate: string;
+  orders: WholesalerOrderRecord[];
 }
 
 const getTodayDateStr = () => {
@@ -165,6 +200,25 @@ export default function WholesalerOrdersClient() {
   const [mfgModalOrder, setMfgModalOrder] = useState<WholesalerOrderRecord | null>(null);
   const [mfgItemSelections, setMfgItemSelections] = useState<{ [itemId: string]: boolean }>({});
   const [isUpdatingMfg, setIsUpdatingMfg] = useState(false);
+
+  // Main Tab State: 'orders' | 'credit'
+  const [activeMainTab, setActiveMainTab] = useState<'orders' | 'credit'>('orders');
+
+  // Manage Order Payments & Installments Modal State
+  const [managingOrder, setManagingOrder] = useState<WholesalerOrderRecord | null>(null);
+  const [installmentAmount, setInstallmentAmount] = useState<string>('');
+  const [installmentMode, setInstallmentMode] = useState<string>('UPI');
+  const [installmentDate, setInstallmentDate] = useState<string>(getTodayDateStr());
+  const [installmentNote, setInstallmentNote] = useState<string>('');
+  const [isSavingInstallment, setIsSavingInstallment] = useState(false);
+  const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
+
+  // Credit Tab States
+  const [creditSearchQuery, setCreditSearchQuery] = useState('');
+  const [creditStatusFilter, setCreditStatusFilter] = useState<'All' | 'Pending' | 'Paid'>('Pending');
+  const [expandedWholesalerKey, setExpandedWholesalerKey] = useState<string | null>(null);
+  const [creditSortBy, setCreditSortBy] = useState<'due_desc' | 'due_asc' | 'name_asc'>('due_desc');
+  const [creditViewMode, setCreditViewMode] = useState<'wholesaler' | 'orders'>('wholesaler');
 
   // Load Wholesalers, Price Lists, Products & B2B Orders from Firestore
   useEffect(() => {
@@ -449,6 +503,10 @@ export default function WholesalerOrdersClient() {
         sgstPercent: modalTaxCalc.sgstPercent,
         taxType: modalTaxCalc.taxType,
         totalAmount: Number(modalTotal) || 0,
+        receivedAmount: 0,
+        paymentStatus: 'Pending',
+        paymentMode: 'Pending',
+        payments: [],
         orderType: 'Wholesaler B2B',
         orderStatus: hasMfgItems ? 'Moved to Manufacturing' : 'Order Created',
         status: hasMfgItems ? 'Approved' : 'Pending',
@@ -776,6 +834,278 @@ export default function WholesalerOrdersClient() {
     }
   };
 
+  // Open Manage Payment Modal for an Order
+  const handleOpenManagePayment = (order: WholesalerOrderRecord) => {
+    setManagingOrder(order);
+    const balanceDue = Math.max(0, (Number(order.totalAmount) || 0) - (Number(order.receivedAmount) || 0));
+    setInstallmentAmount(balanceDue > 0 ? String(balanceDue) : '');
+    setInstallmentMode(order.paymentMode && !order.paymentMode.includes('Pending') ? order.paymentMode : 'UPI');
+    setInstallmentDate(getTodayDateStr());
+    setInstallmentNote('');
+  };
+
+  // Submit Installment Payment
+  const handleRecordInstallment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!managingOrder) return;
+
+    const amt = parseFloat(installmentAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.warning('Invalid Amount', 'Please enter a valid installment payment amount.');
+      return;
+    }
+
+    const currentReceived = Number(managingOrder.receivedAmount) || 0;
+    const totalAmt = Number(managingOrder.totalAmount) || 0;
+    const balanceDue = Math.max(0, totalAmt - currentReceived);
+
+    if (amt > balanceDue + 0.01) {
+      toast.error(
+        'Amount Exceeds Due',
+        `Installment amount (₹${amt.toLocaleString('en-IN')}) cannot exceed remaining balance due of ₹${balanceDue.toLocaleString('en-IN')}.`
+      );
+      return;
+    }
+
+    try {
+      setIsSavingInstallment(true);
+      const newEntry: PaymentEntry = {
+        id: `inst-${Date.now()}`,
+        amount: amt,
+        mode: installmentMode,
+        note: installmentNote.trim() || `Installment payment`,
+        paidAt: installmentDate ? new Date(installmentDate).toISOString() : new Date().toISOString(),
+      };
+
+      const existingPayments = Array.isArray(managingOrder.payments)
+        ? [...managingOrder.payments]
+        : currentReceived > 0
+        ? [
+            {
+              id: 'initial-pay',
+              amount: currentReceived,
+              mode: managingOrder.paymentMode || 'Cash',
+              note: 'Initial payment',
+              paidAt: managingOrder.createdAt?.toDate ? managingOrder.createdAt.toDate().toISOString() : new Date().toISOString(),
+            },
+          ]
+        : [];
+
+      const updatedPayments = [...existingPayments, newEntry];
+      const newTotalReceived = Math.round((currentReceived + amt) * 100) / 100;
+      const isFullyPaid = newTotalReceived >= totalAmt - 0.01;
+      const newPaymentStatus: 'Paid' | 'Partial' | 'Pending' = isFullyPaid ? 'Paid' : 'Partial';
+
+      await updateDoc(doc(db, 'orders', managingOrder.id), {
+        receivedAmount: newTotalReceived,
+        paymentStatus: newPaymentStatus,
+        paymentMode: installmentMode,
+        payments: updatedPayments,
+        updatedAt: serverTimestamp(),
+      });
+
+      const updatedOrderRecord: WholesalerOrderRecord = {
+        ...managingOrder,
+        receivedAmount: newTotalReceived,
+        paymentStatus: newPaymentStatus,
+        paymentMode: installmentMode,
+        payments: updatedPayments,
+      };
+      setManagingOrder(updatedOrderRecord);
+
+      const remainingAfter = Math.max(0, totalAmt - newTotalReceived);
+      setInstallmentAmount(remainingAfter > 0 ? String(remainingAfter) : '');
+      setInstallmentNote('');
+
+      toast.success(
+        'Installment Recorded',
+        `Recorded ₹${amt.toLocaleString('en-IN')} payment for Order ${managingOrder.orderId}. ${
+          isFullyPaid ? 'Order is now fully settled!' : `Remaining balance: ₹${remainingAfter.toLocaleString('en-IN')}`
+        }`
+      );
+    } catch (err: any) {
+      console.error('Error recording payment installment:', err);
+      toast.error('Payment Failed', err?.message || 'Could not record installment payment.');
+    } finally {
+      setIsSavingInstallment(false);
+    }
+  };
+
+  // Void/Delete Installment
+  const handleDeleteInstallment = async (paymentId: string) => {
+    if (!managingOrder) return;
+    if (!confirm('Are you sure you want to remove this installment payment? The order balance will be recalculated.')) {
+      return;
+    }
+
+    try {
+      setDeletingPaymentId(paymentId);
+      const currentPayments = Array.isArray(managingOrder.payments) ? managingOrder.payments : [];
+      const updatedPayments = currentPayments.filter((p) => p.id !== paymentId);
+      const newReceived = Math.round(updatedPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) * 100) / 100;
+      const totalAmt = Number(managingOrder.totalAmount) || 0;
+      const newPaymentStatus: 'Paid' | 'Partial' | 'Pending' =
+        newReceived >= totalAmt - 0.01 ? 'Paid' : newReceived > 0 ? 'Partial' : 'Pending';
+
+      await updateDoc(doc(db, 'orders', managingOrder.id), {
+        receivedAmount: newReceived,
+        paymentStatus: newPaymentStatus,
+        payments: updatedPayments,
+        updatedAt: serverTimestamp(),
+      });
+
+      const updatedOrderRecord: WholesalerOrderRecord = {
+        ...managingOrder,
+        receivedAmount: newReceived,
+        paymentStatus: newPaymentStatus,
+        payments: updatedPayments,
+      };
+      setManagingOrder(updatedOrderRecord);
+
+      const balanceDue = Math.max(0, totalAmt - newReceived);
+      setInstallmentAmount(balanceDue > 0 ? String(balanceDue) : '');
+
+      toast.success('Installment Removed', 'Payment entry deleted and order balance updated.');
+    } catch (err: any) {
+      console.error('Error removing installment:', err);
+      toast.error('Failed to Remove', err?.message || 'Could not remove installment.');
+    } finally {
+      setDeletingPaymentId(null);
+    }
+  };
+
+  // Credit High-Level Statistics
+  const creditStats = useMemo(() => {
+    let totalBilled = 0;
+    let totalReceived = 0;
+    let totalPending = 0;
+    let pendingOrdersCount = 0;
+    const wholesalersWithDues = new Set<string>();
+
+    orders.forEach((o) => {
+      const tot = Number(o.totalAmount) || 0;
+      const rec = Number(o.receivedAmount) || 0;
+      const due = Math.max(0, tot - rec);
+
+      totalBilled += tot;
+      totalReceived += rec;
+      totalPending += due;
+
+      if (due > 0.01) {
+        pendingOrdersCount += 1;
+        wholesalersWithDues.add(o.wholesalerId || o.wholesalerName);
+      }
+    });
+
+    return {
+      totalBilled: Math.round(totalBilled * 100) / 100,
+      totalReceived: Math.round(totalReceived * 100) / 100,
+      totalPending: Math.round(totalPending * 100) / 100,
+      pendingOrdersCount,
+      wholesalersWithDuesCount: wholesalersWithDues.size,
+    };
+  }, [orders]);
+
+  // Wholesaler-wise aggregated credit ledger
+  const wholesalerCreditList = useMemo(() => {
+    const map = new Map<string, WholesalerCreditSummary>();
+
+    orders.forEach((order) => {
+      const wKey = (order.wholesalerId || order.wholesalerName || 'unknown').trim().toLowerCase();
+      const tot = Number(order.totalAmount) || 0;
+      const rec = Number(order.receivedAmount) || 0;
+      const due = Math.max(0, tot - rec);
+      const ordDate =
+        order.orderDate ||
+        (order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('en-CA') : '');
+
+      if (!map.has(wKey)) {
+        map.set(wKey, {
+          key: wKey,
+          wholesalerId: order.wholesalerId || '',
+          wholesalerName: order.wholesalerName || 'Unknown Wholesaler',
+          companyName: order.companyName || '',
+          wholesalerMobile: order.wholesalerMobile || '',
+          totalOrdersCount: 1,
+          pendingOrdersCount: due > 0.01 ? 1 : 0,
+          totalBilled: tot,
+          totalPaid: rec,
+          outstandingBalance: due,
+          latestOrderDate: ordDate,
+          orders: [order],
+        });
+      } else {
+        const item = map.get(wKey)!;
+        item.totalOrdersCount += 1;
+        if (due > 0.01) item.pendingOrdersCount += 1;
+        item.totalBilled += tot;
+        item.totalPaid += rec;
+        item.outstandingBalance += due;
+        item.orders.push(order);
+        if (ordDate && (!item.latestOrderDate || ordDate > item.latestOrderDate)) {
+          item.latestOrderDate = ordDate;
+        }
+      }
+    });
+
+    let list = Array.from(map.values());
+
+    if (creditSearchQuery.trim()) {
+      const q = creditSearchQuery.toLowerCase().trim();
+      list = list.filter(
+        (w) =>
+          w.wholesalerName.toLowerCase().includes(q) ||
+          w.companyName.toLowerCase().includes(q) ||
+          w.wholesalerMobile.includes(q)
+      );
+    }
+
+    if (creditStatusFilter === 'Pending') {
+      list = list.filter((w) => w.outstandingBalance > 0.01);
+    } else if (creditStatusFilter === 'Paid') {
+      list = list.filter((w) => w.outstandingBalance <= 0.01);
+    }
+
+    list.sort((a, b) => {
+      if (creditSortBy === 'due_desc') return b.outstandingBalance - a.outstandingBalance;
+      if (creditSortBy === 'due_asc') return a.outstandingBalance - b.outstandingBalance;
+      if (creditSortBy === 'name_asc') return a.wholesalerName.localeCompare(b.wholesalerName);
+      return 0;
+    });
+
+    return list;
+  }, [orders, creditSearchQuery, creditStatusFilter, creditSortBy]);
+
+  // Credit Orders flat list
+  const filteredCreditOrders = useMemo(() => {
+    return orders
+      .filter((order) => {
+        const tot = Number(order.totalAmount) || 0;
+        const rec = Number(order.receivedAmount) || 0;
+        const due = Math.max(0, tot - rec);
+
+        if (creditStatusFilter === 'Pending' && due <= 0.01) return false;
+        if (creditStatusFilter === 'Paid' && due > 0.01) return false;
+
+        if (creditSearchQuery.trim()) {
+          const q = creditSearchQuery.toLowerCase().trim();
+          const matchId = order.orderId?.toLowerCase().includes(q);
+          const matchName = order.wholesalerName?.toLowerCase().includes(q);
+          const matchMobile = order.wholesalerMobile?.includes(q);
+          if (!matchId && !matchName && !matchMobile) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        const dueA = Math.max(0, (Number(a.totalAmount) || 0) - (Number(a.receivedAmount) || 0));
+        const dueB = Math.max(0, (Number(b.totalAmount) || 0) - (Number(b.receivedAmount) || 0));
+        if (creditSortBy === 'due_desc') return dueB - dueA;
+        if (creditSortBy === 'due_asc') return dueA - dueB;
+        return (b.orderDate || '').localeCompare(a.orderDate || '');
+      });
+  }, [orders, creditStatusFilter, creditSearchQuery, creditSortBy]);
+
   // Filtered Orders List
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
@@ -817,191 +1147,743 @@ export default function WholesalerOrdersClient() {
         </button>
       </div>
 
-      {/* ── Toolbar: Search & Status Filters ──────────────────────────────────── */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3">
-        <div className="relative w-full md:w-80">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by Order #, Wholesaler or phone..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 h-8 bg-[#f7f7f8] focus:bg-white text-xs rounded-lg border border-slate-300 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-500 transition-all"
-          />
-        </div>
+      {/* ── Main Tab Navigation: Orders List vs Credit Ledger ───────────────── */}
+      <div className="flex items-center gap-2 border-b border-slate-200/90 pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('orders')}
+          className={`h-9 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeMainTab === 'orders'
+              ? 'bg-[#02626D] text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80'
+          }`}
+        >
+          <ShoppingBag size={15} />
+          <span>Orders List</span>
+          <span
+            className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+              activeMainTab === 'orders' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {orders.length}
+          </span>
+        </button>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <span className="text-xs text-slate-500 font-semibold">Status:</span>
-          <div className="flex bg-[#f1f2f4] p-0.5 rounded-lg border border-slate-200">
-            {(['All', 'Pending', 'Approved', 'Processing', 'Delivered'] as const).map((st) => (
-              <button
-                key={st}
-                onClick={() => setSelectedStatusFilter(st)}
-                className={`h-7 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                  selectedStatusFilter === st
-                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {st}
-              </button>
-            ))}
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('credit')}
+          className={`h-9 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeMainTab === 'credit'
+              ? 'bg-[#02626D] text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80'
+          }`}
+        >
+          <WalletCards size={15} />
+          <span>Credit & Dues</span>
+          {creditStats.totalPending > 0 ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white shadow-2xs">
+              ₹{creditStats.totalPending.toLocaleString('en-IN')} Due
+            </span>
+          ) : (
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                activeMainTab === 'credit' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-700'
+              }`}
+            >
+              All Settled
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* ── B2B Wholesaler Orders Table ───────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-slate-400 text-xs">
-            <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-slate-500" />
-            Loading B2B Orders...
+      {/* ── TAB 1: Wholesale Orders List View ───────────────────────────────── */}
+      {activeMainTab === 'orders' && (
+        <>
+          {/* ── Toolbar: Search & Status Filters ──────────────────────────────────── */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3">
+            <div className="relative w-full md:w-80">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by Order #, Wholesaler or phone..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 h-8 bg-[#f7f7f8] focus:bg-white text-xs rounded-lg border border-slate-300 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-500 transition-all"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <span className="text-xs text-slate-500 font-semibold">Status:</span>
+              <div className="flex bg-[#f1f2f4] p-0.5 rounded-lg border border-slate-200">
+                {(['All', 'Pending', 'Approved', 'Processing', 'Delivered'] as const).map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => setSelectedStatusFilter(st)}
+                    className={`h-7 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                      selectedStatusFilter === st
+                        ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-        ) : filteredOrders.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 text-xs">No wholesaler B2B orders found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[950px]">
-              <thead>
-                <tr className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider bg-[#f7f7f8] border-b border-slate-200">
-                  <th className="py-3 px-4">Order ID</th>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Wholesaler Details</th>
-                  <th className="py-3 px-4">Assigned Price List</th>
-                  <th className="py-3 px-4">Items Count</th>
-                  <th className="py-3 px-4">Manufacturing Queue</th>
-                  <th className="py-3 px-4">Total Amount</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {paginatedOrders.map((order) => {
-                  const totalItemsCount = order.items?.length || 0;
-                  const mfgItemsCount =
-                    order.items?.filter(
-                      (i) => i.needsManufacturing !== false && i.mfgStatus !== 'Not Required'
-                    ).length || 0;
+
+          {/* ── B2B Wholesaler Orders Table ───────────────────────────────────────── */}
+          <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+            {loading ? (
+              <div className="p-12 text-center text-slate-400 text-xs">
+                <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-slate-500" />
+                Loading B2B Orders...
+              </div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 text-xs">No wholesaler B2B orders found.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[1050px]">
+                  <thead>
+                    <tr className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider bg-[#f7f7f8] border-b border-slate-200">
+                      <th className="py-3 px-4">Order ID</th>
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4">Wholesaler Details</th>
+                      <th className="py-3 px-4">Assigned Price List</th>
+                      <th className="py-3 px-4">Items Count</th>
+                      <th className="py-3 px-4">Manufacturing Queue</th>
+                      <th className="py-3 px-4">Total Amount</th>
+                      <th className="py-3 px-4">Payment & Due</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {paginatedOrders.map((order) => {
+                      const totalItemsCount = order.items?.length || 0;
+                      const mfgItemsCount =
+                        order.items?.filter(
+                          (i) => i.needsManufacturing !== false && i.mfgStatus !== 'Not Required'
+                        ).length || 0;
+                      const totalAmt = Number(order.totalAmount) || 0;
+                      const receivedAmt = Number(order.receivedAmount) || 0;
+                      const balanceDue = Math.max(0, totalAmt - receivedAmt);
+                      const isPaid = receivedAmt >= totalAmt - 0.01;
+                      const isPartial = receivedAmt > 0 && !isPaid;
+
+                      return (
+                        <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3 px-4">
+                            <span className="font-mono font-bold text-slate-900">{order.orderId}</span>
+                          </td>
+
+                          <td className="py-3 px-4 text-slate-600 whitespace-nowrap font-medium">
+                            {order.orderDate ||
+                              (order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('en-CA') : '—')}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <p className="font-semibold text-slate-900">{order.wholesalerName}</p>
+                            <p className="text-[10px] text-slate-400 font-mono">{order.wholesalerMobile}</p>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                              {order.priceListName || 'Standard Rates'}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-4 font-semibold text-slate-700">{totalItemsCount} Items</td>
+
+                          {/* Manufacturing Status Summary Badge */}
+                          <td className="py-3 px-4">
+                            {mfgItemsCount > 0 ? (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 font-semibold text-[10px] border border-teal-200">
+                                <Factory size={12} className="text-teal-600" />
+                                <span>
+                                  {mfgItemsCount}/{totalItemsCount} in Mfg
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-medium text-[10px] border border-slate-200">
+                                <span>Ready / In Stock</span>
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4 font-mono font-bold text-slate-900">₹{order.totalAmount}</td>
+
+                          {/* Payment & Due Status Badge */}
+                          <td className="py-3 px-4">
+                            {isPaid ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold text-[10px] border border-emerald-200">
+                                <CheckCircle2 size={11} className="text-emerald-600" />
+                                <span>Paid (₹{receivedAmt})</span>
+                              </span>
+                            ) : isPartial ? (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-semibold text-[10px] border border-amber-200 w-fit">
+                                  <Clock size={11} className="text-amber-600" />
+                                  <span>Partial (₹{receivedAmt})</span>
+                                </span>
+                                <span className="text-[10px] text-rose-600 font-bold font-mono">
+                                  Due: ₹{balanceDue.toFixed(2)}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 font-semibold text-[10px] border border-rose-200 w-fit">
+                                  <span>Pending</span>
+                                </span>
+                                <span className="text-[10px] text-rose-600 font-bold font-mono">
+                                  Due: ₹{balanceDue.toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <select
+                              value={order.status || 'Pending'}
+                              onChange={(e) => handleUpdateStatus(order.id, e.target.value as any)}
+                              className={`text-[10px] font-bold px-2 py-1 rounded border focus:outline-none cursor-pointer ${
+                                order.status === 'Delivered'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : order.status === 'Approved'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                  : order.status === 'Processing'
+                                  ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="Approved">Approved</option>
+                              <option value="Processing">Processing</option>
+                              <option value="Delivered">Delivered</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </select>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* Manage Order Payments & Installments Action Button */}
+                              <button
+                                onClick={() => handleOpenManagePayment(order)}
+                                className="h-7 px-2.5 text-[11px] font-bold rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                                title="Manage Payments & Installments"
+                              >
+                                <WalletCards size={13} className="text-emerald-600" />
+                                <span>Manage</span>
+                              </button>
+
+                              {/* Manufacturing Items Action Button */}
+                              <button
+                                onClick={() => handleOpenMfgModal(order)}
+                                className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors cursor-pointer"
+                                title="Manufacturing Queue Selection"
+                              >
+                                <Factory size={15} />
+                              </button>
+
+                              {/* View Order Details Action Button */}
+                              <button
+                                onClick={() => setViewingOrder(order)}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                                title="View Order Details"
+                              >
+                                <Eye size={15} />
+                              </button>
+
+                              {/* Edit Order Action Button */}
+                              <button
+                                onClick={() => handleOpenEditOrder(order)}
+                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                                title="Edit Order"
+                              >
+                                <Pencil size={15} />
+                              </button>
+
+                              {/* Delete Order Action Button */}
+                              <button
+                                onClick={() => setDeletingOrder(order)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                title="Delete Order"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 45 Items Per Page Pagination */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredOrders.length}
+              pageSize={45}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        </>
+      )}
+
+      {/* ── TAB 2: Wholesale Credit & Dues Ledger ───────────────────────────── */}
+      {activeMainTab === 'credit' && (
+        <div className="space-y-4">
+          {/* Credit Overview 4-Stat Metric Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Card 1: Outstanding Credit Due */}
+            <div className="bg-white rounded-2xl p-4 border border-rose-200/80 shadow-2xs flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold text-rose-600 uppercase tracking-wider block">
+                  Pending Credit Due
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-rose-700 font-mono mt-0.5 block">
+                  ₹{creditStats.totalPending.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-[11px] text-slate-500 mt-0.5 block">
+                  {creditStats.pendingOrdersCount} orders with balance pending
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                <WalletCards size={22} />
+              </div>
+            </div>
+
+            {/* Card 2: Total Wholesale Billed */}
+            <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Total Wholesale Billed
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono mt-0.5 block">
+                  ₹{creditStats.totalBilled.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-[11px] text-slate-500 mt-0.5 block">
+                  {orders.length} total wholesale orders
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                <Receipt size={22} />
+              </div>
+            </div>
+
+            {/* Card 3: Total Collected / Paid */}
+            <div className="bg-white rounded-2xl p-4 border border-emerald-200/80 shadow-2xs flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider block">
+                  Total Collected
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-emerald-700 font-mono mt-0.5 block">
+                  ₹{creditStats.totalReceived.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-[11px] text-slate-500 mt-0.5 block">
+                  {creditStats.totalBilled > 0
+                    ? `${Math.round((creditStats.totalReceived / creditStats.totalBilled) * 100)}% collected`
+                    : '0% collected'}
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+                <CheckCircle2 size={22} />
+              </div>
+            </div>
+
+            {/* Card 4: Wholesalers with Pending Balance */}
+            <div className="bg-white rounded-2xl p-4 border border-amber-200/80 shadow-2xs flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider block">
+                  Wholesalers with Dues
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-amber-800 font-mono mt-0.5 block">
+                  {creditStats.wholesalersWithDuesCount}
+                </span>
+                <span className="text-[11px] text-slate-500 mt-0.5 block">
+                  Accounts with outstanding credit
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 border border-amber-100">
+                <Building2 size={22} />
+              </div>
+            </div>
+          </div>
+
+          {/* Credit Toolbar: Search, Filters & View Toggle */}
+          <div className="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            {/* Search */}
+            <div className="relative flex-1 max-w-md">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search wholesaler, company, phone, or order ID..."
+                value={creditSearchQuery}
+                onChange={(e) => setCreditSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 h-8 bg-[#f7f7f8] focus:bg-white text-xs rounded-lg border border-slate-300 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#02626D] transition-all"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Filter Pills */}
+              <div className="flex bg-[#f1f2f4] p-0.5 rounded-lg border border-slate-200">
+                {(['Pending', 'All', 'Paid'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setCreditStatusFilter(filter)}
+                    className={`h-7 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                      creditStatusFilter === filter
+                        ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {filter === 'Pending' ? 'Pending Dues' : filter === 'Paid' ? 'Settled Only' : 'All Accounts'}
+                  </button>
+                ))}
+              </div>
+
+              {/* View Mode Switcher */}
+              <div className="flex bg-[#f1f2f4] p-0.5 rounded-lg border border-slate-200">
+                <button
+                  onClick={() => setCreditViewMode('wholesaler')}
+                  className={`h-7 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                    creditViewMode === 'wholesaler'
+                      ? 'bg-white text-[#02626D] shadow-2xs border border-slate-200/80 font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  By Wholesaler
+                </button>
+                <button
+                  onClick={() => setCreditViewMode('orders')}
+                  className={`h-7 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                    creditViewMode === 'orders'
+                      ? 'bg-white text-[#02626D] shadow-2xs border border-slate-200/80 font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  By Orders
+                </button>
+              </div>
+
+              {/* Sort Dropdown */}
+              <select
+                value={creditSortBy}
+                onChange={(e) => setCreditSortBy(e.target.value as any)}
+                className="h-8 px-2.5 bg-[#f7f7f8] text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 focus:outline-none focus:border-[#02626D] cursor-pointer"
+              >
+                <option value="due_desc">Highest Due First</option>
+                <option value="due_asc">Lowest Due First</option>
+                <option value="name_asc">Name (A-Z)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* View 1: Wholesaler Ledger Breakdown Cards */}
+          {creditViewMode === 'wholesaler' && (
+            <div className="space-y-3">
+              {wholesalerCreditList.length === 0 ? (
+                <div className="bg-white rounded-xl border border-slate-200/90 p-12 text-center text-slate-400 text-xs">
+                  No wholesaler credit records matching the selected filter.
+                </div>
+              ) : (
+                wholesalerCreditList.map((ws) => {
+                  const isExpanded = expandedWholesalerKey === ws.key;
+                  const hasDue = ws.outstandingBalance > 0.01;
 
                   return (
-                    <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3 px-4">
-                        <span className="font-mono font-bold text-slate-900">{order.orderId}</span>
-                      </td>
+                    <div
+                      key={ws.key}
+                      className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden transition-all"
+                    >
+                      {/* Wholesaler Header Summary Row */}
+                      <div
+                        onClick={() => setExpandedWholesalerKey(isExpanded ? null : ws.key)}
+                        className={`p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 cursor-pointer select-none transition-colors ${
+                          isExpanded ? 'bg-slate-50/70 border-b border-slate-200' : 'hover:bg-slate-50/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 border ${
+                              hasDue
+                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}
+                          >
+                            {ws.wholesalerName.slice(0, 2).toUpperCase()}
+                          </div>
 
-                      <td className="py-3 px-4 text-slate-600 whitespace-nowrap font-medium">
-                        {order.orderDate ||
-                          (order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('en-CA') : '—')}
-                      </td>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-slate-900 text-sm">{ws.wholesalerName}</h3>
+                              {ws.companyName && (
+                                <span className="text-[11px] text-slate-500 font-medium">({ws.companyName})</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
+                              {ws.wholesalerMobile && (
+                                <span className="flex items-center gap-1 font-mono text-slate-600">
+                                  <Phone size={12} className="text-slate-400" />
+                                  <span>{ws.wholesalerMobile}</span>
+                                </span>
+                              )}
+                              <span>•</span>
+                              <span>{ws.totalOrdersCount} Orders</span>
+                              {ws.pendingOrdersCount > 0 && (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-semibold text-rose-600">
+                                    {ws.pendingOrdersCount} with pending dues
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
-                      <td className="py-3 px-4">
-                        <p className="font-semibold text-slate-900">{order.wholesalerName}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">{order.wholesalerMobile}</p>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                          {order.priceListName || 'Standard Rates'}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-4 font-semibold text-slate-700">{totalItemsCount} Items</td>
-
-                      {/* Manufacturing Status Summary Badge */}
-                      <td className="py-3 px-4">
-                        {mfgItemsCount > 0 ? (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 font-semibold text-[10px] border border-teal-200">
-                            <Factory size={12} className="text-teal-600" />
-                            <span>
-                              {mfgItemsCount}/{totalItemsCount} in Mfg
+                        {/* Financial Snapshot & Expand Button */}
+                        <div className="flex items-center justify-between md:justify-end gap-4 shrink-0">
+                          <div className="text-right">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Billed</span>
+                            <span className="text-xs font-bold text-slate-700 font-mono">
+                              ₹{ws.totalBilled.toLocaleString('en-IN')}
                             </span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-medium text-[10px] border border-slate-200">
-                            <span>Ready / In Stock</span>
-                          </span>
-                        )}
-                      </td>
+                          </div>
 
-                      <td className="py-3 px-4 font-mono font-bold text-slate-900">₹{order.totalAmount}</td>
+                          <div className="text-right">
+                            <span className="text-[10px] uppercase font-bold text-emerald-600 block">Total Paid</span>
+                            <span className="text-xs font-bold text-emerald-700 font-mono">
+                              ₹{ws.totalPaid.toLocaleString('en-IN')}
+                            </span>
+                          </div>
 
-                      <td className="py-3 px-4">
-                        <select
-                          value={order.status || 'Pending'}
-                          onChange={(e) => handleUpdateStatus(order.id, e.target.value as any)}
-                          className={`text-[10px] font-bold px-2 py-1 rounded border focus:outline-none cursor-pointer ${
-                            order.status === 'Delivered'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : order.status === 'Approved'
-                              ? 'bg-blue-50 text-blue-700 border-blue-200'
-                              : order.status === 'Processing'
-                              ? 'bg-purple-50 text-purple-700 border-purple-200'
-                              : 'bg-amber-50 text-amber-700 border-amber-200'
-                          }`}
-                        >
-                          <option value="Pending">Pending</option>
-                          <option value="Approved">Approved</option>
-                          <option value="Processing">Processing</option>
-                          <option value="Delivered">Delivered</option>
-                          <option value="Cancelled">Cancelled</option>
-                        </select>
-                      </td>
+                          <div className="text-right pl-2 border-l border-slate-200">
+                            <span className="text-[10px] uppercase font-bold text-rose-600 block">Pending Due</span>
+                            <span
+                              className={`text-sm sm:text-base font-black font-mono px-2 py-0.5 rounded-lg border ${
+                                hasDue
+                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              }`}
+                            >
+                              ₹{ws.outstandingBalance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
 
-                      <td className="py-3 px-4">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {/* Manufacturing Items Action Button */}
                           <button
-                            onClick={() => handleOpenMfgModal(order)}
-                            className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors cursor-pointer"
-                            title="Manufacturing Queue Selection"
+                            type="button"
+                            className="p-1 text-slate-400 hover:text-slate-700 transition-colors"
+                            aria-label="Expand orders"
                           >
-                            <Factory size={15} />
-                          </button>
-
-                          {/* View Order Details Action Button */}
-                          <button
-                            onClick={() => setViewingOrder(order)}
-                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                            title="View Order Details"
-                          >
-                            <Eye size={15} />
-                          </button>
-
-                          {/* Edit Order Action Button */}
-                          <button
-                            onClick={() => handleOpenEditOrder(order)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                            title="Edit Order"
-                          >
-                            <Pencil size={15} />
-                          </button>
-
-                          {/* Delete Order Action Button */}
-                          <button
-                            onClick={() => setDeletingOrder(order)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                            title="Delete Order"
-                          >
-                            <Trash2 size={15} />
+                            {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                           </button>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                      </div>
 
-        {/* 45 Items Per Page Pagination */}
-        <Pagination
-          currentPage={currentPage}
-          totalItems={filteredOrders.length}
-          pageSize={45}
-          onPageChange={setCurrentPage}
-        />
-      </div>
+                      {/* Expanded Orders Drilldown */}
+                      {isExpanded && (
+                        <div className="p-3 sm:p-4 bg-slate-50/40">
+                          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                            <div className="px-4 py-2.5 bg-[#f7f7f8] border-b border-slate-200 flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-700">
+                                Orders for {ws.wholesalerName} ({ws.orders.length})
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                Click &quot;Manage&quot; on any order to record installment payments
+                              </span>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left border-collapse text-xs min-w-[750px]">
+                                <thead>
+                                  <tr className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50/70 border-b border-slate-200">
+                                    <th className="py-2.5 px-3">Order ID</th>
+                                    <th className="py-2.5 px-3">Date</th>
+                                    <th className="py-2.5 px-3">Items</th>
+                                    <th className="py-2.5 px-3">Order Total</th>
+                                    <th className="py-2.5 px-3">Paid Amount</th>
+                                    <th className="py-2.5 px-3">Pending Due</th>
+                                    <th className="py-2.5 px-3">Payment Status</th>
+                                    <th className="py-2.5 px-3">Fulfillment</th>
+                                    <th className="py-2.5 px-3 text-center">Action</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {ws.orders.map((ord) => {
+                                    const tot = Number(ord.totalAmount) || 0;
+                                    const rec = Number(ord.receivedAmount) || 0;
+                                    const due = Math.max(0, tot - rec);
+                                    const isPaid = rec >= tot - 0.01;
+                                    const isPartial = rec > 0 && !isPaid;
+
+                                    return (
+                                      <tr key={ord.id} className="hover:bg-slate-50/60 transition-colors">
+                                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
+                                          {ord.orderId}
+                                        </td>
+                                        <td className="py-2.5 px-3 text-slate-600 font-medium">
+                                          {ord.orderDate || '—'}
+                                        </td>
+                                        <td className="py-2.5 px-3 text-slate-600">
+                                          {ord.items?.length || 0} items
+                                        </td>
+                                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
+                                          ₹{tot.toLocaleString('en-IN')}
+                                        </td>
+                                        <td className="py-2.5 px-3 font-mono font-semibold text-emerald-700">
+                                          ₹{rec.toLocaleString('en-IN')}
+                                        </td>
+                                        <td className="py-2.5 px-3 font-mono font-bold">
+                                          {due > 0.01 ? (
+                                            <span className="text-rose-600 font-black">
+                                              ₹{due.toLocaleString('en-IN')}
+                                            </span>
+                                          ) : (
+                                            <span className="text-emerald-600 font-semibold">₹0 (Paid)</span>
+                                          )}
+                                        </td>
+                                        <td className="py-2.5 px-3">
+                                          {isPaid ? (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                              Paid
+                                            </span>
+                                          ) : isPartial ? (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                                              Partial
+                                            </span>
+                                          ) : (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
+                                              Pending
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="py-2.5 px-3">
+                                          <span className="text-[10px] font-semibold text-slate-600">
+                                            {ord.status || 'Pending'}
+                                          </span>
+                                        </td>
+                                        <td className="py-2.5 px-3 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenManagePayment(ord)}
+                                            className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs inline-flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
+                                          >
+                                            <WalletCards size={12} />
+                                            <span>Manage Payment</span>
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {/* View 2: Flat Pending Orders List */}
+          {creditViewMode === 'orders' && (
+            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+              {filteredCreditOrders.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 text-xs">
+                  No orders found matching the credit filter.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs min-w-[950px]">
+                    <thead>
+                      <tr className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider bg-[#f7f7f8] border-b border-slate-200">
+                        <th className="py-3 px-4">Order ID</th>
+                        <th className="py-3 px-4">Date</th>
+                        <th className="py-3 px-4">Wholesaler Details</th>
+                        <th className="py-3 px-4">Total Amount</th>
+                        <th className="py-3 px-4">Paid Amount</th>
+                        <th className="py-3 px-4">Pending Due</th>
+                        <th className="py-3 px-4">Payment Status</th>
+                        <th className="py-3 px-4">Fulfillment</th>
+                        <th className="py-3 px-4 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredCreditOrders.map((ord) => {
+                        const tot = Number(ord.totalAmount) || 0;
+                        const rec = Number(ord.receivedAmount) || 0;
+                        const due = Math.max(0, tot - rec);
+                        const isPaid = rec >= tot - 0.01;
+                        const isPartial = rec > 0 && !isPaid;
+
+                        return (
+                          <tr key={ord.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="py-3 px-4 font-mono font-bold text-slate-900">{ord.orderId}</td>
+                            <td className="py-3 px-4 text-slate-600 whitespace-nowrap">{ord.orderDate || '—'}</td>
+                            <td className="py-3 px-4">
+                              <p className="font-semibold text-slate-900">{ord.wholesalerName}</p>
+                              <p className="text-[10px] text-slate-400 font-mono">{ord.wholesalerMobile}</p>
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                              ₹{tot.toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-3 px-4 font-mono font-semibold text-emerald-700">
+                              ₹{rec.toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold">
+                              {due > 0.01 ? (
+                                <span className="text-rose-600 font-black">₹{due.toLocaleString('en-IN')}</span>
+                              ) : (
+                                <span className="text-emerald-600 font-semibold">₹0 (Paid)</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              {isPaid ? (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  Paid
+                                </span>
+                              ) : isPartial ? (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                                  Partial
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
+                                  Pending
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="text-[10px] font-semibold text-slate-600">
+                                {ord.status || 'Pending'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenManagePayment(ord)}
+                                className="h-7 px-3 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs inline-flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
+                              >
+                                <WalletCards size={12} />
+                                <span>Manage</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── MODAL: Create New Wholesaler B2B Order (Full Screen) ─────────────── */}
       {isAddModalOpen && (
@@ -1700,9 +2582,33 @@ export default function WholesalerOrdersClient() {
                 <span>Total Amount:</span>
                 <span>₹{viewingOrder.totalAmount}</span>
               </div>
+              <div className="flex justify-between text-xs text-emerald-700 font-semibold">
+                <span>Total Paid:</span>
+                <span>₹{viewingOrder.receivedAmount || 0}</span>
+              </div>
+              <div className="flex justify-between text-xs font-bold">
+                <span className={Math.max(0, (Number(viewingOrder.totalAmount) || 0) - (Number(viewingOrder.receivedAmount) || 0)) > 0.01 ? 'text-rose-600' : 'text-emerald-600'}>
+                  Balance Due:
+                </span>
+                <span className={Math.max(0, (Number(viewingOrder.totalAmount) || 0) - (Number(viewingOrder.receivedAmount) || 0)) > 0.01 ? 'text-rose-600 font-black' : 'text-emerald-600 font-semibold'}>
+                  ₹{Math.max(0, (Number(viewingOrder.totalAmount) || 0) - (Number(viewingOrder.receivedAmount) || 0)).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </span>
+              </div>
             </div>
 
             <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const targetOrder = viewingOrder;
+                  setViewingOrder(null);
+                  handleOpenManagePayment(targetOrder);
+                }}
+                className="h-8 px-3 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer flex items-center justify-center gap-1"
+              >
+                <WalletCards size={13} />
+                <span>Manage Payments</span>
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -1713,7 +2619,7 @@ export default function WholesalerOrdersClient() {
                 className="flex-1 h-8 text-xs font-semibold rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 cursor-pointer flex items-center justify-center gap-1"
               >
                 <Factory size={13} />
-                <span>Manage Mfg Items</span>
+                <span>Mfg Items</span>
               </button>
               <button
                 onClick={() => setViewingOrder(null)}
@@ -2166,6 +3072,313 @@ export default function WholesalerOrdersClient() {
 
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: Manage Order Payments & Installments ─────────────────────── */}
+      {managingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 font-sans">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-2xs shrink-0">
+                  <WalletCards size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">Manage Order Payments</h3>
+                    <span className="font-mono text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                      {managingOrder.orderId}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {managingOrder.wholesalerName} {managingOrder.companyName ? `(${managingOrder.companyName})` : ''} • {managingOrder.wholesalerMobile}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setManagingOrder(null)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 cursor-pointer rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Financial Summary 3-Box Stats */}
+            {(() => {
+              const total = Number(managingOrder.totalAmount) || 0;
+              const received = Number(managingOrder.receivedAmount) || 0;
+              const balanceDue = Math.max(0, total - received);
+              const percentPaid = total > 0 ? Math.min(100, Math.round((received / total) * 100)) : 0;
+              const isSettled = balanceDue <= 0.01;
+
+              return (
+                <div className="py-3 border-b border-slate-100 shrink-0 space-y-2.5">
+                  <div className="grid grid-cols-3 gap-2.5 text-center">
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                      <span className="block text-[10px] font-semibold text-slate-400 uppercase">Total Bill</span>
+                      <span className="text-sm sm:text-base font-black text-slate-900 font-mono">
+                        ₹{total.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-100">
+                      <span className="block text-[10px] font-semibold text-emerald-600 uppercase">Total Paid</span>
+                      <span className="text-sm sm:text-base font-black text-emerald-700 font-mono">
+                        ₹{received.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div
+                      className={`p-2.5 rounded-xl border ${
+                        isSettled ? 'bg-emerald-50/60 border-emerald-100' : 'bg-rose-50/70 border-rose-200'
+                      }`}
+                    >
+                      <span className={`block text-[10px] font-semibold uppercase ${isSettled ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {isSettled ? 'Balance' : 'Pending Due'}
+                      </span>
+                      <span
+                        className={`text-sm sm:text-base font-black font-mono ${
+                          isSettled ? 'text-emerald-700' : 'text-rose-700'
+                        }`}
+                      >
+                        {isSettled ? '₹0 (Settled)' : `₹${balanceDue.toLocaleString('en-IN')}`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] font-semibold">
+                      <span className="text-slate-500">Payment Collection Progress</span>
+                      <span className={isSettled ? 'text-emerald-600 font-bold' : 'text-slate-700'}>
+                        {percentPaid}% Paid ({managingOrder.payments?.length || (received > 0 ? 1 : 0)} installments)
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-300 ${isSettled ? 'bg-emerald-500' : 'bg-[#02626D]'}`}
+                        style={{ width: `${percentPaid}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Scrollable Body: Past Installments + Add Installment Form */}
+            <div className="flex-1 overflow-y-auto p-1 space-y-4 pr-1 my-2">
+              {/* Past Installments Section */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Receipt size={14} className="text-slate-500" />
+                    <span>Payment Installments History</span>
+                  </h4>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    {(managingOrder.payments || []).length} recorded
+                  </span>
+                </div>
+
+                {!managingOrder.payments || managingOrder.payments.length === 0 ? (
+                  <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400 bg-slate-50/50">
+                    No installment payments recorded yet for this order. Use the form below to record an installment payment.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                    {managingOrder.payments.map((inst, idx) => (
+                      <div
+                        key={inst.id || idx}
+                        className="p-3 flex items-center justify-between gap-3 text-xs hover:bg-slate-50/60 transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px] flex items-center justify-center shrink-0">
+                            #{idx + 1}
+                          </span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 font-mono">
+                                ₹{Number(inst.amount).toLocaleString('en-IN')}
+                              </span>
+                              <span className="text-[10px] font-semibold px-2 py-0.2 rounded-md bg-blue-50 text-blue-700 border border-blue-100">
+                                {inst.mode}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              {inst.paidAt
+                                ? new Date(inst.paidAt).toLocaleString('en-IN', {
+                                    dateStyle: 'medium',
+                                    timeStyle: 'short',
+                                  })
+                                : '—'}
+                              {inst.note ? ` • ${inst.note}` : ''}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteInstallment(inst.id)}
+                          disabled={deletingPaymentId === inst.id}
+                          className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          title="Void/Delete this payment"
+                        >
+                          {deletingPaymentId === inst.id ? (
+                            <Loader2 size={13} className="animate-spin text-red-500" />
+                          ) : (
+                            <Trash2 size={13} />
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Add Payment / Installment Form */}
+              {(() => {
+                const total = Number(managingOrder.totalAmount) || 0;
+                const received = Number(managingOrder.receivedAmount) || 0;
+                const balanceDue = Math.max(0, total - received);
+
+                if (balanceDue <= 0.01) {
+                  return (
+                    <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-2.5 text-xs font-semibold">
+                      <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                      <span>This order is fully paid. All ₹{total.toLocaleString('en-IN')} collected successfully.</span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <form
+                    onSubmit={handleRecordInstallment}
+                    className="p-3.5 sm:p-4 rounded-xl bg-slate-50 border border-slate-200/90 space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <Plus size={14} className="text-[#02626D]" />
+                        <span>Add Payment Installment</span>
+                      </h4>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setInstallmentAmount(String(balanceDue))}
+                          className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-white border border-slate-200 text-[#02626D] hover:bg-slate-100 cursor-pointer"
+                        >
+                          Full Due: ₹{balanceDue}
+                        </button>
+                        {balanceDue >= 1000 && (
+                          <button
+                            type="button"
+                            onClick={() => setInstallmentAmount(String(Math.round(balanceDue / 2)))}
+                            className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
+                          >
+                            50%: ₹{Math.round(balanceDue / 2)}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Installment Amount (₹) <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                            ₹
+                          </span>
+                          <input
+                            type="number"
+                            step="any"
+                            min="1"
+                            max={balanceDue}
+                            value={installmentAmount}
+                            onChange={(e) => setInstallmentAmount(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full pl-7 pr-3 h-9 bg-white text-xs font-bold font-mono rounded-lg border border-slate-300 text-slate-900 focus:outline-none focus:border-[#02626D] focus:ring-2 focus:ring-[#02626D]/15"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Payment Mode <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          value={installmentMode}
+                          onChange={(e) => setInstallmentMode(e.target.value)}
+                          className="w-full px-2.5 h-9 bg-white text-xs font-semibold rounded-lg border border-slate-300 text-slate-800 focus:outline-none focus:border-[#02626D] cursor-pointer"
+                        >
+                          <option value="UPI">UPI / GPay / PhonePe</option>
+                          <option value="Cash">Cash</option>
+                          <option value="Bank Transfer">Bank Transfer (NEFT/RTGS/IMPS)</option>
+                          <option value="Cheque">Cheque</option>
+                          <option value="Card">Debit / Credit Card</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Payment Date</label>
+                        <input
+                          type="date"
+                          value={installmentDate}
+                          onChange={(e) => setInstallmentDate(e.target.value)}
+                          className="w-full px-2.5 h-9 bg-white text-xs font-semibold rounded-lg border border-slate-300 text-slate-800 focus:outline-none focus:border-[#02626D]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Note / Reference (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={installmentNote}
+                        onChange={(e) => setInstallmentNote(e.target.value)}
+                        placeholder="e.g. Installment 1 - Cheque #12345 or UPI ref"
+                        className="w-full px-3 h-8 bg-white text-xs rounded-lg border border-slate-300 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#02626D]"
+                      />
+                    </div>
+
+                    <div className="pt-1 flex items-center justify-end gap-2">
+                      <button
+                        type="submit"
+                        disabled={isSavingInstallment || !installmentAmount || parseFloat(installmentAmount) <= 0}
+                        className="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                      >
+                        {isSavingInstallment ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>Recording Payment...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 size={14} />
+                            <span>Record Installment Payment</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setManagingOrder(null)}
+                className="h-9 px-4 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -270,10 +270,18 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
         <div className="border-b-2 border-slate-900 pb-5 no-break" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1 max-w-[60%]">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#02626D] text-white flex items-center justify-center font-black text-sm">
-                  PS
-                </div>
+              <div className="flex items-center gap-2.5">
+                {businessSettings.logoUrl ? (
+                  <img
+                    src={businessSettings.logoUrl}
+                    alt={businessSettings.businessName || 'Logo'}
+                    className="w-11 h-11 object-contain rounded-lg border border-slate-200 p-0.5 shrink-0 bg-white"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-lg bg-[#02626D] text-white flex items-center justify-center font-black text-sm shrink-0">
+                    PS
+                  </div>
+                )}
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 uppercase">
                   {businessSettings.businessName || 'PATTABIRAM SWEETS'}
                 </h1>
@@ -576,7 +584,12 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
         </div>
 
         {/* Footer / Terms & Conditions & Signatory */}
-        <div className="mt-10 pt-6 border-t border-slate-200 grid grid-cols-2 gap-8 items-end no-break" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+        <div
+          className={`mt-10 pt-6 border-t border-slate-200 ${
+            businessSettings.signatureUrl ? 'grid grid-cols-2 gap-8 items-end' : 'block'
+          } no-break`}
+          style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}
+        >
           <div className="space-y-1 text-[10px] text-slate-500 leading-normal">
             <p className="font-bold text-slate-700 uppercase">Terms &amp; Conditions:</p>
             <p>1. Goods once sold will not be returned or exchanged.</p>
@@ -587,16 +600,25 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
             </p>
           </div>
 
-          <div className="text-right space-y-8">
-            <p className="text-xs font-bold text-slate-800">
-              For {businessSettings.businessName || 'PATTABIRAM SWEETS'}
-            </p>
-            <div className="pt-8">
-              <span className="text-[11px] font-semibold text-slate-500 border-t border-slate-400 pt-1 px-4 inline-block">
-                Authorized Signatory
-              </span>
+          {businessSettings.signatureUrl ? (
+            <div className="text-right space-y-2">
+              <p className="text-xs font-bold text-slate-800">
+                For {businessSettings.businessName || 'PATTABIRAM SWEETS'}
+              </p>
+              <div className="flex flex-col items-end">
+                <div className="h-14 flex items-end justify-end pb-1">
+                  <img
+                    src={businessSettings.signatureUrl}
+                    alt="Authorized Signature"
+                    className="max-h-12 max-w-[160px] object-contain"
+                  />
+                </div>
+                <span className="text-[11px] font-semibold text-slate-500 border-t border-slate-400 pt-1 px-4 inline-block">
+                  Authorized Signatory
+                </span>
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </div>
     </div>,

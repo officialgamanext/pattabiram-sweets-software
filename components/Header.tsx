@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 import { usePrinter } from '@/context/PrinterContext';
+import { useBusinessSettings } from '@/lib/businessSettings';
 import ThermalPrinterModal from '@/components/ThermalPrinterModal';
 import CalculatorModal from '@/components/CalculatorModal';
 import {
@@ -52,6 +53,7 @@ import {
 export default function Header() {
   const pathname = usePathname();
   const { user, employeeProfile, logout } = useAuth();
+  const { settings: businessSettings } = useBusinessSettings();
   const {
     isConnected: isPrinterConnected,
     printerType,
@@ -561,11 +563,21 @@ export default function Header() {
           </button>
 
           <Link href="/" className="flex items-center gap-2">
-            <div className="relative w-7 h-7 rounded-lg overflow-hidden bg-white shadow-2xs border border-teal-200/30 flex-shrink-0">
-              <Image src="/app-icon.png" alt="Pattabiram Sweets" fill className="object-contain p-0.5" />
+            <div className="relative w-7 h-7 rounded-lg overflow-hidden bg-white shadow-2xs border border-teal-200/30 flex-shrink-0 flex items-center justify-center">
+              {businessSettings.logoUrl ? (
+                <img
+                  src={businessSettings.logoUrl}
+                  alt={businessSettings.businessName || 'Pattabiram Sweets'}
+                  className="w-full h-full object-contain p-0.5"
+                />
+              ) : (
+                <Image src="/app-icon.png" alt={businessSettings.businessName || 'Pattabiram Sweets'} fill className="object-contain p-0.5" />
+              )}
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-white font-extrabold text-sm tracking-tight">Pattabiram</span>
+              <span className="text-white font-extrabold text-sm tracking-tight truncate max-w-[140px] sm:max-w-none">
+                {businessSettings.businessName || 'Pattabiram'}
+              </span>
               <span className="text-[10px] text-teal-100 font-medium bg-[#024f58] px-2 py-0.5 rounded-full hidden sm:inline-block border border-[#01464e]">
                 Spring &apos;26
               </span>

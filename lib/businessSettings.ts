@@ -21,6 +21,8 @@ export interface BusinessSettings {
   fssaiNumber?: string;
   website?: string;
   footerNote?: string;
+  logoUrl?: string;
+  signatureUrl?: string;
   updatedAt?: any;
   updatedBy?: string;
   updatedByName?: string;
@@ -43,6 +45,8 @@ export const DEFAULT_BUSINESS_SETTINGS: BusinessSettings = {
   fssaiNumber: '12419008000123',
   website: 'https://pattabiramsweets.com',
   footerNote: 'Thank you for choosing Pattabiram Sweets! Visit again!',
+  logoUrl: '',
+  signatureUrl: '',
 };
 
 // In-memory runtime cache for instantaneous access

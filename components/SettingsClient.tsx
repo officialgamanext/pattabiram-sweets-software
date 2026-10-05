@@ -22,6 +22,11 @@ import {
   Printer,
   Percent,
   ShieldCheck,
+  Upload,
+  Image as ImageIcon,
+  Trash2,
+  PenTool,
+  ExternalLink,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
@@ -29,6 +34,7 @@ import { useAuth } from '@/context/AuthContext';
 import { toast } from '@/context/ToastContext';
 import { logAuditEvent } from '@/lib/auditLogger';
 import { BusinessSettings, DEFAULT_BUSINESS_SETTINGS, calculateTax } from '@/lib/businessSettings';
+import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 
 export default function SettingsClient() {
   const { user, employeeProfile } = useAuth();
@@ -36,9 +42,17 @@ export default function SettingsClient() {
   const [savedData, setSavedData] = useState<BusinessSettings>(DEFAULT_BUSINESS_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'preview'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'invoice' | 'preview'>('profile');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // ImageKit upload states for Company Logo and Signature Logo
+  const [pendingLogoBase64, setPendingLogoBase64] = useState<string | null>(null);
+  const [pendingLogoFileName, setPendingLogoFileName] = useState<string | null>(null);
+  const [pendingSignatureBase64, setPendingSignatureBase64] = useState<string | null>(null);
+  const [pendingSignatureFileName, setPendingSignatureFileName] = useState<string | null>(null);
+  const [isCompressingLogo, setIsCompressingLogo] = useState(false);
+  const [isCompressingSignature, setIsCompressingSignature] = useState(false);
 
   // Check if current user has edit permission
   const canEdit = useMemo(() => {
@@ -81,8 +95,9 @@ export default function SettingsClient() {
 
   // Check for dirty state
   const isDirty = useMemo(() => {
+    if (pendingLogoBase64 || pendingSignatureBase64) return true;
     return JSON.stringify(formData) !== JSON.stringify(savedData);
-  }, [formData, savedData]);
+  }, [formData, savedData, pendingLogoBase64, pendingSignatureBase64]);
 
   const handleChange = (field: keyof BusinessSettings, value: any) => {
     setFormData((prev) => ({
@@ -98,6 +113,80 @@ export default function SettingsClient() {
         return next;
       });
     }
+  };
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Invalid File', 'Please select an image file (PNG, JPG, SVG, WebP).');
+      return;
+    }
+
+    try {
+      setIsCompressingLogo(true);
+      const compressed = await compressImageTo60KB(file);
+      setPendingLogoBase64(compressed);
+      setPendingLogoFileName(file.name);
+      setFormData((prev) => ({ ...prev, logoUrl: compressed }));
+      toast.info('Logo Selected', 'Logo preview ready. Click "Save Changes" to upload to ImageKit.');
+    } catch (err: any) {
+      console.error('Failed to compress logo:', err);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setPendingLogoBase64(base64);
+        setPendingLogoFileName(file.name);
+        setFormData((prev) => ({ ...prev, logoUrl: base64 }));
+        toast.info('Logo Selected', 'Logo preview ready. Click "Save Changes" to upload.');
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsCompressingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setPendingLogoBase64(null);
+    setPendingLogoFileName(null);
+    setFormData((prev) => ({ ...prev, logoUrl: '' }));
+    toast.warning('Logo Removed', 'Click "Save Changes" to confirm removal.');
+  };
+
+  const handleSignatureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Invalid File', 'Please select an image file for signature.');
+      return;
+    }
+
+    try {
+      setIsCompressingSignature(true);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setPendingSignatureBase64(base64);
+        setPendingSignatureFileName(file.name);
+        setFormData((prev) => ({ ...prev, signatureUrl: base64 }));
+        toast.info('Signature Selected', 'Signature preview ready. Click "Save Changes" to upload to ImageKit.');
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('Failed to read signature:', err);
+      toast.error('File Error', 'Could not read signature image.');
+    } finally {
+      setIsCompressingSignature(false);
+    }
+  };
+
+  const handleRemoveSignature = () => {
+    setPendingSignatureBase64(null);
+    setPendingSignatureFileName(null);
+    setFormData((prev) => ({ ...prev, signatureUrl: '' }));
+    toast.warning('Signature Removed', 'Click "Save Changes" to remove from A4 invoices.');
   };
 
   const copyToClipboard = (text: string, fieldName: string) => {
@@ -130,7 +219,6 @@ export default function SettingsClient() {
 
     // GST Number validation (optional or 15-chars standard alphanumeric)
     if (formData.gstNumber.trim()) {
-      const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i;
       const cleanGst = formData.gstNumber.trim().toUpperCase();
       if (cleanGst.length > 0 && cleanGst.length !== 15) {
         newErrors.gstNumber = 'GSTIN must be 15 characters long (e.g. 33AAAAA0000A1Z5)';
@@ -175,6 +263,24 @@ export default function SettingsClient() {
 
     setIsSaving(true);
     try {
+      let finalLogoUrl = formData.logoUrl || '';
+      if (pendingLogoBase64) {
+        toast.info('Uploading to ImageKit', 'Uploading company logo...');
+        finalLogoUrl = await uploadToImageKit(
+          pendingLogoBase64,
+          `logo_${Date.now()}_${pendingLogoFileName || 'logo.png'}`
+        );
+      }
+
+      let finalSignatureUrl = formData.signatureUrl || '';
+      if (pendingSignatureBase64) {
+        toast.info('Uploading to ImageKit', 'Uploading authorized signature...');
+        finalSignatureUrl = await uploadToImageKit(
+          pendingSignatureBase64,
+          `signature_${Date.now()}_${pendingSignatureFileName || 'signature.png'}`
+        );
+      }
+
       const docRef = doc(db, 'settings', 'business');
       const currentUserEmail = user?.email || employeeProfile?.mobile || employeeProfile?.empId || 'admin';
       const currentUserName = employeeProfile?.name || (user?.email ? user.email.split('@')[0] : 'Admin');
@@ -197,6 +303,8 @@ export default function SettingsClient() {
         fssaiNumber: formData.fssaiNumber?.trim() || '',
         website: formData.website?.trim() || '',
         footerNote: formData.footerNote?.trim() || '',
+        logoUrl: finalLogoUrl,
+        signatureUrl: finalSignatureUrl,
         updatedAt: serverTimestamp(),
         updatedBy: currentUserEmail,
         updatedByName: currentUserName,
@@ -204,18 +312,29 @@ export default function SettingsClient() {
 
       await setDoc(docRef, payload, { merge: true });
 
+      const updatedState = {
+        ...formData,
+        logoUrl: finalLogoUrl,
+        signatureUrl: finalSignatureUrl,
+      };
+      setFormData(updatedState);
+      setSavedData(updatedState);
+      setPendingLogoBase64(null);
+      setPendingLogoFileName(null);
+      setPendingSignatureBase64(null);
+      setPendingSignatureFileName(null);
+
       // Record in audit logs
       await logAuditEvent({
         action: 'Settings Updated',
         actionType: 'general',
-        description: `Updated business profile settings for ${formData.businessName}`,
+        description: `Updated business profile and invoice branding settings for ${formData.businessName}`,
         employeeId: employeeProfile?.id || user?.uid || 'admin',
         employeeName: currentUserName,
         employeeRole: employeeProfile?.isSuperAdmin ? 'SuperAdmin' : 'Administrator',
       });
 
-      setSavedData(formData);
-      toast.success('Settings Saved Successfully', 'Business details updated across the application.');
+      toast.success('Settings Saved Successfully', 'Business details & ImageKit branding updated.');
     } catch (err: any) {
       console.error('Error saving settings:', err);
       toast.error('Failed to save settings', err?.message || 'An unexpected error occurred.');
@@ -226,6 +345,10 @@ export default function SettingsClient() {
 
   const handleReset = () => {
     setFormData(savedData);
+    setPendingLogoBase64(null);
+    setPendingLogoFileName(null);
+    setPendingSignatureBase64(null);
+    setPendingSignatureFileName(null);
     setErrors({});
     toast.info('Changes discarded', 'Reverted back to last saved values.');
   };
@@ -352,6 +475,18 @@ export default function SettingsClient() {
         </button>
 
         <button
+          onClick={() => setActiveTab('invoice')}
+          className={`h-8 px-3.5 text-xs font-semibold rounded-md flex items-center gap-2 cursor-pointer transition-colors ${
+            activeTab === 'invoice'
+              ? 'bg-[#02626D] text-white shadow-2xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <FileText size={14} />
+          <span>Invoice Settings</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('preview')}
           className={`h-8 px-3.5 text-xs font-semibold rounded-md flex items-center gap-2 cursor-pointer transition-colors ${
             activeTab === 'preview'
@@ -360,7 +495,7 @@ export default function SettingsClient() {
           }`}
         >
           <Receipt size={14} />
-          <span>Receipt & Bill Preview</span>
+          <span>Receipt &amp; Bill Preview</span>
         </button>
       </div>
 
@@ -1088,7 +1223,305 @@ export default function SettingsClient() {
         </form>
       )}
 
-      {/* ── TAB 2: RECEIPT & BILL PREVIEW ── */}
+      {/* ── TAB 2: INVOICE SETTINGS (Company Logo & Signature Logo) ── */}
+      {activeTab === 'invoice' && (
+        <div className="space-y-6">
+          {/* Tab Header Banner */}
+          <div className="bg-white rounded-lg border border-slate-200 p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-[#02626D]" />
+                <h2 className="text-base font-bold text-slate-900">Invoice Branding &amp; Signature Settings</h2>
+                <span className="px-2 py-0.5 text-[10px] font-bold bg-[#02626D]/10 text-[#02626D] rounded border border-[#02626D]/20 uppercase">
+                  ImageKit CDN
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Upload your Company Logo for the top header and Authorized Signature for A4 invoices. Images are automatically optimized and securely hosted on ImageKit.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleSave()}
+                disabled={!canEdit || isSaving || !isDirty}
+                className={`h-9 px-4 text-xs font-semibold rounded-md flex items-center gap-2 shadow-2xs transition-all cursor-pointer ${
+                  !canEdit || !isDirty || isSaving
+                    ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                    : 'bg-[#02626D] text-white hover:bg-[#014d56] border border-[#02626D]'
+                }`}
+              >
+                {isSaving ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Uploading &amp; Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save size={14} />
+                    <span>Save Invoice Settings</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* ── CARD 1: COMPANY LOGO ── */}
+            <div className="bg-white rounded-lg border border-slate-200 shadow-2xs p-6 space-y-5">
+              <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-[#02626D]" />
+                    Company Logo
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Used across the application Header and on the top of A4 Tax Invoices.
+                  </p>
+                </div>
+                {formData.logoUrl && (
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Active Logo
+                  </span>
+                )}
+              </div>
+
+              {/* Logo Preview Area */}
+              <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/60 min-h-[180px] relative transition-colors hover:border-[#02626D]/40">
+                {formData.logoUrl ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-24 h-24 rounded-xl bg-white border border-slate-200 shadow-xs flex items-center justify-center p-2 overflow-hidden">
+                      <img
+                        src={formData.logoUrl}
+                        alt="Company Logo Preview"
+                        className="max-w-full max-h-full object-contain"
+                      />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs font-semibold text-slate-800">
+                        {pendingLogoFileName || 'Current Company Logo'}
+                      </p>
+                      {pendingLogoBase64 ? (
+                        <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block mt-1">
+                          Ready to upload to ImageKit on save
+                        </span>
+                      ) : (
+                        <a
+                          href={formData.logoUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-[#02626D] hover:underline inline-flex items-center gap-1 mt-1 font-mono"
+                        >
+                          <span>ImageKit CDN Hosted</span>
+                          <ExternalLink size={10} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-center text-slate-400">
+                    <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
+                      <ImageIcon size={28} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">No Company Logo Uploaded</p>
+                      <p className="text-[11px] text-slate-400">Default &quot;PS&quot; monogram is currently used</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Upload Controls */}
+              <div className="flex items-center gap-3">
+                <label className="flex-1">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoChange}
+                    disabled={!canEdit || isCompressingLogo || isSaving}
+                    className="hidden"
+                  />
+                  <div className="h-9 px-4 text-xs font-semibold rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center gap-2 cursor-pointer shadow-2xs transition-colors">
+                    <Upload size={14} className="text-[#02626D]" />
+                    <span>{formData.logoUrl ? 'Change Company Logo' : 'Upload Company Logo'}</span>
+                  </div>
+                </label>
+
+                {formData.logoUrl && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveLogo}
+                    disabled={!canEdit || isSaving}
+                    className="h-9 px-3 text-xs font-semibold rounded-md border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                    title="Remove Logo"
+                  >
+                    <Trash2 size={13} />
+                    <span>Remove</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Header Preview Miniature */}
+              <div className="bg-slate-100/80 rounded-lg p-3 border border-slate-200 space-y-1.5">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Top Header Live Appearance:
+                </span>
+                <div className="h-11 bg-[#02626D] rounded-lg px-3 flex items-center gap-2 text-white">
+                  <div className="w-7 h-7 rounded-lg overflow-hidden bg-white flex items-center justify-center p-0.5 border border-teal-200/40 shrink-0">
+                    {formData.logoUrl ? (
+                      <img src={formData.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-[10px] font-black text-[#02626D]">PS</span>
+                    )}
+                  </div>
+                  <span className="text-xs font-extrabold tracking-tight truncate">
+                    {formData.businessName || 'Pattabiram Sweets'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* ── CARD 2: AUTHORIZED SIGNATURE LOGO ── */}
+            <div className="bg-white rounded-lg border border-slate-200 shadow-2xs p-6 space-y-5">
+              <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <PenTool className="w-4 h-4 text-[#02626D]" />
+                    Authorized Signature Logo
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Printed at the bottom-right of A4 Tax Invoices above &quot;Authorized Signatory&quot;.
+                  </p>
+                </div>
+                {formData.signatureUrl ? (
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Active on Invoices
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    Hidden on Invoices
+                  </span>
+                )}
+              </div>
+
+              {/* Signature Preview Area */}
+              <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/60 min-h-[180px] relative transition-colors hover:border-[#02626D]/40">
+                {formData.signatureUrl ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-56 h-20 bg-white rounded-lg border border-slate-200 shadow-xs flex items-center justify-center p-2 overflow-hidden">
+                      <img
+                        src={formData.signatureUrl}
+                        alt="Authorized Signature Preview"
+                        className="max-w-full max-h-full object-contain"
+                      />
+                    </div>
+                    <div className="text-center pt-1">
+                      <p className="text-xs font-semibold text-slate-800">
+                        {pendingSignatureFileName || 'Current Authorized Signature'}
+                      </p>
+                      {pendingSignatureBase64 ? (
+                        <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block mt-1">
+                          Ready to upload to ImageKit on save
+                        </span>
+                      ) : (
+                        <a
+                          href={formData.signatureUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-[#02626D] hover:underline inline-flex items-center gap-1 mt-1 font-mono"
+                        >
+                          <span>ImageKit CDN Hosted</span>
+                          <ExternalLink size={10} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-center text-slate-400">
+                    <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
+                      <PenTool size={28} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">No Signature Uploaded</p>
+                      <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                        Signature section will remain hidden on all A4 invoices until an image is uploaded.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Upload Controls */}
+              <div className="flex items-center gap-3">
+                <label className="flex-1">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleSignatureChange}
+                    disabled={!canEdit || isCompressingSignature || isSaving}
+                    className="hidden"
+                  />
+                  <div className="h-9 px-4 text-xs font-semibold rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center gap-2 cursor-pointer shadow-2xs transition-colors">
+                    <Upload size={14} className="text-[#02626D]" />
+                    <span>{formData.signatureUrl ? 'Change Signature Image' : 'Upload Signature Image'}</span>
+                  </div>
+                </label>
+
+                {formData.signatureUrl && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveSignature}
+                    disabled={!canEdit || isSaving}
+                    className="h-9 px-3 text-xs font-semibold rounded-md border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                    title="Remove Signature"
+                  >
+                    <Trash2 size={13} />
+                    <span>Remove</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Invoice Signatory Live Appearance Miniature */}
+              <div className="bg-slate-100/80 rounded-lg p-3 border border-slate-200 space-y-1.5">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  A4 Invoice Footer Live Appearance:
+                </span>
+                <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center justify-between">
+                  <div className="text-[10px] text-slate-400">
+                    <p className="font-bold text-slate-600 uppercase">Terms &amp; Conditions</p>
+                    <p>1. Goods once sold will not be returned.</p>
+                  </div>
+
+                  {formData.signatureUrl ? (
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-slate-800">
+                        For {formData.businessName || 'PATTABIRAM SWEETS'}
+                      </p>
+                      <div className="h-10 flex items-end justify-end pb-0.5">
+                        <img
+                          src={formData.signatureUrl}
+                          alt="Sign"
+                          className="max-h-9 max-w-[100px] object-contain"
+                        />
+                      </div>
+                      <span className="text-[9.5px] font-semibold text-slate-500 border-t border-slate-400 pt-0.5 px-2 inline-block">
+                        Authorized Signatory
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-right text-[10px] text-slate-400 italic">
+                      (Signature Section Hidden)
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 3: RECEIPT & BILL PREVIEW ── */}
       {activeTab === 'preview' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Thermal Slip 80mm Preview */}

@@ -32,6 +32,7 @@ import {
   Building2,
   UserPlus,
   Printer,
+  FileText,
   BarChart3,
   PieChart,
   Layers,
@@ -53,6 +54,7 @@ import { usePrinter } from '@/context/PrinterContext';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from '@/context/ToastContext';
 import { OrderActionOtpModal } from '@/components/OrderActionOtpModal';
+import A4InvoiceModal from '@/components/A4InvoiceModal';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -599,6 +601,7 @@ export default function OrdersClient() {
   const navigateToOrder = (orderId: string) => router.push(`/orders/${orderId}`);
   const [deletingOrder, setDeletingOrder] = useState<OrderRecord | null>(null);
   const [updatingStatusOrder, setUpdatingStatusOrder] = useState<OrderRecord | null>(null);
+  const [a4InvoiceOrder, setA4InvoiceOrder] = useState<OrderRecord | null>(null);
 
   // New Order Form State
   const [orderSlot, setOrderSlot] = useState<SlotTime>('9:00 AM - 12:00 PM');
@@ -2447,8 +2450,8 @@ export default function OrdersClient() {
                                 </div>
                               </div>
 
-                              {/* Sixth Row: Action Buttons (View, Edit, Print - Delete removed) */}
-                              <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-slate-100/80">
+                              {/* Sixth Row: Action Buttons (View, Edit, Print, A4) */}
+                              <div className="grid grid-cols-4 gap-1.5 pt-1.5 border-t border-slate-100/80">
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -2480,10 +2483,22 @@ export default function OrdersClient() {
                                     handlePrintOrderSlip(order);
                                   }}
                                   className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-800 border border-emerald-200 transition-all shadow-2xs cursor-pointer whitespace-nowrap active:scale-[0.98]"
-                                  title="Print Thermal Receipt"
+                                  title="Print Thermal Receipt (80mm)"
                                 >
                                   <Printer size={12} className="text-emerald-600" />
                                   <span>Print</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setA4InvoiceOrder(order);
+                                  }}
+                                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-800 border border-indigo-200 transition-all shadow-2xs cursor-pointer whitespace-nowrap active:scale-[0.98]"
+                                  title="Print A4 Tax Invoice"
+                                >
+                                  <FileText size={12} className="text-indigo-600" />
+                                  <span>A4</span>
                                 </button>
                               </div>
                             </div>
@@ -2662,9 +2677,16 @@ export default function OrdersClient() {
                           <button
                             onClick={(e) => { e.stopPropagation(); handlePrintOrderSlip(order); }}
                             className="flex items-center justify-center h-7 w-7 rounded-lg text-[#02626D] bg-[#02626D]/10 hover:bg-[#02626D]/20 transition-colors cursor-pointer border border-[#02626D]/30 shadow-2xs"
-                            title="Print Thermal Receipt"
+                            title="Print Thermal Receipt (80mm)"
                           >
                             <Printer size={13} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setA4InvoiceOrder(order); }}
+                            className="flex items-center justify-center h-7 w-7 rounded-lg text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors cursor-pointer border border-indigo-200 shadow-2xs font-bold text-[10px]"
+                            title="Print A4 Tax Invoice"
+                          >
+                            <FileText size={13} />
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleOpenEditOrderModal(order); }}
@@ -3238,6 +3260,13 @@ export default function OrdersClient() {
           </div>
         </div>
       )}
+
+      {/* ── 12. A4 TAX INVOICE PRINT PREVIEW MODAL ── */}
+      <A4InvoiceModal
+        isOpen={Boolean(a4InvoiceOrder)}
+        onClose={() => setA4InvoiceOrder(null)}
+        order={a4InvoiceOrder}
+      />
 
     </div>
   );

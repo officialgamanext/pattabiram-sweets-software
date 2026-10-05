@@ -29,6 +29,7 @@ import {
   ChevronRight,
   FileText,
   Check,
+  Truck,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import {
@@ -44,6 +45,7 @@ import {
 import { toast } from '@/context/ToastContext';
 import { useBusinessSettings, formatStoreAddress, formatStorePhone } from '@/lib/businessSettings';
 import { usePrinter } from '@/context/PrinterContext';
+import A4InvoiceModal from '@/components/A4InvoiceModal';
 
 export interface PaymentEntry {
   id: string;
@@ -101,6 +103,9 @@ export interface WholesalerOrderRecord {
   orderType: string;
   orderStatus?: string;
   status: 'Pending' | 'Approved' | 'Processing' | 'Delivered' | 'Cancelled';
+  isTransportRequired?: boolean;
+  transportCharges?: number;
+  packingCharges?: number;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -122,6 +127,7 @@ export default function WholesalerOrderDetailClient({ orderId }: { orderId: stri
   const [loading, setLoading] = useState(true);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [showThermalModal, setShowThermalModal] = useState(false);
+  const [isA4InvoiceOpen, setIsA4InvoiceOpen] = useState(false);
 
   // Payment installment states
   const [installmentAmount, setInstallmentAmount] = useState<string>('');
@@ -482,6 +488,17 @@ export default function WholesalerOrderDetailClient({ orderId }: { orderId: stri
             <span>Manage Payments</span>
           </a>
 
+          {/* Print A4 Tax Invoice */}
+          <button
+            type="button"
+            onClick={() => setIsA4InvoiceOpen(true)}
+            className="h-9 px-3.5 text-xs font-bold rounded-xl bg-teal-50 hover:bg-teal-100 text-[#02626D] border border-teal-200 shadow-2xs inline-flex items-center gap-1.5 cursor-pointer transition-colors active:scale-95"
+            title="View & Print A4 Tax Invoice"
+          >
+            <FileText size={14} className="text-[#02626D]" />
+            <span>A4 Invoice</span>
+          </button>
+
           {/* Print Thermal Receipt */}
           <button
             type="button"
@@ -625,6 +642,27 @@ export default function WholesalerOrderDetailClient({ orderId }: { orderId: stri
                 {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleString('en-IN') : '—'}
               </span>
             </div>
+
+            {order.isTransportRequired && (
+              <div className="pt-2 border-t border-amber-100 space-y-1 bg-amber-50/50 -mx-4 -mb-4 p-3 rounded-b-2xl">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-amber-800 flex items-center gap-1">
+                    <Truck size={12} className="text-amber-600" />
+                    Transport Delivery
+                  </span>
+                  {Number(order.transportCharges) > 0 && (
+                    <span className="text-xs font-mono font-bold text-amber-900">
+                      ₹{Number(order.transportCharges).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                {order.deliveryAddress && (
+                  <p className="text-[10.5px] text-slate-600 leading-tight line-clamp-2">
+                    Dest: {order.deliveryAddress}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -640,6 +678,20 @@ export default function WholesalerOrderDetailClient({ orderId }: { orderId: stri
               <span>{order.taxType === 'inclusive' ? 'Base Subtotal:' : 'Subtotal:'}</span>
               <span>₹{(order.taxableAmount ?? order.subtotal ?? 0).toFixed(2)}</span>
             </div>
+
+            {Number(order.packingCharges) > 0 && (
+              <div className="flex justify-between text-slate-600 text-[11px]">
+                <span>Packing Charges:</span>
+                <span>+₹{Number(order.packingCharges).toFixed(2)}</span>
+              </div>
+            )}
+
+            {order.isTransportRequired && Number(order.transportCharges) > 0 && (
+              <div className="flex justify-between text-amber-700 text-[11px]">
+                <span>Transport Freight:</span>
+                <span className="font-bold">+₹{Number(order.transportCharges).toFixed(2)}</span>
+              </div>
+            )}
 
             {(order.cgstAmount || order.sgstAmount) ? (
               <>
@@ -1350,6 +1402,13 @@ export default function WholesalerOrderDetailClient({ orderId }: { orderId: stri
           <p>Visit Again!</p>
         </div>
       </div>
+
+      {/* ── MODAL: A4 Tax Invoice Modal ────────────────────────────────────────── */}
+      <A4InvoiceModal
+        isOpen={isA4InvoiceOpen}
+        onClose={() => setIsA4InvoiceOpen(false)}
+        order={order}
+      />
     </div>
   );
 }

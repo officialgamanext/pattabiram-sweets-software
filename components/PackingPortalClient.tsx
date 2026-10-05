@@ -34,6 +34,7 @@ import { db } from '@/lib/firebase';
 import { collection, onSnapshot, updateDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import type { OrderRecord, OrderItemLine, CustomisationData } from './OrdersClient';
 import CustomSelect from '@/components/CustomSelect';
+import CustomDatePicker from '@/components/CustomDatePicker';
 import { useAuth } from '@/context/AuthContext';
 import SwitchPackingUnitModal from '@/components/SwitchPackingUnitModal';
 import { getSlotOrderWeight } from './ManufacturingPortalClient';
@@ -169,8 +170,29 @@ export function isWholesaleOrder(order: OrderRecord): boolean {
 }
 
 /**
+ * Extracts effective date for packing portal filtering (expected delivery date, order date, etc.)
+ */
+export function getOrderEffectivePackingDate(order: OrderRecord): string {
+  if (order.expectedDeliveryDate && /^\d{4}-\d{2}-\d{2}$/.test(order.expectedDeliveryDate)) {
+    return order.expectedDeliveryDate;
+  }
+  if (order.orderDate && /^\d{4}-\d{2}-\d{2}$/.test(order.orderDate)) {
+    return order.orderDate;
+  }
+  if (order.manufacturingDate && /^\d{4}-\d{2}-\d{2}$/.test(order.manufacturingDate)) {
+    return order.manufacturingDate;
+  }
+  const createdRaw = (order as any).createdAt;
+  if (createdRaw?.toDate) {
+    return createdRaw.toDate().toLocaleDateString('en-CA');
+  }
+  return '';
+}
+
+/**
  * Checks if a specific packing unit is responsible for handling an order based on:
  * - Wholesale order -> Wholesale packing unit(s)
+ * - Wholesale order with Transport -> Transport packing unit(s) as well
  * - Customisation order -> Customisation packing unit(s)
  * - Transport order -> Transport packing unit(s)
  * - Both -> Both Customisation and Transport packing units
@@ -182,8 +204,25 @@ export function isOrderMatchingPackingUnit(
   allUnits: DynamicUnit[]
 ): boolean {
   const isWholesale = isWholesaleOrder(order);
+  const isTransport = Boolean(order.isTransportRequired);
+  const isCustom = Boolean(order.isCustomisation);
   const isUnitWholesale = Boolean(unit.isWholesaleUnit);
+  const isUnitTransport = Boolean(unit.isTransportUnit);
+  const isUnitCustom = Boolean(unit.isCustomisationUnit);
+
   const hasWholesaleUnits = allUnits.some((u) => Boolean(u.isWholesaleUnit));
+  const hasTransportUnits = allUnits.some((u) => Boolean(u.isTransportUnit));
+  const hasCustomUnits = allUnits.some((u) => Boolean(u.isCustomisationUnit));
+
+  // Requirement 5: Wholesale order with transport must route to Transport packing units!
+  if (isTransport) {
+    if (hasTransportUnits) {
+      if (isUnitTransport) return true;
+      if (isWholesale && isUnitWholesale) return true;
+      if (isCustom && isUnitCustom) return true;
+      return false;
+    }
+  }
 
   if (isWholesale) {
     if (hasWholesaleUnits) {
@@ -195,14 +234,6 @@ export function isOrderMatchingPackingUnit(
       return false;
     }
   }
-
-  const isCustom = Boolean(order.isCustomisation);
-  const isTransport = Boolean(order.isTransportRequired);
-  const isUnitCustom = Boolean(unit.isCustomisationUnit);
-  const isUnitTransport = Boolean(unit.isTransportUnit);
-
-  const hasCustomUnits = allUnits.some((u) => Boolean(u.isCustomisationUnit));
-  const hasTransportUnits = allUnits.some((u) => Boolean(u.isTransportUnit));
 
   // Case 1: Order has BOTH Customisation AND Transport
   if (isCustom && isTransport) {
@@ -248,16 +279,30 @@ export function getEffectivePackingUnitName(
     return (order as any).packingUnitOverride;
   }
 
-  // 3. Wholesale order handling
-  if (isWholesaleOrder(order)) {
+  const isCustom = Boolean(order.isCustomisation);
+  const isTransport = Boolean(order.isTransportRequired);
+  const isWholesale = isWholesaleOrder(order);
+
+  // If order requires transport (including wholesale order with transport)
+  if (isTransport) {
+    const transportUnits = allUnits.filter((u) => u.isTransportUnit);
+    if (transportUnits.length > 0) {
+      if (isWholesale) {
+        const wholesaleUnits = allUnits.filter((u) => u.isWholesaleUnit);
+        const combined = [...transportUnits, ...wholesaleUnits];
+        return Array.from(new Set(combined.map((u) => u.name))).join(', ');
+      }
+      return transportUnits.map((u) => u.name).join(', ');
+    }
+  }
+
+  // 3. Wholesale order handling (without transport)
+  if (isWholesale) {
     const wholesaleUnits = allUnits.filter((u) => u.isWholesaleUnit);
     if (wholesaleUnits.length > 0) {
       return wholesaleUnits.map((u) => u.name).join(', ');
     }
   }
-
-  const isCustom = Boolean(order.isCustomisation);
-  const isTransport = Boolean(order.isTransportRequired);
 
   const customUnits = allUnits.filter((u) => u.isCustomisationUnit);
   const transportUnits = allUnits.filter((u) => u.isTransportUnit);
@@ -297,6 +342,13 @@ export default function PackingPortalClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUnit, setSelectedUnit] = useState('all');
+  const [selectedPackingDate, setSelectedPackingDate] = useState<string>(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  });
   const [activeTab, setActiveTab] = useState<'item_wise' | 'slot_wise' | 'order_wise'>('item_wise');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -496,6 +548,12 @@ export default function PackingPortalClient() {
       // An order's items only enter active packing queue if order status has reached Moved to Packing
       if (!isOrderFromMovedToPacking(order.orderStatus)) return;
 
+      // Filter by selected packing delivery date
+      if (selectedPackingDate && selectedPackingDate !== 'all') {
+        const ordDate = getOrderEffectivePackingDate(order);
+        if (ordDate && ordDate !== selectedPackingDate) return;
+      }
+
       (order.items || []).forEach((item) => {
         const itemMfgStatus = item.mfgStatus || (
           order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
@@ -604,13 +662,19 @@ export default function PackingPortalClient() {
         if (aMin !== bMin) return aMin - bMin;
         return b.totalQuantity - a.totalQuantity;
       });
-  }, [orders, itemInfoMap, selectedUnit, searchTerm, isAllUnitsAllowed, accessiblePckUnits, pckUnits]);
+  }, [orders, itemInfoMap, selectedUnit, selectedPackingDate, searchTerm, isAllUnitsAllowed, accessiblePckUnits, pckUnits]);
 
   // Order-wise active packing list - sorted with earliest slot / time at top
   // Order-wise active packing list - sorted with orders ready for packing at top
   const filteredOrderWiseList = useMemo(() => {
     const list = orders.filter((order) => {
       if (!isOrderEligibleForPacking(order)) return false;
+
+      // Filter by selected packing delivery date
+      if (selectedPackingDate && selectedPackingDate !== 'all') {
+        const ordDate = getOrderEffectivePackingDate(order);
+        if (ordDate && ordDate !== selectedPackingDate) return false;
+      }
 
       // Filter out orders that have completely moved to store or delivered
       const allItemsMovedToStore = Boolean(
@@ -654,7 +718,7 @@ export default function PackingPortalClient() {
       if (aWeight !== bWeight) return aWeight - bWeight;
       return (a.code || '').localeCompare(b.code || '');
     });
-  }, [orders, selectedUnit, searchTerm, itemInfoMap, isAllUnitsAllowed, accessiblePckUnits, pckUnits]);
+  }, [orders, selectedUnit, selectedPackingDate, searchTerm, itemInfoMap, isAllUnitsAllowed, accessiblePckUnits, pckUnits]);
 
   // ── Slot-Wise Grouped Packing Queue ──
   const slotWiseGroups = useMemo(() => {
@@ -664,6 +728,12 @@ export default function PackingPortalClient() {
     orders.forEach((order) => {
       if (!isOrderEligibleForPacking(order)) return;
       if (!isOrderFromMovedToPacking(order.orderStatus)) return;
+
+      // Filter by selected packing delivery date
+      if (selectedPackingDate && selectedPackingDate !== 'all') {
+        const ordDate = getOrderEffectivePackingDate(order);
+        if (ordDate && ordDate !== selectedPackingDate) return;
+      }
 
       const slot = (order.slot || 'Regular / General Slot').trim();
 
@@ -784,7 +854,7 @@ export default function PackingPortalClient() {
     });
 
     return groups;
-  }, [orders, itemInfoMap, selectedUnit, searchTerm, isAllUnitsAllowed, accessiblePckUnits, pckUnits]);
+  }, [orders, itemInfoMap, selectedUnit, selectedPackingDate, searchTerm, isAllUnitsAllowed, accessiblePckUnits, pckUnits]);
 
   // Helper to remove any undefined fields before writing to Firestore
   const sanitizeForFirestore = (obj: any): any => {
@@ -1031,18 +1101,32 @@ export default function PackingPortalClient() {
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Packing & Dispatch Portal</h1>
         </div>
 
-        {/* Dynamic Packing Unit Selector */}
-        <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-lg border border-slate-300 shadow-2xs">
-          <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-            <Building2 size={13} className="text-slate-500" /> Packing Unit:
-          </span>
-          <CustomSelect
-            options={unitOptions}
-            value={selectedUnit}
-            onChange={(val) => setSelectedUnit(val)}
-            size="sm"
-            className="min-w-[200px]"
-          />
+        {/* Date & Dynamic Packing Unit Selectors */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-lg border border-slate-300 shadow-2xs">
+            <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+              <Calendar size={13} className="text-slate-500" /> Date:
+            </span>
+            <CustomDatePicker
+              value={selectedPackingDate}
+              onChange={(val) => setSelectedPackingDate(val)}
+              allowAll={true}
+              size="sm"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-lg border border-slate-300 shadow-2xs">
+            <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+              <Building2 size={13} className="text-slate-500" /> Packing Unit:
+            </span>
+            <CustomSelect
+              options={unitOptions}
+              value={selectedUnit}
+              onChange={(val) => setSelectedUnit(val)}
+              size="sm"
+              className="min-w-[200px]"
+            />
+          </div>
         </div>
       </div>
 

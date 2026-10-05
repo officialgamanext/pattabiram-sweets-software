@@ -38,9 +38,12 @@ import {
   Receipt,
   CreditCard,
   TrendingUp,
+  Truck,
+  IndianRupee,
 } from 'lucide-react';
 import Pagination from '@/components/Pagination';
 import CustomDatePicker from '@/components/CustomDatePicker';
+import A4InvoiceModal from '@/components/A4InvoiceModal';
 import { db } from '@/lib/firebase';
 import { toast } from '@/context/ToastContext';
 import {
@@ -64,6 +67,9 @@ export interface WholesalerItem {
   mobile?: string;
   businessName?: string;
   companyName?: string;
+  city?: string;
+  address?: string;
+  gstin?: string;
   priceListId?: string;
   priceListName?: string;
   status?: string;
@@ -111,6 +117,8 @@ export interface WholesalerOrderRecord {
   wholesalerName: string;
   wholesalerMobile: string;
   companyName?: string;
+  wholesalerGstin?: string;
+  deliveryAddress?: string;
   priceListName: string;
   orderDate?: string;
   manufacturingDate?: string;
@@ -132,6 +140,9 @@ export interface WholesalerOrderRecord {
   orderType: string;
   orderStatus?: string;
   status: 'Pending' | 'Approved' | 'Processing' | 'Delivered' | 'Cancelled';
+  isTransportRequired?: boolean;
+  transportCharges?: number;
+  packingCharges?: number;
   createdAt?: any;
 }
 
@@ -178,9 +189,15 @@ export default function WholesalerOrdersClient() {
   const [addSearchQuery, setAddSearchQuery] = useState('');
   const [addCategoryFilter, setAddCategoryFilter] = useState('All');
   const [addShowOnlySelected, setAddShowOnlySelected] = useState(false);
+  const [addAlphabetFilter, setAddAlphabetFilter] = useState('ALL');
+  const [isTransportRequired, setIsTransportRequired] = useState(false);
+  const [transportCharges, setTransportCharges] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [packingCharges, setPackingCharges] = useState('');
 
   // View Order Modal State
   const [viewingOrder, setViewingOrder] = useState<WholesalerOrderRecord | null>(null);
+  const [a4InvoiceOrder, setA4InvoiceOrder] = useState<WholesalerOrderRecord | null>(null);
 
   // Edit Order Modal State
   const [editingOrder, setEditingOrder] = useState<WholesalerOrderRecord | null>(null);
@@ -191,6 +208,11 @@ export default function WholesalerOrdersClient() {
   const [editSearchQuery, setEditSearchQuery] = useState('');
   const [editCategoryFilter, setEditCategoryFilter] = useState('All');
   const [editShowOnlySelected, setEditShowOnlySelected] = useState(false);
+  const [editAlphabetFilter, setEditAlphabetFilter] = useState('ALL');
+  const [editIsTransportRequired, setEditIsTransportRequired] = useState(false);
+  const [editTransportCharges, setEditTransportCharges] = useState('');
+  const [editDeliveryAddress, setEditDeliveryAddress] = useState('');
+  const [editPackingCharges, setEditPackingCharges] = useState('');
 
   // Delete Order State
   const [deletingOrder, setDeletingOrder] = useState<WholesalerOrderRecord | null>(null);
@@ -400,25 +422,37 @@ export default function WholesalerOrdersClient() {
     return ['All', ...Array.from(cats)];
   }, [items]);
 
-  // Filtered Add Items based on Search & Category
+  // Alphabet List
+  const ALPHABET_LIST = useMemo(
+    () => ['ALL', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'],
+    []
+  );
+
+  // Filtered Add Items based on Search, Category & Alphabet (Sorted Alphabetically)
   const filteredAddItems = useMemo(() => {
-    return orderItems.filter((item) => {
-      if (addShowOnlySelected && (!item.quantity || item.quantity <= 0)) {
-        return false;
-      }
-      if (addCategoryFilter !== 'All' && item.category !== addCategoryFilter) {
-        return false;
-      }
-      if (addSearchQuery.trim()) {
-        const q = addSearchQuery.toLowerCase().trim();
-        const matchName = item.name?.toLowerCase().includes(q);
-        const matchCode = item.code?.toLowerCase().includes(q);
-        const matchCat = item.category?.toLowerCase().includes(q);
-        if (!matchName && !matchCode && !matchCat) return false;
-      }
-      return true;
-    });
-  }, [orderItems, addShowOnlySelected, addCategoryFilter, addSearchQuery]);
+    return orderItems
+      .filter((item) => {
+        if (addShowOnlySelected && (!item.quantity || item.quantity <= 0)) {
+          return false;
+        }
+        if (addCategoryFilter !== 'All' && item.category !== addCategoryFilter) {
+          return false;
+        }
+        if (addAlphabetFilter !== 'ALL') {
+          const firstChar = (item.name || item.itemName || '').trim().charAt(0).toUpperCase();
+          if (firstChar !== addAlphabetFilter) return false;
+        }
+        if (addSearchQuery.trim()) {
+          const q = addSearchQuery.toLowerCase().trim();
+          const matchName = item.name?.toLowerCase().includes(q);
+          const matchCode = item.code?.toLowerCase().includes(q);
+          const matchCat = item.category?.toLowerCase().includes(q);
+          if (!matchName && !matchCode && !matchCat) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (a.name || a.itemName || '').localeCompare(b.name || b.itemName || ''));
+  }, [orderItems, addShowOnlySelected, addCategoryFilter, addAlphabetFilter, addSearchQuery]);
 
   const addSelectedLines = useMemo(() => {
     return orderItems.filter((it) => (it.quantity || 0) > 0);
@@ -428,14 +462,19 @@ export default function WholesalerOrdersClient() {
     return Math.round(addSelectedLines.reduce((acc, it) => acc + (it.quantity || 0), 0) * 100) / 100;
   }, [addSelectedLines]);
 
-  // Modal Order Summary Calculation
+  // Modal Order Summary Calculation including Packing & Transport
   const modalSubtotal = useMemo(() => {
     return Math.round(orderItems.reduce((sum, item) => sum + item.totalAmount, 0) * 100) / 100;
   }, [orderItems]);
 
+  const transportChargesVal = isTransportRequired ? (parseFloat(String(transportCharges)) || 0) : 0;
+  const packingChargesVal = parseFloat(String(packingCharges)) || 0;
+  const additionalChargesTotal = transportChargesVal + packingChargesVal;
+
+  const baseBeforeTax = modalSubtotal + additionalChargesTotal;
   const modalTaxCalc = useMemo(() => {
-    return calculateTax(modalSubtotal, businessSettings);
-  }, [modalSubtotal, businessSettings]);
+    return calculateTax(baseBeforeTax, businessSettings);
+  }, [baseBeforeTax, businessSettings]);
 
   const modalTotal = modalTaxCalc.finalAmount;
   const modalTax = modalTaxCalc.totalTax;
@@ -480,6 +519,11 @@ export default function WholesalerOrdersClient() {
         wholesalerName: wholesalerName,
         wholesalerMobile: wholesalerMobile,
         companyName: companyName,
+        wholesalerGstin: selectedWholesaler.gstin || '',
+        deliveryAddress: isTransportRequired ? deliveryAddress : (selectedWholesaler.address || ''),
+        isTransportRequired: Boolean(isTransportRequired),
+        transportCharges: transportChargesVal,
+        packingCharges: packingChargesVal,
         priceListName: priceListName,
         customerName: wholesalerName,
         customerMobile: wholesalerMobile,
@@ -519,6 +563,11 @@ export default function WholesalerOrdersClient() {
       setSelectedWholesaler(null);
       setOrderDate(getTodayDateStr());
       setOrderItems([]);
+      setIsTransportRequired(false);
+      setTransportCharges('');
+      setDeliveryAddress('');
+      setPackingCharges('');
+      setAddAlphabetFilter('ALL');
       toast.success(
         'Order Created',
         hasMfgItems
@@ -623,12 +672,18 @@ export default function WholesalerOrdersClient() {
 
   // ── Edit Order Handlers & Calculations ───────────────────────────────────────
   const editModalSubtotal = useMemo(() => {
-    return editOrderItems.reduce((sum, item) => sum + item.totalAmount, 0);
+    return Math.round(editOrderItems.reduce((sum, item) => sum + item.totalAmount, 0) * 100) / 100;
   }, [editOrderItems]);
 
+  const editTransportChargesVal = editIsTransportRequired ? (parseFloat(String(editTransportCharges)) || 0) : 0;
+  const editPackingChargesVal = parseFloat(String(editPackingCharges)) || 0;
+  const editAdditionalChargesTotal = editTransportChargesVal + editPackingChargesVal;
+
+  const editBaseBeforeTax = editModalSubtotal + editAdditionalChargesTotal;
+
   const editModalTaxCalc = useMemo(() => {
-    return calculateTax(editModalSubtotal, businessSettings);
-  }, [editModalSubtotal, businessSettings]);
+    return calculateTax(editBaseBeforeTax, businessSettings);
+  }, [editBaseBeforeTax, businessSettings]);
 
   const editModalTotal = editModalTaxCalc.finalAmount;
   const editModalTax = editModalTaxCalc.totalTax;
@@ -643,6 +698,12 @@ export default function WholesalerOrdersClient() {
 
     const ws = wholesalers.find((w) => w.id === order.wholesalerId) || null;
     setEditWholesaler(ws);
+
+    setEditIsTransportRequired(Boolean(order.isTransportRequired));
+    setEditTransportCharges(order.transportCharges ? String(order.transportCharges) : '');
+    setEditDeliveryAddress(order.deliveryAddress || '');
+    setEditPackingCharges(order.packingCharges ? String(order.packingCharges) : '');
+    setEditAlphabetFilter('ALL');
 
     // Compute price map for assigned price list
     const assignedList = ws
@@ -730,25 +791,31 @@ export default function WholesalerOrdersClient() {
     );
   };
 
-  // Filtered Edit Items based on Search & Category
+  // Filtered Edit Items based on Search, Category & Alphabet (Sorted Alphabetically)
   const filteredEditItems = useMemo(() => {
-    return editOrderItems.filter((item) => {
-      if (editShowOnlySelected && (!item.quantity || item.quantity <= 0)) {
-        return false;
-      }
-      if (editCategoryFilter !== 'All' && item.category !== editCategoryFilter) {
-        return false;
-      }
-      if (editSearchQuery.trim()) {
-        const q = editSearchQuery.toLowerCase().trim();
-        const matchName = item.name?.toLowerCase().includes(q);
-        const matchCode = item.code?.toLowerCase().includes(q);
-        const matchCat = item.category?.toLowerCase().includes(q);
-        if (!matchName && !matchCode && !matchCat) return false;
-      }
-      return true;
-    });
-  }, [editOrderItems, editShowOnlySelected, editCategoryFilter, editSearchQuery]);
+    return editOrderItems
+      .filter((item) => {
+        if (editShowOnlySelected && (!item.quantity || item.quantity <= 0)) {
+          return false;
+        }
+        if (editCategoryFilter !== 'All' && item.category !== editCategoryFilter) {
+          return false;
+        }
+        if (editAlphabetFilter !== 'ALL') {
+          const firstChar = (item.name || item.itemName || '').trim().charAt(0).toUpperCase();
+          if (firstChar !== editAlphabetFilter) return false;
+        }
+        if (editSearchQuery.trim()) {
+          const q = editSearchQuery.toLowerCase().trim();
+          const matchName = item.name?.toLowerCase().includes(q);
+          const matchCode = item.code?.toLowerCase().includes(q);
+          const matchCat = item.category?.toLowerCase().includes(q);
+          if (!matchName && !matchCode && !matchCat) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (a.name || a.itemName || '').localeCompare(b.name || b.itemName || ''));
+  }, [editOrderItems, editShowOnlySelected, editCategoryFilter, editAlphabetFilter, editSearchQuery]);
 
   const editSelectedLines = useMemo(() => {
     return editOrderItems.filter((it) => (it.quantity || 0) > 0);
@@ -777,6 +844,10 @@ export default function WholesalerOrdersClient() {
         orderDate: editOrderDate || getTodayDateStr(),
         manufacturingDate: editOrderDate || getTodayDateStr(),
         expectedDeliveryDate: editOrderDate || getTodayDateStr(),
+        isTransportRequired: Boolean(editIsTransportRequired),
+        transportCharges: editTransportChargesVal,
+        deliveryAddress: editIsTransportRequired ? editDeliveryAddress : '',
+        packingCharges: editPackingChargesVal,
         items: selectedLines.map((line) => ({
           itemId: line.itemId || '',
           name: line.name || '',
@@ -1278,13 +1349,21 @@ export default function WholesalerOrdersClient() {
                       return (
                         <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
                           <td className="py-3 px-4">
-                            <Link
-                              href={`/wholesaler-orders/${order.id}`}
-                              className="font-mono font-bold text-slate-900 hover:text-[#02626D] hover:underline"
-                              title="View Order Details Page"
-                            >
-                              {order.orderId}
-                            </Link>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Link
+                                href={`/wholesaler-orders/${order.id}`}
+                                className="font-mono font-bold text-slate-900 hover:text-[#02626D] hover:underline"
+                                title="View Order Details Page"
+                              >
+                                {order.orderId}
+                              </Link>
+                              {order.isTransportRequired && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200" title={`Transport Delivery: ₹${order.transportCharges || 0}`}>
+                                  <Truck size={10} className="text-amber-600" />
+                                  Transport
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           <td className="py-3 px-4 text-slate-600 whitespace-nowrap font-medium">
@@ -1376,6 +1455,16 @@ export default function WholesalerOrdersClient() {
 
                           <td className="py-3 px-4">
                             <div className="flex items-center justify-center gap-1.5">
+                              {/* A4 Invoice Action Button */}
+                              <button
+                                onClick={() => setA4InvoiceOrder(order)}
+                                className="h-7 px-2.5 text-[11px] font-bold rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                                title="View & Print A4 Invoice"
+                              >
+                                <FileText size={13} className="text-[#02626D]" />
+                                <span>Invoice</span>
+                              </button>
+
                               {/* Manage Order Payments & Installments Action Button */}
                               <button
                                 onClick={() => handleOpenManagePayment(order)}
@@ -1782,14 +1871,25 @@ export default function WholesalerOrdersClient() {
                                           </span>
                                         </td>
                                         <td className="py-2.5 px-3 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleOpenManagePayment(ord)}
-                                            className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs inline-flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
-                                          >
-                                            <WalletCards size={12} />
-                                            <span>Manage Payment</span>
-                                          </button>
+                                          <div className="flex items-center justify-center gap-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => setA4InvoiceOrder(ord)}
+                                              className="px-2 py-1 text-[11px] font-bold rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 inline-flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                              title="View & Print A4 Invoice"
+                                            >
+                                              <FileText size={12} className="text-[#02626D]" />
+                                              <span>Invoice</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenManagePayment(ord)}
+                                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs inline-flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
+                                            >
+                                              <WalletCards size={12} />
+                                              <span>Manage</span>
+                                            </button>
+                                          </div>
                                         </td>
                                       </tr>
                                     );
@@ -1887,14 +1987,25 @@ export default function WholesalerOrdersClient() {
                               </span>
                             </td>
                             <td className="py-3 px-4 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenManagePayment(ord)}
-                                className="h-7 px-3 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs inline-flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
-                              >
-                                <WalletCards size={12} />
-                                <span>Manage</span>
-                              </button>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setA4InvoiceOrder(ord)}
+                                  className="h-7 px-2.5 text-[11px] font-bold rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 inline-flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                  title="View & Print A4 Invoice"
+                                >
+                                  <FileText size={12} className="text-[#02626D]" />
+                                  <span>Invoice</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenManagePayment(ord)}
+                                  className="h-7 px-3 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs inline-flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
+                                >
+                                  <WalletCards size={12} />
+                                  <span>Manage</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -2081,6 +2192,25 @@ export default function WholesalerOrdersClient() {
                           </button>
                         ))}
                       </div>
+
+                      {/* Alphabet Filter Pills */}
+                      <div className="flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar text-[11px] pt-1.5 border-t border-slate-100">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0">A-Z:</span>
+                        {ALPHABET_LIST.map((letter) => (
+                          <button
+                            key={letter}
+                            type="button"
+                            onClick={() => setAddAlphabetFilter(letter)}
+                            className={`h-6 min-w-6 px-1.5 rounded-md font-bold text-xs transition-all cursor-pointer shrink-0 flex items-center justify-center ${
+                              addAlphabetFilter === letter
+                                ? 'bg-amber-500 text-white shadow-xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            {letter}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     {/* Product Cards Grid */}
@@ -2260,6 +2390,94 @@ export default function WholesalerOrdersClient() {
                     </div>
                   ) : null}
 
+                  {/* Packing & Transport Configuration */}
+                  <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-xl space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between font-bold text-slate-800">
+                      <span className="flex items-center gap-1.5 text-slate-700">
+                        <Package size={13} className="text-[#02626D]" />
+                        Packing & Transport
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                        Packing Charges (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={packingCharges}
+                        onChange={(e) => setPackingCharges(e.target.value)}
+                        className="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#02626D] font-mono"
+                      />
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200/60">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isTransportRequired}
+                          onChange={(e) => {
+                            setIsTransportRequired(e.target.checked);
+                            if (e.target.checked && !deliveryAddress && selectedWholesaler?.address) {
+                              setDeliveryAddress(selectedWholesaler.address);
+                            }
+                          }}
+                          className="w-4 h-4 rounded text-[#02626D] focus:ring-[#02626D] border-slate-300"
+                        />
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Truck size={13} className="text-amber-600" />
+                          Requires Transport Delivery
+                        </span>
+                      </label>
+
+                      {isTransportRequired && (
+                        <div className="mt-2.5 space-y-2 pl-6">
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                              Transport Charges (₹)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              placeholder="0.00"
+                              value={transportCharges}
+                              onChange={(e) => setTransportCharges(e.target.value)}
+                              className="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#02626D] font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[11px] font-semibold text-slate-600">
+                                Delivery Address
+                              </label>
+                              {selectedWholesaler?.address && (
+                                <button
+                                  type="button"
+                                  onClick={() => setDeliveryAddress(selectedWholesaler.address || '')}
+                                  className="text-[10px] text-[#02626D] font-bold hover:underline"
+                                >
+                                  Use Wholesaler Address
+                                </button>
+                              )}
+                            </div>
+                            <textarea
+                              rows={2}
+                              placeholder="Enter transport delivery destination..."
+                              value={deliveryAddress}
+                              onChange={(e) => setDeliveryAddress(e.target.value)}
+                              className="w-full p-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#02626D] resize-none"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Selected Items Cart List */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
@@ -2337,9 +2555,31 @@ export default function WholesalerOrdersClient() {
                       <span className="font-bold text-slate-800">{addTotalWeight}</span>
                     </div>
                     <div className="flex justify-between text-slate-500">
-                      <span>{modalTaxCalc.taxType === 'inclusive' ? 'Subtotal (Base Price):' : 'Subtotal:'}</span>
+                      <span>Items Subtotal:</span>
                       <span className="font-bold text-slate-800 font-mono">
-                        ₹{(modalTaxCalc.taxType === 'inclusive' ? modalTaxCalc.taxableAmount : modalSubtotal).toFixed(2)}
+                        ₹{modalSubtotal.toFixed(2)}
+                      </span>
+                    </div>
+                    {packingChargesVal > 0 && (
+                      <div className="flex justify-between text-slate-600 text-[11px]">
+                        <span>Packing Charges:</span>
+                        <span className="font-bold font-mono text-slate-800">
+                          +₹{packingChargesVal.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    {isTransportRequired && transportChargesVal > 0 && (
+                      <div className="flex justify-between text-slate-600 text-[11px]">
+                        <span>Transport Freight:</span>
+                        <span className="font-bold font-mono text-amber-700">
+                          +₹{transportChargesVal.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-slate-500 pt-1 border-t border-slate-100">
+                      <span>{modalTaxCalc.taxType === 'inclusive' ? 'Base Before Tax:' : 'Taxable Subtotal:'}</span>
+                      <span className="font-bold text-slate-800 font-mono">
+                        ₹{(modalTaxCalc.taxType === 'inclusive' ? modalTaxCalc.taxableAmount : baseBeforeTax).toFixed(2)}
                       </span>
                     </div>
                     {modalTaxCalc.totalGstPercent > 0 && (
@@ -2787,6 +3027,25 @@ export default function WholesalerOrdersClient() {
                         </button>
                       ))}
                     </div>
+
+                    {/* Alphabet Filter Pills */}
+                    <div className="flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar text-[11px] pt-1.5 border-t border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0">A-Z:</span>
+                      {ALPHABET_LIST.map((letter) => (
+                        <button
+                          key={letter}
+                          type="button"
+                          onClick={() => setEditAlphabetFilter(letter)}
+                          className={`h-6 min-w-6 px-1.5 rounded-md font-bold text-xs transition-all cursor-pointer shrink-0 flex items-center justify-center ${
+                            editAlphabetFilter === letter
+                              ? 'bg-amber-500 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {letter}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Product Cards Grid */}
@@ -2955,6 +3214,94 @@ export default function WholesalerOrdersClient() {
                     </div>
                   </div>
 
+                  {/* Packing & Transport Configuration */}
+                  <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-xl space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between font-bold text-slate-800">
+                      <span className="flex items-center gap-1.5 text-slate-700">
+                        <Package size={13} className="text-[#02626D]" />
+                        Packing & Transport
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                        Packing Charges (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={editPackingCharges}
+                        onChange={(e) => setEditPackingCharges(e.target.value)}
+                        className="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#02626D] font-mono"
+                      />
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200/60">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={editIsTransportRequired}
+                          onChange={(e) => {
+                            setEditIsTransportRequired(e.target.checked);
+                            if (e.target.checked && !editDeliveryAddress && editWholesaler?.address) {
+                              setEditDeliveryAddress(editWholesaler.address);
+                            }
+                          }}
+                          className="w-4 h-4 rounded text-[#02626D] focus:ring-[#02626D] border-slate-300"
+                        />
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Truck size={13} className="text-amber-600" />
+                          Requires Transport Delivery
+                        </span>
+                      </label>
+
+                      {editIsTransportRequired && (
+                        <div className="mt-2.5 space-y-2 pl-6">
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                              Transport Charges (₹)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              placeholder="0.00"
+                              value={editTransportCharges}
+                              onChange={(e) => setEditTransportCharges(e.target.value)}
+                              className="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#02626D] font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[11px] font-semibold text-slate-600">
+                                Delivery Address
+                              </label>
+                              {editWholesaler?.address && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditDeliveryAddress(editWholesaler.address || '')}
+                                  className="text-[10px] text-[#02626D] font-bold hover:underline"
+                                >
+                                  Use Wholesaler Address
+                                </button>
+                              )}
+                            </div>
+                            <textarea
+                              rows={2}
+                              placeholder="Enter transport delivery destination..."
+                              value={editDeliveryAddress}
+                              onChange={(e) => setEditDeliveryAddress(e.target.value)}
+                              className="w-full p-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#02626D] resize-none"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Selected Items Cart List */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
@@ -3032,9 +3379,31 @@ export default function WholesalerOrdersClient() {
                       <span className="font-bold text-slate-800">{editTotalWeight}</span>
                     </div>
                     <div className="flex justify-between text-slate-500">
-                      <span>{editModalTaxCalc.taxType === 'inclusive' ? 'Subtotal (Base Price):' : 'Subtotal:'}</span>
+                      <span>Items Subtotal:</span>
                       <span className="font-bold text-slate-800 font-mono">
-                        ₹{(editModalTaxCalc.taxType === 'inclusive' ? editModalTaxCalc.taxableAmount : editModalSubtotal).toFixed(2)}
+                        ₹{editModalSubtotal.toFixed(2)}
+                      </span>
+                    </div>
+                    {editPackingChargesVal > 0 && (
+                      <div className="flex justify-between text-slate-600 text-[11px]">
+                        <span>Packing Charges:</span>
+                        <span className="font-bold font-mono text-slate-800">
+                          +₹{editPackingChargesVal.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    {editIsTransportRequired && editTransportChargesVal > 0 && (
+                      <div className="flex justify-between text-slate-600 text-[11px]">
+                        <span>Transport Freight:</span>
+                        <span className="font-bold font-mono text-amber-700">
+                          +₹{editTransportChargesVal.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-slate-500 pt-1 border-t border-slate-100">
+                      <span>{editModalTaxCalc.taxType === 'inclusive' ? 'Base Before Tax:' : 'Taxable Subtotal:'}</span>
+                      <span className="font-bold text-slate-800 font-mono">
+                        ₹{(editModalTaxCalc.taxType === 'inclusive' ? editModalTaxCalc.taxableAmount : editBaseBeforeTax).toFixed(2)}
                       </span>
                     </div>
                     {editModalTaxCalc.totalGstPercent > 0 && (
@@ -3443,6 +3812,13 @@ export default function WholesalerOrdersClient() {
           </div>
         </div>
       )}
+
+      {/* ── MODAL: A4 Tax Invoice Modal ────────────────────────────────────────── */}
+      <A4InvoiceModal
+        isOpen={Boolean(a4InvoiceOrder)}
+        onClose={() => setA4InvoiceOrder(null)}
+        order={a4InvoiceOrder}
+      />
     </div>
   );
 }

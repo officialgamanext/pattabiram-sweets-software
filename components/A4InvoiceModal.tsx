@@ -1,0 +1,508 @@
+'use client';
+
+import React, { useRef } from 'react';
+import {
+  X,
+  Printer,
+  Download,
+  Building2,
+  Phone,
+  Mail,
+  MapPin,
+  Calendar,
+  Clock,
+  Truck,
+  Package,
+  Receipt,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react';
+import { useBusinessSettings, formatStoreAddress, formatStorePhone } from '@/lib/businessSettings';
+
+interface A4InvoiceModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  order: any | null;
+}
+
+// Convert number to Indian currency words
+function numberToIndianWords(num: number): string {
+  if (isNaN(num) || num <= 0) return 'Zero Rupees Only';
+  const a = [
+    '',
+    'One',
+    'Two',
+    'Three',
+    'Four',
+    'Five',
+    'Six',
+    'Seven',
+    'Eight',
+    'Nine',
+    'Ten',
+    'Eleven',
+    'Twelve',
+    'Thirteen',
+    'Fourteen',
+    'Fifteen',
+    'Sixteen',
+    'Seventeen',
+    'Eighteen',
+    'Nineteen',
+  ];
+  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  const inWords = (n: number): string => {
+    let str = '';
+    if (n > 99) {
+      str += a[Math.floor(n / 100)] + ' Hundred ';
+      n %= 100;
+    }
+    if (n > 19) {
+      str += b[Math.floor(n / 10)] + ' ' + a[n % 10];
+    } else if (n > 0) {
+      str += a[n];
+    }
+    return str.trim();
+  };
+
+  const integerPart = Math.floor(num);
+  const decimalPart = Math.round((num - integerPart) * 100);
+
+  const crore = Math.floor(integerPart / 10000000);
+  const lakh = Math.floor((integerPart % 10000000) / 100000);
+  const thousand = Math.floor((integerPart % 100000) / 1000);
+  const remainder = integerPart % 1000;
+
+  let result = '';
+  if (crore > 0) result += inWords(crore) + ' Crore ';
+  if (lakh > 0) result += inWords(lakh) + ' Lakh ';
+  if (thousand > 0) result += inWords(thousand) + ' Thousand ';
+  if (remainder > 0) result += inWords(remainder) + ' ';
+
+  result = result.trim() + ' Rupees';
+  if (decimalPart > 0) {
+    result += ' and ' + inWords(decimalPart) + ' Paise';
+  }
+  return result + ' Only';
+}
+
+export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModalProps) {
+  const { settings: businessSettings } = useBusinessSettings();
+  const invoiceRef = useRef<HTMLDivElement>(null);
+
+  if (!isOpen || !order) return null;
+
+  const invoiceNo = order.orderId || order.code || order.id || 'INV-001';
+  const orderDate = order.orderDate || (order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('en-IN') : '—');
+  const deliveryDate = order.expectedDeliveryDate || order.deliveryDate || orderDate;
+  const isWholesale = Boolean(order.orderType === 'Wholesaler B2B' || order.wholesalerId || order.wholesalerName);
+
+  const customerName = order.wholesalerName || order.customerName || 'Valued Customer';
+  const companyName = order.companyName || '';
+  const customerMobile = order.wholesalerMobile || order.customerMobile || order.customerPhone || '—';
+  const customerAddress = order.deliveryAddress || order.customerAddress || order.address || '';
+  const customerGstin = order.wholesalerGstin || order.gstin || order.gstNumber || '';
+
+  const isTransport = Boolean(order.isTransportRequired);
+  const transportCharges = Number(order.transportCharges) || 0;
+  const packingCharges = Number(order.packingCharges) || 0;
+
+  // Customisation extras
+  const boxCharges = Number(order.boxChargesTotal) || 0;
+  const stickerCharges = Number(order.stickerChargesTotal) || 0;
+  const shrinkCharges = Number(order.shrinkChargesTotal) || 0;
+  const packetCharges = Number(order.packetChargesTotal) || 0;
+  const discountAmount = Number(order.discountAmount) || 0;
+
+  const subtotal = Number(order.taxableAmount ?? order.subtotal ?? order.subTotal ?? 0);
+  const grandTotal = Number(order.totalAmount || 0);
+  const receivedAmount = Number(order.receivedAmount || 0);
+  const balanceDue = Math.max(0, grandTotal - receivedAmount);
+  const paymentStatus = order.paymentStatus || (receivedAmount >= grandTotal - 0.01 ? 'Paid' : receivedAmount > 0 ? 'Partial' : 'Pending');
+  const paymentMode = order.paymentMode || 'Credit';
+
+  const items = (order.items || []).map((it: any) => {
+    const qty = parseFloat(String(it.quantity || it.qty || 1)) || 1;
+    const price = parseFloat(String(it.assignedPrice || it.standardPrice || it.price || 0)) || 0;
+    const total = parseFloat(String(it.totalAmount || (qty * price))) || 0;
+    return {
+      name: it.itemName || it.name || 'Item',
+      code: it.code || it.itemCode || '',
+      category: it.category || '',
+      qty,
+      unit: it.unit || 'Kg',
+      price,
+      total,
+      mfgNote: it.needsManufacturing ? 'Mfg' : '',
+    };
+  });
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
+      {/* Top Action Bar (hidden on print) */}
+      <div className="fixed top-4 right-4 z-60 flex items-center gap-2 print:hidden">
+        <button
+          type="button"
+          onClick={handlePrint}
+          className="px-4 py-2 bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-bold rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+        >
+          <Printer size={15} />
+          <span>Print A4 Invoice</span>
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl shadow-md border border-slate-200 cursor-pointer transition-colors"
+          title="Close Preview"
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      {/* A4 Sheet Container */}
+      <div
+        ref={invoiceRef}
+        id="a4-invoice-printable"
+        className="w-full max-w-[850px] min-h-[1100px] bg-white rounded-xl shadow-2xl border border-slate-200 p-8 sm:p-10 my-8 print:my-0 print:p-6 print:border-none print:shadow-none print:rounded-none print:w-full print:max-w-none text-slate-800 font-sans text-xs relative"
+      >
+        {/* Top Header: Business Details & Tax Invoice Badge */}
+        <div className="border-b-2 border-slate-900 pb-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1 max-w-[60%]">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#02626D] text-white flex items-center justify-center font-black text-sm">
+                  PS
+                </div>
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 uppercase">
+                  {businessSettings.businessName || 'PATTABIRAM SWEETS'}
+                </h1>
+              </div>
+              {businessSettings.tagline && (
+                <p className="text-xs font-semibold text-[#02626D] tracking-wide">
+                  {businessSettings.tagline}
+                </p>
+              )}
+              <p className="text-[11px] text-slate-600 leading-tight">
+                {formatStoreAddress(businessSettings)}
+              </p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600 pt-1">
+                <span>Phone: <strong className="text-slate-800">{formatStorePhone(businessSettings)}</strong></span>
+                {businessSettings.email && (
+                  <span>Email: <strong className="text-slate-800">{businessSettings.email}</strong></span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-mono text-slate-800 pt-0.5">
+                {businessSettings.gstNumber && (
+                  <span>GSTIN: <strong>{businessSettings.gstNumber}</strong></span>
+                )}
+                {businessSettings.fssaiNumber && (
+                  <span>FSSAI: <strong>{businessSettings.fssaiNumber}</strong></span>
+                )}
+              </div>
+            </div>
+
+            <div className="text-right space-y-1.5 shrink-0">
+              <div className="inline-block px-3 py-1 bg-slate-900 text-white font-extrabold text-xs tracking-wider uppercase rounded">
+                TAX INVOICE
+              </div>
+              {isWholesale && (
+                <div className="text-[10px] font-bold text-[#02626D] uppercase">
+                  Wholesale B2B
+                </div>
+              )}
+              <div className="text-[11px] space-y-0.5 pt-1">
+                <p>
+                  Invoice No: <strong className="font-mono text-slate-900">{invoiceNo}</strong>
+                </p>
+                <p>
+                  Date: <strong className="text-slate-800">{orderDate}</strong>
+                </p>
+                {deliveryDate && deliveryDate !== orderDate && (
+                  <p>
+                    Delivery Date: <strong className="text-slate-800">{deliveryDate}</strong>
+                  </p>
+                )}
+                {order.slot && (
+                  <p>
+                    Time Slot: <strong className="text-slate-800">{order.slot}</strong>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Customer / Buyer Information Block */}
+        <div className="grid grid-cols-2 gap-4 py-4 border-b border-slate-200">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Billed To / Buyer:
+            </span>
+            <p className="text-sm font-bold text-slate-900">{customerName}</p>
+            {companyName && companyName !== customerName && (
+              <p className="text-xs font-semibold text-slate-700">{companyName}</p>
+            )}
+            <p className="text-xs text-slate-600">Mobile: {customerMobile}</p>
+            {customerGstin && (
+              <p className="text-xs font-mono text-slate-800">
+                GSTIN: <strong>{customerGstin}</strong>
+              </p>
+            )}
+            {customerAddress && !isTransport && (
+              <p className="text-xs text-slate-600 leading-tight">Address: {customerAddress}</p>
+            )}
+          </div>
+
+          <div className="space-y-1 border-l border-slate-100 pl-4">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Shipping / Delivery Details:
+            </span>
+            {isTransport ? (
+              <div className="space-y-0.5">
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                  <Truck size={12} />
+                  <span>Transport Delivery Required</span>
+                </div>
+                {customerAddress ? (
+                  <p className="text-xs text-slate-700 leading-tight pt-1">
+                    <strong>Delivery Address:</strong> {customerAddress}
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-500 italic">Address as per buyer instructions</p>
+                )}
+                {transportCharges > 0 && (
+                  <p className="text-[11px] text-slate-600">
+                    Transport Freight: ₹{transportCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-slate-500 pt-1">
+                <span className="font-semibold text-slate-700">Store Pickup / Direct Dispatch</span>
+                <p className="text-[11px] text-slate-400 mt-0.5">No freight or shipping applied</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Line Items Table */}
+        <div className="py-4">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b-2 border-slate-900 bg-slate-50 text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
+                <th className="py-2.5 px-3 w-10 text-center">#</th>
+                <th className="py-2.5 px-3">Description of Goods</th>
+                <th className="py-2.5 px-3 w-20 text-center">Unit</th>
+                <th className="py-2.5 px-3 w-24 text-right">Quantity</th>
+                <th className="py-2.5 px-3 w-24 text-right">Rate (₹)</th>
+                <th className="py-2.5 px-3 w-28 text-right">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 text-xs">
+              {items.map((it: any, idx: number) => (
+                <tr key={idx} className="hover:bg-slate-50/50">
+                  <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                  <td className="py-2 px-3">
+                    <p className="font-bold text-slate-900">{it.name}</p>
+                    {(it.code || it.category) && (
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        {it.code} {it.category ? `• ${it.category}` : ''}
+                      </p>
+                    )}
+                  </td>
+                  <td className="py-2 px-3 text-center text-slate-600">{it.unit}</td>
+                  <td className="py-2 px-3 text-right font-semibold text-slate-800">{it.qty}</td>
+                  <td className="py-2 px-3 text-right font-mono text-slate-700">
+                    {it.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
+                    {it.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Totals & Calculations Section */}
+        <div className="border-t-2 border-slate-900 pt-3">
+          <div className="grid grid-cols-2 gap-6 items-start">
+            {/* Left: Words & Payment Details */}
+            <div className="space-y-3">
+              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 text-[11px] space-y-1">
+                <span className="font-bold text-slate-500 uppercase text-[9.5px] tracking-wider block">
+                  Amount Chargeable (in words):
+                </span>
+                <p className="font-bold text-slate-900 leading-tight">
+                  {numberToIndianWords(grandTotal)}
+                </p>
+              </div>
+
+              <div className="space-y-1.5 text-xs text-slate-600">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-500">Payment Status:</span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                    paymentStatus === 'Paid'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : paymentStatus === 'Partial'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    {paymentStatus}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-500">Payment Mode:</span>
+                  <span className="font-bold text-slate-800">{paymentMode}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Summary Breakdown */}
+            <div className="space-y-1.5 text-xs">
+              <div className="flex justify-between text-slate-600">
+                <span>Items Subtotal:</span>
+                <span className="font-mono font-semibold">
+                  ₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+
+              {packingCharges > 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Packing Charges:</span>
+                  <span className="font-mono font-semibold">
+                    +₹{packingCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              {boxCharges > 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Box Charges:</span>
+                  <span className="font-mono font-semibold">
+                    +₹{boxCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              {stickerCharges > 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Sticker Charges:</span>
+                  <span className="font-mono font-semibold">
+                    +₹{stickerCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              {shrinkCharges > 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Shrink Charges:</span>
+                  <span className="font-mono font-semibold">
+                    +₹{shrinkCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              {packetCharges > 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Packet Charges:</span>
+                  <span className="font-mono font-semibold">
+                    +₹{packetCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              {isTransport && transportCharges > 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Transport Freight Charges:</span>
+                  <span className="font-mono font-semibold">
+                    +₹{transportCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-emerald-700">
+                  <span>Discount Applied:</span>
+                  <span className="font-mono font-semibold">
+                    -₹{discountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              {order.cgstAmount ? (
+                <div className="flex justify-between text-slate-600 text-[11px]">
+                  <span>CGST ({order.cgstPercent ?? 2.5}%):</span>
+                  <span className="font-mono font-semibold">
+                    +₹{Number(order.cgstAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ) : null}
+
+              {order.sgstAmount ? (
+                <div className="flex justify-between text-slate-600 text-[11px]">
+                  <span>SGST ({order.sgstPercent ?? 2.5}%):</span>
+                  <span className="font-mono font-semibold">
+                    +₹{Number(order.sgstAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ) : null}
+
+              {/* Grand Total */}
+              <div className="flex justify-between items-center text-sm font-black border-t-2 border-slate-900 pt-2 text-slate-900">
+                <span>GRAND TOTAL:</span>
+                <span className="font-mono text-base text-[#02626D]">
+                  ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+
+              {/* Payments & Balance */}
+              <div className="flex justify-between text-xs font-semibold text-emerald-800 pt-1">
+                <span>Total Received / Advance:</span>
+                <span className="font-mono">
+                  ₹{receivedAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+
+              <div className="flex justify-between text-xs font-black text-rose-700">
+                <span>Balance Due:</span>
+                <span className="font-mono">
+                  ₹{balanceDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer / Terms & Conditions & Signatory */}
+        <div className="mt-12 pt-6 border-t border-slate-200 grid grid-cols-2 gap-8 items-end">
+          <div className="space-y-1 text-[10px] text-slate-500 leading-normal">
+            <p className="font-bold text-slate-700 uppercase">Terms &amp; Conditions:</p>
+            <p>1. Goods once sold will not be returned or exchanged.</p>
+            <p>2. Keep sweets in cool and dry place / refrigeration as applicable.</p>
+            <p>3. All disputes are subject to local jurisdiction.</p>
+            <p className="italic text-slate-400 pt-1">
+              {businessSettings.footerNote || 'Thank you for choosing Pattabiram Sweets! Visit again!'}
+            </p>
+          </div>
+
+          <div className="text-right space-y-8">
+            <p className="text-xs font-bold text-slate-800">
+              For {businessSettings.businessName || 'PATTABIRAM SWEETS'}
+            </p>
+            <div className="pt-8">
+              <span className="text-[11px] font-semibold text-slate-500 border-t border-slate-400 pt-1 px-4 inline-block">
+                Authorized Signatory
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

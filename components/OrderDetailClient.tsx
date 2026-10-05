@@ -57,6 +57,7 @@ import type { OrderRecord, OrderStatus, PaymentStatus } from './OrdersClient';
 import CustomSelect from '@/components/CustomSelect';
 import { OrderActionOtpModal } from '@/components/OrderActionOtpModal';
 import { useBusinessSettings, calculateTax } from '@/lib/businessSettings';
+import A4InvoiceModal from '@/components/A4InvoiceModal';
 
 // ── Types ────────────────────────────────────────────────────────
 export interface PaymentEntry {
@@ -228,6 +229,7 @@ export default function OrderDetailClient({ orderId }: Props) {
   const { user, employeeProfile } = useAuth();
   const [order, setOrder] = useState<OrderWithPayments | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isA4InvoiceOpen, setIsA4InvoiceOpen] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
   // Admin security check
@@ -750,8 +752,16 @@ export default function OrderDetailClient({ orderId }: Props) {
           <button
             onClick={handleThermalPrint}
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
+            title="Print Thermal Receipt (80mm)"
           >
             <Printer size={14} /> Print
+          </button>
+          <button
+            onClick={() => setIsA4InvoiceOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 shadow-2xs transition-colors cursor-pointer"
+            title="Print A4 Tax Invoice"
+          >
+            <FileText size={14} className="text-indigo-600" /> A4 Invoice
           </button>
           <button
             onClick={() => {
@@ -2307,6 +2317,13 @@ export default function OrderDetailClient({ orderId }: Props) {
         action={authModalState.action}
         requestedBy={employeeProfile?.name || user?.email?.split('@')[0] || 'Staff'}
         onAuthorized={handleAuthOtpSuccess}
+      />
+
+      {/* ── A4 Tax Invoice Print Modal ── */}
+      <A4InvoiceModal
+        isOpen={isA4InvoiceOpen}
+        onClose={() => setIsA4InvoiceOpen(false)}
+        order={order}
       />
 
     </div>

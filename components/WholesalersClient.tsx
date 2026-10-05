@@ -415,8 +415,16 @@ export default function WholesalersClient() {
               ) : (
                 paginatedWholesalers.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-4 px-4 sm:px-6 font-bold text-indigo-600">{item.code}</td>
-                    <td className="py-4 px-4 font-semibold text-slate-900">{item.name}</td>
+                    <td className="py-4 px-4 sm:px-6 font-bold text-indigo-600">
+                      <Link href={`/wholesalers/${item.id}`} className="hover:underline">
+                        {item.code}
+                      </Link>
+                    </td>
+                    <td className="py-4 px-4 font-semibold text-slate-900">
+                      <Link href={`/wholesalers/${item.id}`} className="hover:text-indigo-600 hover:underline">
+                        {item.name}
+                      </Link>
+                    </td>
                     <td className="py-4 px-4 font-medium text-slate-800">{item.businessName}</td>
                     <td className="py-4 px-4">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-semibold text-[11px] border border-indigo-100">
@@ -441,13 +449,13 @@ export default function WholesalersClient() {
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => setViewWholesaler(item)}
+                        <Link
+                          href={`/wholesalers/${item.id}`}
                           className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                          title="View Wholesaler Details"
+                          title="View Wholesaler Profile, Orders & Credit Dues"
                         >
                           <Eye size={15} />
-                        </button>
+                        </Link>
                         <button
                           onClick={() => handleOpenEditModal(item)}
                           className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"

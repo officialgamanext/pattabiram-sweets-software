@@ -219,7 +219,7 @@ input[type="number"] {
   appearance: textfield !important;
 }
 
-/* ── Universal Print Styles for Thermal Receipts ── */
+/* ── Universal Print Styles for Thermal Receipts & A4 Invoices ── */
 @media print {
   body {
     background: #fff !important;
@@ -245,7 +245,27 @@ input[type="number"] {
     background: white !important;
     color: black !important;
   }
+
+  #a4-invoice-printable,
+  #a4-invoice-printable * {
+    visibility: visible !important;
+  }
+  #a4-invoice-printable {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 8mm 12mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+    color: black !important;
+  }
 }
+
 
 
 

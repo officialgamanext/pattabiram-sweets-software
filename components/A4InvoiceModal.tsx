@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Printer,
@@ -87,15 +88,55 @@ function numberToIndianWords(num: number): string {
   return result + ' Only';
 }
 
+function formatDate(val: any): string {
+  if (!val) return '—';
+  if (typeof val === 'string' && val.trim()) return val;
+  if (val?.toDate) {
+    try {
+      return val.toDate().toLocaleDateString('en-IN');
+    } catch {
+      // fallback
+    }
+  }
+  return String(val);
+}
+
 export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModalProps) {
   const { settings: businessSettings } = useBusinessSettings();
   const invoiceRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
 
-  if (!isOpen || !order) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0;
+      }
+      document.body.classList.add('a4-modal-open');
+      document.body.style.overflow = 'hidden';
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') onClose();
+      };
+      window.addEventListener('keydown', handleKeyDown);
+
+      return () => {
+        document.body.classList.remove('a4-modal-open');
+        document.body.style.overflow = '';
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [isOpen, onClose]);
+
+  if (!isOpen || !order || !mounted) return null;
 
   const invoiceNo = order.orderId || order.code || order.id || 'INV-001';
-  const orderDate = order.orderDate || (order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('en-IN') : '—');
-  const deliveryDate = order.expectedDeliveryDate || order.deliveryDate || orderDate;
+  const orderDate = formatDate(order.orderDate || order.createdAt);
+  const deliveryDate = formatDate(order.expectedDeliveryDate || order.deliveryDate || orderDate);
   const isWholesale = Boolean(order.orderType === 'Wholesaler B2B' || order.wholesalerId || order.wholesalerName);
 
   const customerName = order.wholesalerName || order.customerName || 'Valued Customer';
@@ -115,7 +156,6 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
   const packetCharges = Number(order.packetChargesTotal) || 0;
   const discountAmount = Number(order.discountAmount) || 0;
 
-  const subtotal = Number(order.taxableAmount ?? order.subtotal ?? order.subTotal ?? 0);
   const grandTotal = Number(order.totalAmount || 0);
   const receivedAmount = Number(order.receivedAmount || 0);
   const balanceDue = Math.max(0, grandTotal - receivedAmount);
@@ -123,55 +163,111 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
   const paymentMode = order.paymentMode || 'Credit';
 
   const items = (order.items || []).map((it: any) => {
-    const qty = parseFloat(String(it.quantity || it.qty || 1)) || 1;
-    const price = parseFloat(String(it.assignedPrice || it.standardPrice || it.price || 0)) || 0;
-    const total = parseFloat(String(it.totalAmount || (qty * price))) || 0;
+    const qty = parseFloat(String(it.quantity ?? it.qty ?? it.count ?? 1)) || 1;
+    let price = parseFloat(
+      String(
+        it.unitPrice ??
+        it.assignedPrice ??
+        it.standardPrice ??
+        it.price ??
+        it.rate ??
+        it.unit_price ??
+        it.sellingPrice ??
+        0
+      )
+    ) || 0;
+    let total = parseFloat(
+      String(
+        it.lineTotal ??
+        it.totalAmount ??
+        it.total ??
+        it.amount ??
+        (qty * price)
+      )
+    ) || 0;
+
+    // Fail-safe cross calculation so rate/amount never show 0.00
+    if (total === 0 && price > 0) {
+      total = qty * price;
+    } else if (price === 0 && total > 0 && qty > 0) {
+      price = total / qty;
+    } else if (price === 0 && total === 0 && (order.items || []).length === 1) {
+      const fallbackTotal = Number(order.taxableAmount ?? order.subtotal ?? order.subTotal ?? order.totalAmount ?? 0);
+      if (fallbackTotal > 0) {
+        total = fallbackTotal;
+        price = total / qty;
+      }
+    }
+
     return {
-      name: it.itemName || it.name || 'Item',
-      code: it.code || it.itemCode || '',
+      name: it.itemName || it.name || it.productName || 'Item',
+      code: it.itemCode || it.code || it.sku || '',
       category: it.category || '',
       qty,
-      unit: it.unit || 'Kg',
+      unit: it.unit || it.uom || 'Kg',
       price,
       total,
       mfgNote: it.needsManufacturing ? 'Mfg' : '',
     };
   });
 
+  const computedItemsSubtotal = items.reduce((sum: number, it: any) => sum + (it.total || 0), 0);
+  const subtotal = Number(order.taxableAmount ?? order.subtotal ?? order.subTotal ?? (computedItemsSubtotal > 0 ? computedItemsSubtotal : grandTotal));
+
+  const cgstAmount = Number(order.cgstAmount ?? (order.taxAmount ? Number(order.taxAmount) / 2 : 0)) || 0;
+  const sgstAmount = Number(order.sgstAmount ?? (order.taxAmount ? Number(order.taxAmount) / 2 : 0)) || 0;
+  const cgstPercent = order.cgstPercent ?? 2.5;
+  const sgstPercent = order.sgstPercent ?? 2.5;
+
   const handlePrint = () => {
+    document.body.classList.add('a4-modal-open');
     window.print();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
-      {/* Top Action Bar (hidden on print) */}
-      <div className="fixed top-4 right-4 z-60 flex items-center gap-2 print:hidden">
-        <button
-          type="button"
-          onClick={handlePrint}
-          className="px-4 py-2 bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-bold rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition-all active:scale-95"
-        >
-          <Printer size={15} />
-          <span>Print A4 Invoice</span>
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl shadow-md border border-slate-200 cursor-pointer transition-colors"
-          title="Close Preview"
-        >
-          <X size={18} />
-        </button>
+  return createPortal(
+    <div
+      id="a4-modal-portal"
+      ref={scrollContainerRef}
+      className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex flex-col items-center p-3 sm:p-6 overflow-y-auto print:p-0 print:m-0 print:bg-white print:static print:inset-auto print:overflow-visible"
+    >
+      {/* Top Action Bar (Dedicated bar placed neatly above invoice - never obscures content) */}
+      <div className="w-full max-w-[800px] flex items-center justify-between gap-3 mb-3 py-1 print:hidden shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-white bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-700/60 shadow-xs">
+            A4 Tax Invoice Preview
+          </span>
+          <span className="text-[11px] text-slate-300 font-mono hidden sm:inline">
+            {invoiceNo}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="px-4 py-2 bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+          >
+            <Printer size={15} />
+            <span>Print A4 Invoice</span>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 bg-white/90 hover:bg-white text-slate-700 rounded-xl cursor-pointer shadow-md transition-colors"
+            title="Close Preview (Esc)"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
       {/* A4 Sheet Container */}
       <div
         ref={invoiceRef}
         id="a4-invoice-printable"
-        className="w-full max-w-[850px] min-h-[1100px] bg-white rounded-xl shadow-2xl border border-slate-200 p-8 sm:p-10 my-8 print:my-0 print:p-6 print:border-none print:shadow-none print:rounded-none print:w-full print:max-w-none text-slate-800 font-sans text-xs relative"
+        className="w-full max-w-[800px] bg-white rounded-xl shadow-2xl border border-slate-200 p-8 sm:p-10 mb-8 print:mb-0 print:p-0 print:border-none print:shadow-none print:rounded-none print:w-full print:max-w-none text-slate-800 font-sans text-xs relative"
       >
         {/* Top Header: Business Details & Tax Invoice Badge */}
-        <div className="border-b-2 border-slate-900 pb-5">
+        <div className="border-b-2 border-slate-900 pb-5 no-break" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1 max-w-[60%]">
               <div className="flex items-center gap-2">
@@ -238,7 +334,7 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
         </div>
 
         {/* Customer / Buyer Information Block */}
-        <div className="grid grid-cols-2 gap-4 py-4 border-b border-slate-200">
+        <div className="grid grid-cols-2 gap-4 py-4 border-b border-slate-200 no-break" style={{ pageBreakInside: 'avoid' }}>
           <div className="space-y-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               Billed To / Buyer:
@@ -305,7 +401,7 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
             </thead>
             <tbody className="divide-y divide-slate-200 text-xs">
               {items.map((it: any, idx: number) => (
-                <tr key={idx} className="hover:bg-slate-50/50">
+                <tr key={idx} className="hover:bg-slate-50/50" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
                   <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
                   <td className="py-2 px-3">
                     <p className="font-bold text-slate-900">{it.name}</p>
@@ -330,7 +426,7 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
         </div>
 
         {/* Totals & Calculations Section */}
-        <div className="border-t-2 border-slate-900 pt-3">
+        <div className="border-t-2 border-slate-900 pt-3 no-break" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
           <div className="grid grid-cols-2 gap-6 items-start">
             {/* Left: Words & Payment Details */}
             <div className="space-y-3">
@@ -435,20 +531,20 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
                 </div>
               )}
 
-              {order.cgstAmount ? (
+              {cgstAmount > 0 ? (
                 <div className="flex justify-between text-slate-600 text-[11px]">
-                  <span>CGST ({order.cgstPercent ?? 2.5}%):</span>
+                  <span>CGST ({cgstPercent}%):</span>
                   <span className="font-mono font-semibold">
-                    +₹{Number(order.cgstAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    +₹{cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               ) : null}
 
-              {order.sgstAmount ? (
+              {sgstAmount > 0 ? (
                 <div className="flex justify-between text-slate-600 text-[11px]">
-                  <span>SGST ({order.sgstPercent ?? 2.5}%):</span>
+                  <span>SGST ({sgstPercent}%):</span>
                   <span className="font-mono font-semibold">
-                    +₹{Number(order.sgstAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    +₹{sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               ) : null}
@@ -480,7 +576,7 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
         </div>
 
         {/* Footer / Terms & Conditions & Signatory */}
-        <div className="mt-12 pt-6 border-t border-slate-200 grid grid-cols-2 gap-8 items-end">
+        <div className="mt-10 pt-6 border-t border-slate-200 grid grid-cols-2 gap-8 items-end no-break" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
           <div className="space-y-1 text-[10px] text-slate-500 leading-normal">
             <p className="font-bold text-slate-700 uppercase">Terms &amp; Conditions:</p>
             <p>1. Goods once sold will not be returned or exchanged.</p>
@@ -503,6 +599,7 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

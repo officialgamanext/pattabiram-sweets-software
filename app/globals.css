@@ -221,48 +221,110 @@ input[type="number"] {
 
 /* ── Universal Print Styles for Thermal Receipts & A4 Invoices ── */
 @media print {
-  body {
-    background: #fff !important;
+  @page {
+    size: A4 portrait;
+    margin: 0mm !important; /* Strips browser header (URL/title) and footer (date/page numbers) */
   }
-  body * {
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ═════════════════════════════════════════════════
+     A4 INVOICE PRINTING (Portal Mode)
+     When A4 modal is open, completely hide all page contents
+     using display: none so they take up ZERO vertical space.
+     This eliminates blank/empty leading pages in print preview!
+     ═════════════════════════════════════════════════ */
+  body.a4-modal-open > *:not(#a4-modal-portal),
+  body:has(#a4-modal-portal) > *:not(#a4-modal-portal) {
+    display: none !important;
+  }
+
+  body.a4-modal-open #a4-modal-portal,
+  body:has(#a4-modal-portal) #a4-modal-portal {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+
+  body.a4-modal-open #a4-modal-portal .print\:hidden,
+  body:has(#a4-modal-portal) #a4-modal-portal .print\:hidden {
+    display: none !important;
+  }
+
+  body.a4-modal-open #receipt-print-area,
+  body:has(#a4-modal-portal) #receipt-print-area {
+    display: none !important;
+  }
+
+  body.a4-modal-open #a4-invoice-printable,
+  body:has(#a4-modal-portal) #a4-invoice-printable {
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 210mm !important;
+    min-height: auto !important;
+    margin: 0 auto !important;
+    padding: 12mm 15mm !important;
+    box-sizing: border-box !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+    color: #0f172a !important;
+    visibility: visible !important;
+  }
+
+  body.a4-modal-open #a4-invoice-printable *,
+  body:has(#a4-modal-portal) #a4-invoice-printable * {
+    visibility: visible !important;
+  }
+
+  /* ═════════════════════════════════════════════════
+     THERMAL RECEIPT PRINTING (Non-A4 Mode)
+     ═════════════════════════════════════════════════ */
+  body:not(.a4-modal-open):not(:has(#a4-modal-portal)) * {
     visibility: hidden;
   }
-  #receipt-print-area,
-  #receipt-print-area * {
-    visibility: visible;
+
+  body:not(.a4-modal-open):not(:has(#a4-modal-portal)) #receipt-print-area,
+  body:not(.a4-modal-open):not(:has(#a4-modal-portal)) #receipt-print-area * {
+    visibility: visible !important;
   }
-  #receipt-print-area {
+
+  body:not(.a4-modal-open):not(:has(#a4-modal-portal)) #receipt-print-area {
     display: block !important;
-    position: absolute;
-    left: 0;
-    top: 0;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
     width: 80mm !important;
     max-width: 80mm !important;
     margin: 0 !important;
-    padding: 8px !important;
+    padding: 6mm !important;
     border: none !important;
     box-shadow: none !important;
     background: white !important;
     color: black !important;
   }
 
-  #a4-invoice-printable,
-  #a4-invoice-printable * {
-    visibility: visible !important;
-  }
-  #a4-invoice-printable {
-    display: block !important;
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 8mm 12mm !important;
-    border: none !important;
-    box-shadow: none !important;
-    background: white !important;
-    color: black !important;
+  /* Avoid awkward page breaks */
+  .no-break,
+  #a4-invoice-printable tr,
+  #a4-invoice-printable .no-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 }
 

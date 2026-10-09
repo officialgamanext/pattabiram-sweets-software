@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 
 import CustomSelect from '@/components/CustomSelect';
+import WhatsAppIcon from '@/components/WhatsAppIcon';
 
 const CONTACT_INFO = {
   mobile: '6281288314',
@@ -155,7 +156,7 @@ export default function SupportClient() {
                 rel="noreferrer"
                 className="flex-1 flex items-center justify-center gap-1.5 px-[8px] py-[4px] h-[30px] rounded-[6px] bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
               >
-                <MessageSquare size={13} /> WhatsApp
+                <WhatsAppIcon size={14} /> WhatsApp
               </a>
             </div>
           </div>

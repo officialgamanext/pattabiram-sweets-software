@@ -5,12 +5,12 @@ import { createPortal } from 'react-dom';
 import {
   X,
   Printer,
-  MessageSquare,
   Loader2,
   CheckCircle2,
   AlertCircle,
   ExternalLink,
 } from 'lucide-react';
+import WhatsAppIcon from './WhatsAppIcon';
 import { useBusinessSettings } from '@/lib/businessSettings';
 import A4InvoiceDocument from './A4InvoiceDocument';
 import { sendWhatsAppInvoiceFlow, SendWhatsAppInvoiceResult } from '@/lib/whatsappInvoice';
@@ -113,7 +113,7 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
             {isSendingWhatsApp ? (
               <Loader2 size={15} className="animate-spin" />
             ) : (
-              <MessageSquare size={15} />
+              <WhatsAppIcon size={16} />
             )}
             <span>{isSendingWhatsApp ? 'Sending...' : 'Send WhatsApp'}</span>
           </button>
@@ -180,9 +180,10 @@ export default function A4InvoiceModal({ isOpen, onClose, order }: A4InvoiceModa
                   href={waResult.directWhatsAppUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-bold text-[11px]"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-bold text-[11px]"
                 >
-                  WhatsApp Web
+                  <WhatsAppIcon size={12} />
+                  <span>WhatsApp Web</span>
                 </a>
               )}
             </div>

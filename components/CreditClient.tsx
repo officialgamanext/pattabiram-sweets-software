@@ -17,9 +17,9 @@ import {
   ChevronDown,
   Plus,
   Trash2,
-  X,
   Loader2,
 } from 'lucide-react';
+import WhatsAppIcon from './WhatsAppIcon';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { toast } from '@/context/ToastContext';
@@ -845,7 +845,7 @@ export default function CreditClient() {
                                   className="p-1.5 text-emerald-600 hover:bg-emerald-50 border border-emerald-200 rounded-lg transition-colors"
                                   title="Send WhatsApp Payment Reminder"
                                 >
-                                  <MessageCircle size={14} />
+                                  <WhatsAppIcon size={14} />
                                 </a>
                               )}
 
@@ -964,7 +964,7 @@ export default function CreditClient() {
                                 className="p-2 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors"
                                 title="Send WhatsApp Consolidated Reminder"
                               >
-                                <MessageCircle size={15} />
+                                <WhatsAppIcon size={15} />
                                 <span className="hidden sm:inline">WhatsApp</span>
                               </a>
                             )}

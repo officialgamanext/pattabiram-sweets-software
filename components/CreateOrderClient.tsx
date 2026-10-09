@@ -35,9 +35,9 @@ import {
   Pencil,
   Layers,
   Printer,
-  MessageSquare,
   ExternalLink,
 } from 'lucide-react';
+import WhatsAppIcon from '@/components/WhatsAppIcon';
 import A4InvoiceDocument from '@/components/A4InvoiceDocument';
 import { sendWhatsAppInvoiceFlow, generateDirectWhatsAppLink, SendWhatsAppInvoiceResult } from '@/lib/whatsappInvoice';
 import { db } from '@/lib/firebase';
@@ -3949,7 +3949,7 @@ export default function CreateOrderClient() {
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs"
                     >
-                      <MessageSquare size={12} />
+                      <WhatsAppIcon size={13} />
                       <span>Open in WhatsApp Web / App</span>
                     </a>
                   </div>
@@ -3990,7 +3990,7 @@ export default function CreateOrderClient() {
                   </>
                 ) : (
                   <>
-                    <MessageSquare size={15} />
+                    <WhatsAppIcon size={16} />
                     <span>Send WhatsApp</span>
                   </>
                 )}

@@ -74,7 +74,7 @@ export async function compressImageTo60KB(file: File): Promise<string> {
 /**
  * Upload compressed image data to ImageKit API endpoint and return official ImageKit CDN URL.
  */
-export async function uploadToImageKit(base64Data: string, fileName: string): Promise<string> {
+export async function uploadToImageKit(base64Data: string, fileName: string, folder?: string): Promise<string> {
   const response = await fetch('/api/upload-image', {
     method: 'POST',
     headers: {
@@ -83,6 +83,7 @@ export async function uploadToImageKit(base64Data: string, fileName: string): Pr
     body: JSON.stringify({
       base64Data,
       fileName,
+      folder,
     }),
   });
 

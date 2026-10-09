@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   try {
-    const { base64Data, fileName } = await request.json();
+    const { base64Data, fileName, folder } = await request.json();
 
     if (!base64Data) {
       return NextResponse.json({ error: 'No image data provided' }, { status: 400 });
@@ -17,6 +17,9 @@ export async function POST(request: Request) {
     formData.append('file', base64Data);
     formData.append('fileName', fileName || `item_${Date.now()}.jpg`);
     formData.append('useUniqueFileName', 'true');
+    if (folder) {
+      formData.append('folder', folder);
+    }
 
     // Basic authentication header: Base64(privateKey + ":")
     const authHeader = `Basic ${Buffer.from(`${privateKey}:`).toString('base64')}`;

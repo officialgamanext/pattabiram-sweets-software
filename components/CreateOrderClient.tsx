@@ -35,7 +35,11 @@ import {
   Pencil,
   Layers,
   Printer,
+  MessageSquare,
+  ExternalLink,
 } from 'lucide-react';
+import A4InvoiceDocument from '@/components/A4InvoiceDocument';
+import { sendWhatsAppInvoiceFlow, generateDirectWhatsAppLink, SendWhatsAppInvoiceResult } from '@/lib/whatsappInvoice';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp, onSnapshot, query } from 'firebase/firestore';
 import { toast } from '@/context/ToastContext';
@@ -325,6 +329,9 @@ export default function CreateOrderClient() {
   const { isConnected: isPrinterConnected, printerType, printReceipt, printWindow } = usePrinter();
   const { settings: businessSettings } = useBusinessSettings();
   const [createdOrderForPrint, setCreatedOrderForPrint] = useState<any | null>(null);
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState<boolean>(false);
+  const [whatsAppSendResult, setWhatsAppSendResult] = useState<SendWhatsAppInvoiceResult | null>(null);
+  const a4InvoiceRef = useRef<HTMLDivElement>(null);
 
   const editId = searchParams.get('editId') || searchParams.get('id') || '';
   const isEditMode = Boolean(editId);
@@ -1826,6 +1833,7 @@ export default function CreateOrderClient() {
 
       toast.success('Order Created', `New order ${orderCode} recorded successfully.`);
       setCreatedOrderForPrint(createdOrderData);
+      setWhatsAppSendResult(null);
     } catch (err: any) {
       console.error('Failed to save order:', err);
       toast.error('Order Save Failed', err?.message || 'Failed to save order to Firebase.');
@@ -1836,7 +1844,49 @@ export default function CreateOrderClient() {
 
   const handleCloseSuccessModal = () => {
     setCreatedOrderForPrint(null);
+    setWhatsAppSendResult(null);
     router.push('/orders');
+  };
+
+  const handleSendWhatsAppInvoice = async () => {
+    if (!createdOrderForPrint || !a4InvoiceRef.current) return;
+    const phone = createdOrderForPrint.customerMobile || createdOrderForPrint.customerPhone;
+    if (!phone) {
+      toast.error('Mobile Number Missing', 'Customer mobile number is required to send WhatsApp invoice.');
+      return;
+    }
+
+    setIsSendingWhatsApp(true);
+    setWhatsAppSendResult(null);
+
+    try {
+      toast.info('Uploading & Sending', 'Capturing A4 invoice to ImageKit and sending WhatsApp template...');
+      const result = await sendWhatsAppInvoiceFlow(createdOrderForPrint, a4InvoiceRef.current);
+      setWhatsAppSendResult(result);
+
+      if (result.success) {
+        toast.success(
+          'WhatsApp Sent!',
+          `Invoice sent to ${createdOrderForPrint.customerName || 'customer'} (${phone})`
+        );
+      } else {
+        toast.warning(
+          'WhatsApp Cloud Notice',
+          result.error || 'API notice. You can send directly via WhatsApp Web link below.'
+        );
+      }
+    } catch (err: any) {
+      console.error('Failed to send WhatsApp invoice:', err);
+      toast.error('WhatsApp Error', err?.message || 'Failed to process WhatsApp invoice.');
+      const directUrl = generateDirectWhatsAppLink(createdOrderForPrint, '');
+      setWhatsAppSendResult({
+        success: false,
+        error: err?.message,
+        directWhatsAppUrl: directUrl,
+      });
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
   };
 
   const handlePrintOrderReceipt = async (orderToPrint: any) => {
@@ -3861,12 +3911,58 @@ export default function CreateOrderClient() {
               </div>
             </div>
 
-            {/* Bottom Actions: Close / Cancel or Print */}
-            <div className="grid grid-cols-2 gap-2.5 pt-1 border-t border-slate-100">
+            {/* WhatsApp Status Card if sent or error */}
+            {whatsAppSendResult && (
+              <div className={`p-3 rounded-xl border text-xs space-y-1.5 ${
+                whatsAppSendResult.success 
+                  ? 'bg-emerald-50/90 border-emerald-200 text-emerald-900' 
+                  : 'bg-amber-50/90 border-amber-200 text-amber-900'
+              }`}>
+                <div className="flex items-center justify-between font-bold">
+                  <span className="flex items-center gap-1.5">
+                    {whatsAppSendResult.success ? (
+                      <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                    )}
+                    {whatsAppSendResult.success ? 'WhatsApp Invoice Sent!' : 'WhatsApp Notice'}
+                  </span>
+                  {whatsAppSendResult.invoiceUrl && (
+                    <a
+                      href={whatsAppSendResult.invoiceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] underline font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 shrink-0"
+                    >
+                      View Invoice URL <ExternalLink size={11} />
+                    </a>
+                  )}
+                </div>
+                {whatsAppSendResult.error && (
+                  <p className="text-[11px] text-amber-800 leading-snug">{whatsAppSendResult.error}</p>
+                )}
+                {whatsAppSendResult.directWhatsAppUrl && (
+                  <div className="pt-0.5">
+                    <a
+                      href={whatsAppSendResult.directWhatsAppUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs"
+                    >
+                      <MessageSquare size={12} />
+                      <span>Open in WhatsApp Web / App</span>
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Bottom Actions: Close / Print Receipt / Send WhatsApp */}
+            <div className="flex flex-col sm:flex-row items-center gap-2 pt-1 border-t border-slate-100">
               <button
                 type="button"
                 onClick={handleCloseSuccessModal}
-                className="h-9 px-4 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                className="w-full sm:w-auto h-9 px-3.5 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer flex items-center justify-center gap-1"
               >
                 Close
               </button>
@@ -3874,13 +3970,54 @@ export default function CreateOrderClient() {
               <button
                 type="button"
                 onClick={() => handlePrintOrderReceipt(createdOrderForPrint)}
-                className="h-9 px-4 text-xs font-bold rounded-xl bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                className="w-full sm:flex-1 h-9 px-3 text-xs font-bold rounded-xl bg-slate-800 hover:bg-slate-900 text-white shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Printer size={15} />
                 <span>Print Receipt</span>
               </button>
+
+              <button
+                type="button"
+                onClick={handleSendWhatsAppInvoice}
+                disabled={isSendingWhatsApp}
+                className="w-full sm:flex-1 h-9 px-3 text-xs font-bold rounded-xl bg-[#25D366] hover:bg-[#20ba59] active:scale-95 text-white shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed"
+                title="Capture A4 Invoice, upload to ImageKit & send WhatsApp message"
+              >
+                {isSendingWhatsApp ? (
+                  <>
+                    <Loader2 size={15} className="animate-spin" />
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <MessageSquare size={15} />
+                    <span>Send WhatsApp</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Off-screen A4 Invoice Container for capture & ImageKit upload */}
+      {createdOrderForPrint && (
+        <div
+          style={{
+            position: 'fixed',
+            left: '-9999px',
+            top: 0,
+            width: '794px',
+            zIndex: -100,
+            opacity: 1,
+            pointerEvents: 'none',
+          }}
+        >
+          <A4InvoiceDocument
+            ref={a4InvoiceRef}
+            order={createdOrderForPrint}
+            businessSettings={businessSettings}
+          />
         </div>
       )}
 

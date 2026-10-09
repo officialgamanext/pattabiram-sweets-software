@@ -18,6 +18,7 @@ import {
   Plus,
   Trash2,
   Loader2,
+  X,
 } from 'lucide-react';
 import WhatsAppIcon from './WhatsAppIcon';
 import { db } from '@/lib/firebase';

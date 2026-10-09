@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || '';
-const DEFAULT_TEMPLATE_NAME = process.env.WHATSAPP_INVOICE_TEMPLATE_NAME || 'customers_invoice_template';
-const DEFAULT_LANG = process.env.WHATSAPP_TEMPLATE_LANG || 'en_US';
+const DEFAULT_TEMPLATE_NAME = process.env.WHATSAPP_INVOICE_TEMPLATE_NAME || 'clients_invoice_notification';
+const DEFAULT_LANG = process.env.WHATSAPP_TEMPLATE_LANG || 'en';
 const BUTTON_URL_BASE = process.env.WHATSAPP_BUTTON_URL_BASE || 'https://ik.imagekit.io/o3ycj4srnb/';
 
 /**
@@ -158,17 +158,18 @@ export async function POST(req: NextRequest) {
       parameters: [{ type: 'text', text: buttonParam }],
     };
 
-    // Candidate languages to try (if en_US fails, try en; if en fails, try en_US)
-    const languagesToTry = languageCode === 'en_US' ? ['en_US', 'en'] : ['en', 'en_US'];
+    // Candidate languages to try (en is primary for English, followed by en_US and en_GB)
+    const languagesToTry = Array.from(new Set([languageCode, 'en', 'en_US', 'en_GB'])).filter(Boolean);
 
     let lastError: any = null;
 
     // Strategy Pipeline:
-    // 1. Try 5 body parameters WITHOUT button (matching template text with {{5}} link)
-    // 2. Try 5 body parameters WITH button
-    // 3. Try 4 body parameters WITH button
+    // 1. Try 4 body parameters WITH button (Exact match for clients_invoice_notification)
+    // 2. Try 4 body parameters WITHOUT button
+    // 3. Try 5 body parameters WITH button
+    // 4. Try 5 body parameters WITHOUT button
     for (const lang of languagesToTry) {
-      // Attempt 1: 5 body params (No button)
+      // Attempt 1: 4 body params WITH button (Default for clients_invoice_notification)
       const p1 = {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
@@ -177,7 +178,7 @@ export async function POST(req: NextRequest) {
         template: {
           name: templateName,
           language: { code: lang },
-          components: [{ type: 'body', parameters: bodyParams5 }],
+          components: [{ type: 'body', parameters: bodyParams4 }, buttonComponent],
         },
       };
 
@@ -195,7 +196,7 @@ export async function POST(req: NextRequest) {
       }
       lastError = res1.data;
 
-      // Attempt 2: 5 body params WITH button
+      // Attempt 2: 4 body params WITHOUT button
       const p2 = {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
@@ -204,7 +205,7 @@ export async function POST(req: NextRequest) {
         template: {
           name: templateName,
           language: { code: lang },
-          components: [{ type: 'body', parameters: bodyParams5 }, buttonComponent],
+          components: [{ type: 'body', parameters: bodyParams4 }],
         },
       };
 
@@ -222,7 +223,7 @@ export async function POST(req: NextRequest) {
       }
       lastError = res2.data;
 
-      // Attempt 3: 4 body params WITH button
+      // Attempt 3: 5 body params WITH button
       const p3 = {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
@@ -231,7 +232,7 @@ export async function POST(req: NextRequest) {
         template: {
           name: templateName,
           language: { code: lang },
-          components: [{ type: 'body', parameters: bodyParams4 }, buttonComponent],
+          components: [{ type: 'body', parameters: bodyParams5 }, buttonComponent],
         },
       };
 

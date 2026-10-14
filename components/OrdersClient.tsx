@@ -38,6 +38,7 @@ import {
   Layers,
   Boxes,
   Package,
+  Gift,
   Star,
   Minus,
   Sun,
@@ -454,6 +455,8 @@ export default function OrdersClient() {
         note: mfgNote,
         manufacturingDescription: mfgNote,
         packingDescription: pckNote,
+        isFestivalBox: it.isFestivalBox,
+        festivalBoxDetails: it.festivalBoxDetails,
       };
     });
 
@@ -1592,13 +1595,21 @@ export default function OrdersClient() {
       }
     }
 
-    // 4. Order Type Filter (Customisation & Transport)
+    // 4. Order Type Filter (Customisation & Transport & Festival)
     if (orderTypeFilter === 'Customisation') {
       if (!order.isCustomisation) {
         return false;
       }
     } else if (orderTypeFilter === 'Transport') {
       if (!order.isTransportRequired) {
+        return false;
+      }
+    } else if (orderTypeFilter === 'Festival') {
+      const isFestival = Boolean(
+        (order as any).isFestivalOrder ||
+        (order.items || []).some((it: any) => it.isFestivalBox || it.festivalBoxDetails)
+      );
+      if (!isFestival) {
         return false;
       }
     } else if (orderTypeFilter === 'Both') {
@@ -1766,6 +1777,23 @@ export default function OrdersClient() {
     }).length;
   }, [orders, selectedDate]);
 
+  const festivalOrdersCount = useMemo(() => {
+    return orders.filter((o) => {
+      if (selectedDate && selectedDate !== 'All') {
+        const orderDate = getOrderDateStr(o);
+        const mfgDate = o.manufacturingDate || '';
+        const delivDate = o.expectedDeliveryDate || '';
+        if (orderDate !== selectedDate && mfgDate !== selectedDate && delivDate !== selectedDate) {
+          return false;
+        }
+      }
+      return Boolean(
+        (o as any).isFestivalOrder ||
+        (o.items || []).some((it: any) => it.isFestivalBox || it.festivalBoxDetails)
+      );
+    }).length;
+  }, [orders, selectedDate]);
+
   // Calculate Order Statistics for Summary Bar from filtered orders
   const totalOrdersCount = filteredOrders.length;
   const totalAmountSum = filteredOrders.reduce((acc, o) => acc + (o.totalAmount || 0), 0);
@@ -1790,6 +1818,7 @@ export default function OrdersClient() {
     { value: 'All', label: 'All Order Types' },
     { value: 'Customisation', label: '📦 Customisation Orders' },
     { value: 'Transport', label: '🚚 Transport Orders' },
+    { value: 'Festival', label: '🎁 Festival Orders' },
     { value: 'Both', label: '📦+🚚 Custom & Transport' },
     { value: 'Standard', label: 'Standard Orders' },
   ];
@@ -2264,6 +2293,19 @@ export default function OrdersClient() {
             <Truck size={13} className={orderTypeFilter === 'Transport' ? 'text-white' : 'text-teal-700'} />
             <span>Transport ({transportOrdersCount})</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setOrderTypeFilter(orderTypeFilter === 'Festival' ? 'All' : 'Festival')}
+            className={`px-3.5 py-1.5 h-8 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+              orderTypeFilter === 'Festival'
+                ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100/70'
+            }`}
+            title="Filter only Festival Box orders"
+          >
+            <Gift size={13} className={orderTypeFilter === 'Festival' ? 'text-white' : 'text-amber-700'} />
+            <span>Festival Orders ({festivalOrdersCount})</span>
+          </button>
         </div>
       </div>
 
@@ -2374,9 +2416,15 @@ export default function OrdersClient() {
                                 </div>
                               </div>
 
-                              {/* Third Row: Customisation and Transport badges if applicable */}
-                              {(order.isCustomisation || order.isTransportRequired) && (
+                              {/* Third Row: Customisation, Transport and Festival badges if applicable */}
+                              {(order.isCustomisation || order.isTransportRequired || (order as any).isFestivalOrder || (order.items || []).some((it: any) => it.isFestivalBox || it.festivalBoxDetails)) && (
                                 <div className="flex items-center gap-1.5 flex-wrap">
+                                  {Boolean((order as any).isFestivalOrder || (order.items || []).some((it: any) => it.isFestivalBox || it.festivalBoxDetails)) && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                                      <Gift size={11} className="text-amber-600" />
+                                      <span>Festival Box</span>
+                                    </span>
+                                  )}
                                   {order.isCustomisation && (
                                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
                                       <Boxes size={11} className="text-purple-600" />
@@ -2591,8 +2639,14 @@ export default function OrdersClient() {
                       <td className="py-3 px-4 sm:px-6 font-bold text-[#02626D] font-mono">{order.code}</td>
                       <td className="py-3 px-4">
                         <div className="font-semibold text-slate-900">{order.customerName}</div>
-                        {(order.isCustomisation || order.isTransportRequired) && (
+                        {(order.isCustomisation || order.isTransportRequired || (order as any).isFestivalOrder || (order.items || []).some((it: any) => it.isFestivalBox || it.festivalBoxDetails)) && (
                           <div className="flex items-center gap-1 flex-wrap mt-1">
+                            {Boolean((order as any).isFestivalOrder || (order.items || []).some((it: any) => it.isFestivalBox || it.festivalBoxDetails)) && (
+                              <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                                <Gift size={10} className="text-amber-600" />
+                                <span>Festival</span>
+                              </span>
+                            )}
                             {order.isCustomisation && (
                               <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
                                 <Boxes size={10} />

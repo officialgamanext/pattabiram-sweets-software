@@ -152,6 +152,7 @@ export interface FestivalBoxRecord {
   cols: number;
   compartmentsCount?: number;
   basePrice?: number;
+  price?: number;
   description?: string;
   status: 'Active' | 'Inactive';
 }
@@ -500,6 +501,8 @@ export default function CreateOrderClient() {
   }>>({});
   const [configuringSlotIndex, setConfiguringSlotIndex] = useState<number | null>(null);
   const [boxOrderCount, setBoxOrderCount] = useState<string | number>('');
+  const [boxHasBoxPrice, setBoxHasBoxPrice] = useState<boolean>(false);
+  const [boxBoxPrice, setBoxBoxPrice] = useState<string | number>(20);
   const [boxHasSticker, setBoxHasSticker] = useState<boolean>(false);
   const [boxStickerPrice, setBoxStickerPrice] = useState<string | number>(10);
   const [boxHasShrink, setBoxHasShrink] = useState<boolean>(false);
@@ -1380,6 +1383,8 @@ export default function CreateOrderClient() {
     setSelectedBoxForConfig(box);
     setBoxCompartmentFills({});
     setBoxOrderCount('');
+    setBoxHasBoxPrice(false);
+    setBoxBoxPrice(box.price || box.basePrice || 20);
     setBoxHasSticker(false);
     setBoxStickerPrice(10);
     setBoxHasShrink(false);
@@ -1464,9 +1469,10 @@ export default function CreateOrderClient() {
       (s, f) => s + f.pieces * (f.piecePrice || 0),
       0
     );
+    const boxCost = boxHasBoxPrice ? (Number(boxBoxPrice) || 0) : 0;
     const stickerCost = boxHasSticker ? (Number(boxStickerPrice) || 0) : 0;
     const shrinkCost = boxHasShrink ? (Number(boxShrinkPrice) || 0) : 0;
-    const boxUnitPrice = Math.round((sweetsUnitPrice + stickerCost + shrinkCost) * 100) / 100;
+    const boxUnitPrice = Math.round((sweetsUnitPrice + boxCost + stickerCost + shrinkCost) * 100) / 100;
     const boxLineTotal = Math.round(boxUnitPrice * boxCount * 100) / 100;
 
     const itemsBreakdown = Object.values(boxCompartmentFills).map((f) => {
@@ -1513,6 +1519,8 @@ export default function CreateOrderClient() {
         cols: cols,
         boxCount: boxCount,
         sweetsCostPerBox: sweetsUnitPrice,
+        hasBoxPrice: boxHasBoxPrice,
+        boxPrice: boxCost,
         hasSticker: boxHasSticker,
         stickerPrice: stickerCost,
         hasShrink: boxHasShrink,
@@ -1526,7 +1534,7 @@ export default function CreateOrderClient() {
         compartments: boxCompartmentFills,
       },
       manufacturingDescription: `[Festival Box: ${selectedBoxForConfig.name}] ${mfgSummary}`,
-      packingDescription: `Pack in ${selectedBoxForConfig.name} (${rows}x${cols} grid)${boxHasSticker ? ` • Sticker (₹${stickerCost}/box)` : ''}${boxHasShrink ? ` • Shrink Wrap (₹${shrinkCost}/box)` : ''}`,
+      packingDescription: `Pack in ${selectedBoxForConfig.name} (${rows}x${cols} grid)${boxHasBoxPrice ? ` • Box (₹${boxCost}/box)` : ''}${boxHasSticker ? ` • Sticker (₹${stickerCost}/box)` : ''}${boxHasShrink ? ` • Shrink Wrap (₹${shrinkCost}/box)` : ''}`,
       needsManufacturing: true,
       mfgStatus: 'Pending',
       pckStatus: 'Pending',
@@ -1537,6 +1545,7 @@ export default function CreateOrderClient() {
     setSelectedBoxForConfig(null);
     setBoxCompartmentFills({});
     setBoxOrderCount('');
+    setBoxHasBoxPrice(false);
     setBoxHasSticker(false);
     setBoxHasShrink(false);
   }, [selectedBoxForConfig, boxCompartmentFills, boxOrderCount, boxHasSticker, boxStickerPrice, boxHasShrink, boxShrinkPrice]);
@@ -2163,6 +2172,8 @@ export default function CreateOrderClient() {
         note: mfgNote,
         manufacturingDescription: mfgNote,
         packingDescription: pckNote,
+        isFestivalBox: it.isFestivalBox,
+        festivalBoxDetails: it.festivalBoxDetails,
       };
     });
 
@@ -4305,6 +4316,36 @@ export default function CreateOrderClient() {
                       Box Add-ons (Per Box)
                     </span>
 
+                    {/* Box Cost Toggle */}
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200/80">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={boxHasBoxPrice}
+                          onChange={(e) => setBoxHasBoxPrice(e.target.checked)}
+                          className="w-4 h-4 rounded text-[#02626D] focus:ring-[#02626D] cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-slate-800">🎁 Box Price</span>
+                      </label>
+
+                      {boxHasBoxPrice ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] font-bold text-slate-500">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={boxBoxPrice}
+                            onChange={(e) => setBoxBoxPrice(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                            className="w-14 h-6 px-1 text-center text-xs font-bold border border-slate-300 rounded bg-white focus:outline-none focus:border-[#02626D]"
+                          />
+                          <span className="text-[10px] text-slate-400">/box</span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-medium">Free / Included</span>
+                      )}
+                    </div>
+
                     {/* Sticker Toggle */}
                     <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200/80">
                       <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -4416,9 +4457,10 @@ export default function CreateOrderClient() {
                         (s, f) => s + f.pieces * (f.piecePrice || 0),
                         0
                       );
+                      const boxCost = boxHasBoxPrice ? (Number(boxBoxPrice) || 0) : 0;
                       const stickerCost = boxHasSticker ? (Number(boxStickerPrice) || 0) : 0;
                       const shrinkCost = boxHasShrink ? (Number(boxShrinkPrice) || 0) : 0;
-                      const perBoxPrice = sweetsCostPerBox + stickerCost + shrinkCost;
+                      const perBoxPrice = sweetsCostPerBox + boxCost + stickerCost + shrinkCost;
                       const countNum = Number(boxOrderCount) || 0;
                       const lineTotalPrice = countNum > 0 ? perBoxPrice * countNum : perBoxPrice;
 
@@ -4428,6 +4470,13 @@ export default function CreateOrderClient() {
                             <span>Sweets Cost:</span>
                             <span className="font-semibold text-slate-800">₹{sweetsCostPerBox.toFixed(2)}</span>
                           </div>
+
+                          {boxHasBoxPrice && (
+                            <div className="flex justify-between text-slate-600 text-[11px]">
+                              <span>🎁 Box Price:</span>
+                              <span className="font-semibold text-slate-800">+₹{boxCost.toFixed(2)} / box</span>
+                            </div>
+                          )}
 
                           {boxHasSticker && (
                             <div className="flex justify-between text-slate-600 text-[11px]">
@@ -4739,13 +4788,19 @@ export default function CreateOrderClient() {
             </div>
 
             {/* Packaging Add-ons Details */}
-            {(viewingBoxPreviewItem.festivalBoxDetails.hasSticker ||
+            {(viewingBoxPreviewItem.festivalBoxDetails.hasBoxPrice ||
+              viewingBoxPreviewItem.festivalBoxDetails.hasSticker ||
               viewingBoxPreviewItem.festivalBoxDetails.hasShrink) && (
               <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
                   Packaging Add-ons:
                 </span>
                 <div className="flex flex-wrap gap-2">
+                  {viewingBoxPreviewItem.festivalBoxDetails.hasBoxPrice && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                      🎁 Box (₹{viewingBoxPreviewItem.festivalBoxDetails.boxPrice || 0}/box)
+                    </span>
+                  )}
                   {viewingBoxPreviewItem.festivalBoxDetails.hasSticker && (
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
                       🏷️ Sticker (₹{viewingBoxPreviewItem.festivalBoxDetails.stickerPrice || 0}/box)

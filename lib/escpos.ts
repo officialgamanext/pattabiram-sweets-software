@@ -13,6 +13,8 @@ export interface ReceiptItem {
   note?: string;
   manufacturingDescription?: string;
   packingDescription?: string;
+  isFestivalBox?: boolean;
+  festivalBoxDetails?: any;
 }
 
 export interface ReceiptData {
@@ -93,6 +95,21 @@ export interface ReceiptData {
   remarks?: string;
   footerNote?: string;
   cashierName?: string;
+}
+
+/**
+ * Strips UTF-8 emojis and special multi-byte symbols to prevent ESC/POS corruptions
+ */
+export function cleanAscii(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/₹/g, 'Rs.')
+    .replace(/[•●]/g, '-')
+    // Strip multi-byte emojis
+    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu, '')
+    // Strip other non-printable / high Unicode chars
+    .replace(/[^\x20-\x7E\r\n\t]/g, '')
+    .trim();
 }
 
 /**
@@ -212,10 +229,11 @@ export class EscPosBuilder {
     return this;
   }
 
-  // Append raw text
+  // Append raw text (auto-sanitized for ESC/POS printer code pages)
   public text(str: string): EscPosBuilder {
+    const safeStr = cleanAscii(str);
     const encoder = new TextEncoder();
-    const encoded = encoder.encode(str);
+    const encoded = encoder.encode(safeStr);
     for (let i = 0; i < encoded.length; i++) {
       this.buffer.push(encoded[i]);
     }
@@ -546,19 +564,71 @@ export function generateReceiptEscPos(
   builder.drawLine('-');
 
   const renderItemNotes = (item: ReceiptItem) => {
-    const rawMfg = item.manufacturingDescription || item.note;
-    if (rawMfg && rawMfg.trim()) {
-      const cleanMfg = rawMfg.trim();
-      const displayMfg = cleanMfg.toLowerCase().startsWith('mfg') ? cleanMfg : `Mfg Note: ${cleanMfg}`;
-      builder.textLineWrapped(`  [${displayMfg}]`, 2);
-    }
-    if (item.packingDescription && item.packingDescription.trim()) {
-      const cleanPck = item.packingDescription.trim();
-      const displayPck =
-        cleanPck.toLowerCase().startsWith('pck') || cleanPck.toLowerCase().startsWith('pack')
-          ? cleanPck
-          : `Packing: ${cleanPck}`;
-      builder.textLineWrapped(`  [${displayPck}]`, 2);
+    const isFestival = Boolean(
+      item.isFestivalBox ||
+      item.festivalBoxDetails ||
+      (item.manufacturingDescription && item.manufacturingDescription.includes('[Festival Box:'))
+    );
+
+    if (isFestival) {
+      builder.bold(true).textLine('  Box Sweets Included:').bold(false);
+      const fbd = item.festivalBoxDetails;
+      if (fbd?.itemsBreakdown && Array.isArray(fbd.itemsBreakdown) && fbd.itemsBreakdown.length > 0) {
+        fbd.itemsBreakdown.forEach((sb: any) => {
+          const sName = cleanAscii(sb.itemName || sb.name || 'Sweet');
+          const pcs = sb.piecesCount ? `${sb.piecesCount} pcs` : (sb.totalPieces ? `${sb.totalPieces} pcs` : '');
+          builder.textLine(`    - ${sName}${pcs ? `: ${pcs}` : ''}`);
+        });
+      } else if (item.manufacturingDescription && item.manufacturingDescription.includes('[Festival Box:')) {
+        const contentAfterTag = item.manufacturingDescription.replace(/\[Festival Box:[^\]]*\]/i, '').trim();
+        const parts = contentAfterTag.split(',').map((s) => s.trim()).filter(Boolean);
+        parts.forEach((p) => {
+          const cleanPart = cleanAscii(p).replace(/\s*\([0-9.]+\s*KG\)/i, '');
+          builder.textLine(`    - ${cleanPart}`);
+        });
+      }
+
+      // Add-ons
+      const packagingLines: string[] = [];
+      if (fbd?.hasBoxPrice && fbd.boxPrice > 0) {
+        packagingLines.push(`Box Cost: Rs.${Number(fbd.boxPrice).toFixed(2)}/box`);
+      }
+      if (fbd?.hasSticker) {
+        packagingLines.push(`Custom Sticker: Rs.${Number(fbd.stickerPrice || 0).toFixed(2)}/box`);
+      }
+      if (fbd?.hasShrink) {
+        packagingLines.push(`Shrink Wrap: Rs.${Number(fbd.shrinkPrice || 0).toFixed(2)}/box`);
+      }
+
+      if (packagingLines.length === 0 && item.packingDescription) {
+        const cleanPck = cleanAscii(item.packingDescription);
+        const pckParts = cleanPck.split(/[-•]/).map((s) => s.trim()).filter(Boolean);
+        pckParts.forEach((part) => {
+          packagingLines.push(part);
+        });
+      }
+
+      if (packagingLines.length > 0) {
+        builder.bold(true).textLine('  Packaging & Add-ons:').bold(false);
+        packagingLines.forEach((line) => {
+          builder.textLine(`    + ${line}`);
+        });
+      }
+    } else {
+      const rawMfg = item.manufacturingDescription || item.note;
+      if (rawMfg && rawMfg.trim()) {
+        const cleanMfg = cleanAscii(rawMfg.trim());
+        const displayMfg = cleanMfg.toLowerCase().startsWith('mfg') ? cleanMfg : `Mfg Note: ${cleanMfg}`;
+        builder.textLineWrapped(`  [${displayMfg}]`, 2);
+      }
+      if (item.packingDescription && item.packingDescription.trim()) {
+        const cleanPck = cleanAscii(item.packingDescription.trim());
+        const displayPck =
+          cleanPck.toLowerCase().startsWith('pck') || cleanPck.toLowerCase().startsWith('pack')
+            ? cleanPck
+            : `Packing: ${cleanPck}`;
+        builder.textLineWrapped(`  [${displayPck}]`, 2);
+      }
     }
   };
 
@@ -568,7 +638,8 @@ export function generateReceiptEscPos(
 
     // Line items in 2-line layout
     data.items.forEach((item) => {
-      builder.textLineWrapped(item.name);
+      const cleanName = cleanAscii(item.name);
+      builder.textLineWrapped(cleanName);
       const unitStr = item.unit ? ` ${item.unit}` : '';
       const priceStr = item.price > 0 ? ` @ Rs.${item.price.toFixed(2)}` : '';
       const qtyLine = `  ${item.qty}${unitStr}${priceStr}`;
@@ -586,6 +657,7 @@ export function generateReceiptEscPos(
     builder.textLine(`${hName}${hQty}${hRate}${hTotal}`).bold(false).drawLine('-');
 
     data.items.forEach((item) => {
+      const cleanName = cleanAscii(item.name);
       const unitStr = item.unit ? ` ${item.unit}` : '';
       const qtyText = `${item.qty}${unitStr}`;
       const rateText = item.price > 0 ? item.price.toFixed(2) : '—';
@@ -596,12 +668,12 @@ export function generateReceiptEscPos(
       const colT = totalText.padStart(10).substring(0, 10);
 
       // If name is long, print on first line, then aligned values
-      if (item.name.length > 22) {
-        builder.textLine(item.name);
+      if (cleanName.length > 22) {
+        builder.textLine(cleanName);
         const padSpace = ' '.repeat(22);
         builder.textLine(`${padSpace}${colQ}${colR}${colT}`);
       } else {
-        const colN = item.name.padEnd(22).substring(0, 22);
+        const colN = cleanName.padEnd(22).substring(0, 22);
         builder.textLine(`${colN}${colQ}${colR}${colT}`);
       }
       renderItemNotes(item);

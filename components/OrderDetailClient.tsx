@@ -323,6 +323,8 @@ export default function OrderDetailClient({ orderId }: Props) {
         note: mfgNote,
         manufacturingDescription: mfgNote,
         packingDescription: pckNote,
+        isFestivalBox: it.isFestivalBox,
+        festivalBoxDetails: it.festivalBoxDetails,
       };
     });
 
@@ -1141,8 +1143,13 @@ export default function OrderDetailClient({ orderId }: Props) {
                             )}
 
                             {/* Festival Box Packaging Add-ons */}
-                            {item.isFestivalBox && (item.festivalBoxDetails?.hasSticker || item.festivalBoxDetails?.hasShrink) && (
+                            {item.isFestivalBox && (item.festivalBoxDetails?.hasBoxPrice || item.festivalBoxDetails?.hasSticker || item.festivalBoxDetails?.hasShrink) && (
                               <div className="mt-1 flex flex-wrap gap-1.5">
+                                {item.festivalBoxDetails.hasBoxPrice && (
+                                  <span className="inline-flex items-center gap-1 text-[9.5px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                                    🎁 Box (+₹{item.festivalBoxDetails.boxPrice || 0}/box)
+                                  </span>
+                                )}
                                 {item.festivalBoxDetails.hasSticker && (
                                   <span className="inline-flex items-center gap-1 text-[9.5px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
                                     🏷️ Sticker (+₹{item.festivalBoxDetails.stickerPrice || 0}/box)

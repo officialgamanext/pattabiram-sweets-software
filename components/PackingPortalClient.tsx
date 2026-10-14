@@ -28,7 +28,8 @@ import {
   Eye,
   X,
   User,
-  AlertCircle
+  AlertCircle,
+  Gift
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, updateDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
@@ -81,6 +82,8 @@ export interface AggregatedPackingSummary {
     deliveryAddress?: string;
     transportCharges?: number;
     hasPacket?: boolean;
+    isFestivalBox?: boolean;
+    festivalBoxDetails?: any;
   }[];
 }
 
@@ -110,6 +113,8 @@ export interface SlotWisePackingItemSummary {
     deliveryAddress?: string;
     transportCharges?: number;
     hasPacket?: boolean;
+    isFestivalBox?: boolean;
+    festivalBoxDetails?: any;
   }[];
 }
 
@@ -352,6 +357,13 @@ export default function PackingPortalClient() {
   const [activeTab, setActiveTab] = useState<'item_wise' | 'slot_wise' | 'order_wise'>('item_wise');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewBoxModalData, setPreviewBoxModalData] = useState<{
+    orderCode?: string;
+    customerName?: string;
+    boxName?: string;
+    quantity?: number;
+    festivalBoxDetails: any;
+  } | null>(null);
 
   // Switch Packing Unit Modal State
   const [switchModalData, setSwitchModalData] = useState<{
@@ -614,7 +626,9 @@ export default function PackingPortalClient() {
             isTransportRequired: Boolean(order.isTransportRequired),
             deliveryAddress: order.deliveryAddress,
             transportCharges: order.transportCharges || 0,
-            hasPacket: Boolean(item.hasPacket)
+            hasPacket: Boolean(item.hasPacket),
+            isFestivalBox: Boolean(item.isFestivalBox || (item as any).festivalBoxDetails),
+            festivalBoxDetails: (item as any).festivalBoxDetails || null
           });
         } else {
           map.set(key, {
@@ -643,7 +657,9 @@ export default function PackingPortalClient() {
                 isTransportRequired: Boolean(order.isTransportRequired),
                 deliveryAddress: order.deliveryAddress,
                 transportCharges: order.transportCharges || 0,
-                hasPacket: Boolean(item.hasPacket)
+                hasPacket: Boolean(item.hasPacket),
+                isFestivalBox: Boolean(item.isFestivalBox || (item as any).festivalBoxDetails),
+                festivalBoxDetails: (item as any).festivalBoxDetails || null
               }
             ]
           });
@@ -803,6 +819,8 @@ export default function PackingPortalClient() {
           deliveryAddress: order.deliveryAddress,
           transportCharges: order.transportCharges || 0,
           hasPacket: Boolean(item.hasPacket),
+          isFestivalBox: Boolean(item.isFestivalBox || (item as any).festivalBoxDetails),
+          festivalBoxDetails: (item as any).festivalBoxDetails || null,
         };
 
         if (existing) {
@@ -1459,6 +1477,31 @@ export default function PackingPortalClient() {
                                 </div>
                               )}
 
+                              {/* Festival Box Badge and Layout Preview */}
+                              {ord.isFestivalBox && ord.festivalBoxDetails && (
+                                <div className="p-2 rounded-lg bg-amber-50/90 border border-amber-200 text-[11px] space-y-1">
+                                  <div className="flex items-center justify-between font-bold text-amber-950">
+                                    <span className="flex items-center gap-1">
+                                      <Gift size={12} className="text-amber-700 flex-shrink-0" />
+                                      <span>Festival Box ({ord.quantity} {ord.quantity === 1 ? 'Box' : 'Boxes'})</span>
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewBoxModalData({
+                                        orderCode: ord.orderCode,
+                                        customerName: ord.customerName,
+                                        boxName: ord.festivalBoxDetails.boxName,
+                                        quantity: ord.quantity,
+                                        festivalBoxDetails: ord.festivalBoxDetails,
+                                      })}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold shadow-2xs transition-colors cursor-pointer"
+                                    >
+                                      <Eye size={10} /> View Layout
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Packet badge if applicable */}
                               {ord.hasPacket && (
                                 <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
@@ -1649,6 +1692,26 @@ export default function PackingPortalClient() {
                                         <strong>Note:</strong> {ord.packingDescription}
                                       </p>
                                     )}
+                                    {ord.isFestivalBox && ord.festivalBoxDetails && (
+                                      <div className="flex items-center justify-between pt-0.5">
+                                        <span className="text-[9px] font-bold text-amber-800 bg-amber-100/70 px-1.5 py-0.2 rounded border border-amber-200 flex items-center gap-0.5">
+                                          <Gift size={9} className="text-amber-700" /> Festival Box
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setPreviewBoxModalData({
+                                            orderCode: ord.orderCode,
+                                            customerName: ord.customerName,
+                                            boxName: ord.festivalBoxDetails.boxName,
+                                            quantity: ord.quantity,
+                                            festivalBoxDetails: ord.festivalBoxDetails,
+                                          })}
+                                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-bold shadow-2xs transition-colors cursor-pointer"
+                                        >
+                                          <Eye size={8} /> Preview
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -1763,6 +1826,13 @@ export default function PackingPortalClient() {
                           {isWholesaleOrder(order) && (
                             <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200">
                               Wholesale B2B
+                            </span>
+                          )}
+
+                          {Boolean((order as any).isFestivalOrder || (order.items || []).some((it: any) => it.isFestivalBox || it.festivalBoxDetails)) && (
+                            <span className="text-xs font-extrabold px-3 py-1 rounded-lg bg-amber-100/90 text-amber-950 border border-amber-300 flex items-center gap-1.5 shadow-2xs">
+                              <Gift size={14} className="text-amber-700" />
+                              Festival Order
                             </span>
                           )}
 
@@ -2166,6 +2236,31 @@ export default function PackingPortalClient() {
                                     )}
                                   </div>
 
+                                  {/* Festival Box Preview Button */}
+                                  {Boolean(item.isFestivalBox || item.festivalBoxDetails) && (
+                                    <div className="flex items-center justify-between gap-1.5 p-1.5 rounded-lg bg-amber-50 border border-amber-200">
+                                      <div className="flex items-center gap-1 min-w-0">
+                                        <Gift size={12} className="text-amber-700 shrink-0" />
+                                        <span className="text-[10px] font-bold text-amber-950 truncate">
+                                          {item.festivalBoxDetails?.boxName || 'Festival Box'} {item.festivalBoxDetails?.rows ? `(${item.festivalBoxDetails.rows}×${item.festivalBoxDetails.cols})` : ''}
+                                        </span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewBoxModalData({
+                                          orderCode: order.code,
+                                          customerName: order.customerName,
+                                          boxName: item.festivalBoxDetails?.boxName || item.itemName,
+                                          quantity: item.quantity,
+                                          festivalBoxDetails: item.festivalBoxDetails,
+                                        })}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold shadow-2xs transition-colors cursor-pointer shrink-0"
+                                      >
+                                        <Eye size={11} /> View Layout
+                                      </button>
+                                    </div>
+                                  )}
+
                                   {/* Cooking & Packing Status Badges */}
                                   <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-100">
                                     <div className="flex items-center gap-1">
@@ -2548,6 +2643,200 @@ export default function PackingPortalClient() {
                 type="button"
                 onClick={() => setPreviewImage(null)}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Festival Box Configuration Layout Preview Modal */}
+      {previewBoxModalData && previewBoxModalData.festivalBoxDetails && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150"
+          onClick={() => setPreviewBoxModalData(null)}
+        >
+          <div
+            className="relative max-w-xl w-full bg-white rounded-3xl overflow-hidden shadow-2xl border border-amber-200/80 p-5 sm:p-6 space-y-4 max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-100 text-amber-800 border border-amber-200">
+                  <Gift size={20} className="text-amber-700" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                      {previewBoxModalData.boxName || previewBoxModalData.festivalBoxDetails.boxName || 'Festival Box'} Layout
+                    </h3>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                      {previewBoxModalData.festivalBoxDetails.rows || 2}×{previewBoxModalData.festivalBoxDetails.cols || 3} Grid
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Order: <strong className="text-violet-700 font-mono">{previewBoxModalData.orderCode}</strong>
+                    {previewBoxModalData.customerName ? ` • ${previewBoxModalData.customerName}` : ''}
+                    {previewBoxModalData.quantity ? ` • ` : ''}
+                    {previewBoxModalData.quantity ? <strong className="text-slate-800">{previewBoxModalData.quantity} Boxes</strong> : null}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewBoxModalData(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-4 flex-1 pr-1">
+              {/* Visual Cavity Layout: Which item is stored in which cavity */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-extrabold text-slate-700 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                    <Boxes size={14} className="text-amber-600" /> Compartment Packing Layout:
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {(previewBoxModalData.festivalBoxDetails.rows || 2) * (previewBoxModalData.festivalBoxDetails.cols || 3)} Cavities
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-900 via-amber-950 to-amber-900 border-2 border-amber-400 shadow-md">
+                  <div
+                    className="bg-[#faf5eb] rounded-xl p-2.5 shadow-inner"
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: `repeat(${previewBoxModalData.festivalBoxDetails.cols || 3}, minmax(0, 1fr))`,
+                      gridTemplateRows: `repeat(${previewBoxModalData.festivalBoxDetails.rows || 2}, minmax(0, 1fr))`,
+                      gap: '8px',
+                    }}
+                  >
+                    {Array.from({
+                      length:
+                        (previewBoxModalData.festivalBoxDetails.rows || 2) *
+                        (previewBoxModalData.festivalBoxDetails.cols || 3),
+                    }).map((_, idx) => {
+                      const comp = previewBoxModalData.festivalBoxDetails.compartments?.[idx];
+                      return (
+                        <div
+                          key={idx}
+                          className={`rounded-xl border p-2 flex flex-col items-center justify-center text-center shadow-2xs min-h-[72px] transition-all ${
+                            comp
+                              ? 'bg-white border-amber-300 shadow-xs ring-1 ring-amber-200/50'
+                              : 'bg-slate-100/60 border-dashed border-slate-300'
+                          }`}
+                        >
+                          <span className="text-[8.5px] font-mono font-bold text-slate-400 mb-0.5">
+                            Cavity #{idx + 1}
+                          </span>
+                          {comp ? (
+                            <>
+                              {comp.imageUrl && (
+                                <img
+                                  src={comp.imageUrl}
+                                  alt={comp.itemName}
+                                  className="w-7 h-7 object-cover rounded-md mb-1 border border-amber-200"
+                                />
+                              )}
+                              <span className="text-[10px] font-black text-slate-900 leading-tight line-clamp-2 w-full">
+                                {comp.itemName}
+                              </span>
+                              <span className="mt-1 text-[8.5px] font-black text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded-full border border-amber-200">
+                                {comp.pieces} {comp.pieces === 1 ? 'pc' : 'pcs'}/box
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[9px] font-medium text-slate-400 italic">Empty</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Breakdown Checklist */}
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                  <span>Sweets Checklist &amp; Quantities</span>
+                  <span className="text-teal-700 font-mono">
+                    {previewBoxModalData.festivalBoxDetails.totalPiecesCount ? `${previewBoxModalData.festivalBoxDetails.totalPiecesCount} pcs/box` : ''}
+                    {previewBoxModalData.festivalBoxDetails.totalWeightKg ? ` • ${previewBoxModalData.festivalBoxDetails.totalWeightKg.toFixed(2)} KG total` : ''}
+                  </span>
+                </div>
+
+                <div className="divide-y divide-slate-200/80 text-xs">
+                  {previewBoxModalData.festivalBoxDetails.itemsBreakdown?.map((it: any, idx: number) => {
+                    const totalPcsForOrder = it.piecesPerBox && previewBoxModalData.quantity
+                      ? it.piecesPerBox * previewBoxModalData.quantity
+                      : it.totalPieces || it.piecesCount;
+
+                    return (
+                      <div key={idx} className="py-1.5 flex items-center justify-between gap-2">
+                        <span className="font-bold text-slate-800">{it.itemName}</span>
+                        <div className="flex items-center gap-2 font-mono text-[11px]">
+                          <span className="text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200 font-semibold">
+                            {it.piecesPerBox || it.piecesCount} pcs/box
+                          </span>
+                          <span className="font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                            Total: {totalPcsForOrder} pcs {it.weightKg ? `(${it.weightKg} KG)` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Packaging Specifications Strip */}
+              <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200 text-xs space-y-1.5">
+                <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block">
+                  Packaging &amp; Add-on Specifications:
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {previewBoxModalData.festivalBoxDetails.hasBoxPrice ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white text-amber-900 border border-amber-300 shadow-2xs">
+                      🎁 Box Included (+₹{previewBoxModalData.festivalBoxDetails.boxPrice || 0}/box)
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-white/70 text-slate-600 border border-slate-200">
+                      🎁 Standard Box
+                    </span>
+                  )}
+
+                  {previewBoxModalData.festivalBoxDetails.hasSticker ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-300 shadow-2xs">
+                      🏷️ Sticker (+₹{previewBoxModalData.festivalBoxDetails.stickerPrice || 0}/box)
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-white/70 text-slate-500 border border-slate-200">
+                      No Sticker
+                    </span>
+                  )}
+
+                  {previewBoxModalData.festivalBoxDetails.hasShrink ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-cyan-50 text-cyan-900 border border-cyan-300 shadow-2xs">
+                      📦 Shrink Wrap (+₹{previewBoxModalData.festivalBoxDetails.shrinkPrice || 0}/box)
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-white/70 text-slate-500 border border-slate-200">
+                      No Shrink Wrap
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end pt-3 border-t border-slate-100 shrink-0">
+              <button
+                type="button"
+                onClick={() => setPreviewBoxModalData(null)}
+                className="px-5 py-2 bg-[#02626D] hover:bg-[#024f58] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-sm"
               >
                 Close Preview
               </button>

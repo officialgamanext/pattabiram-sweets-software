@@ -34,6 +34,8 @@ import {
   WalletCards,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
+  Calendar,
   Phone,
   Receipt,
   CreditCard,
@@ -169,6 +171,54 @@ const getTodayDateStr = () => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
+const getYesterdayDateStr = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const getOrderDateKey = (order: WholesalerOrderRecord): string => {
+  if (order.orderDate && /^\d{4}-\d{2}-\d{2}$/.test(order.orderDate)) {
+    return order.orderDate;
+  }
+  if (order.orderDate) {
+    const d = new Date(order.orderDate);
+    if (!isNaN(d.getTime())) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+  }
+  if (order.createdAt) {
+    if (typeof order.createdAt.toDate === 'function') {
+      const d = order.createdAt.toDate();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    if (order.createdAt.seconds) {
+      const d = new Date(order.createdAt.seconds * 1000);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    const d = new Date(order.createdAt);
+    if (!isNaN(d.getTime())) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+  }
+  return '';
+};
+
 export default function WholesalerOrdersClient() {
   const [orders, setOrders] = useState<WholesalerOrderRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -179,6 +229,10 @@ export default function WholesalerOrdersClient() {
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('All');
+
+  // Date Filters: 'All' | 'today' | 'yesterday' | 'custom' (default: today)
+  const [dateFilterType, setDateFilterType] = useState<'All' | 'today' | 'yesterday' | 'custom'>('today');
+  const [customFilterDate, setCustomFilterDate] = useState<string>(getTodayDateStr());
   
   // Add Order Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -1181,19 +1235,75 @@ export default function WholesalerOrdersClient() {
       });
   }, [orders, creditStatusFilter, creditSearchQuery, creditSortBy]);
 
-  // Filtered Orders List
+  const handlePrevDay = () => {
+    const baseStr =
+      dateFilterType === 'today'
+        ? getTodayDateStr()
+        : dateFilterType === 'yesterday'
+        ? getYesterdayDateStr()
+        : customFilterDate;
+    const [y, m, d] = (baseStr || getTodayDateStr()).split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    dateObj.setDate(dateObj.getDate() - 1);
+    const yr = dateObj.getFullYear();
+    const mo = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const dy = String(dateObj.getDate()).padStart(2, '0');
+    const newStr = `${yr}-${mo}-${dy}`;
+    setCustomFilterDate(newStr);
+    setDateFilterType('custom');
+  };
+
+  const handleNextDay = () => {
+    const baseStr =
+      dateFilterType === 'today'
+        ? getTodayDateStr()
+        : dateFilterType === 'yesterday'
+        ? getYesterdayDateStr()
+        : customFilterDate;
+    const [y, m, d] = (baseStr || getTodayDateStr()).split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    dateObj.setDate(dateObj.getDate() + 1);
+    const yr = dateObj.getFullYear();
+    const mo = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const dy = String(dateObj.getDate()).padStart(2, '0');
+    const newStr = `${yr}-${mo}-${dy}`;
+    setCustomFilterDate(newStr);
+    setDateFilterType('custom');
+  };
+
+  // Filtered Orders List with Date Filter (All, Today, Yesterday, Custom)
   const filteredOrders = useMemo(() => {
+    const todayStr = getTodayDateStr();
+    const yesterdayStr = getYesterdayDateStr();
+
     return orders.filter((order) => {
       const matchQuery =
         order.orderId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         order.wholesalerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         order.wholesalerMobile?.includes(searchQuery);
       const matchStatus = selectedStatusFilter === 'All' || order.status === selectedStatusFilter;
-      return matchQuery && matchStatus;
+
+      let matchDate = true;
+      const orderDateStr = getOrderDateKey(order);
+
+      if (dateFilterType === 'today') {
+        matchDate = orderDateStr === todayStr;
+      } else if (dateFilterType === 'yesterday') {
+        matchDate = orderDateStr === yesterdayStr;
+      } else if (dateFilterType === 'custom') {
+        matchDate = customFilterDate ? orderDateStr === customFilterDate : true;
+      }
+
+      return matchQuery && matchStatus && matchDate;
     });
-  }, [orders, searchQuery, selectedStatusFilter]);
+  }, [orders, searchQuery, selectedStatusFilter, dateFilterType, customFilterDate]);
 
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset pagination to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedStatusFilter, dateFilterType, customFilterDate]);
 
   const paginatedOrders = useMemo(() => {
     return filteredOrders.slice((currentPage - 1) * 45, currentPage * 45);
@@ -1274,35 +1384,150 @@ export default function WholesalerOrdersClient() {
       {/* ── TAB 1: Wholesale Orders List View ───────────────────────────────── */}
       {activeMainTab === 'orders' && (
         <>
-          {/* ── Toolbar: Search & Status Filters ──────────────────────────────────── */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3">
-            <div className="relative w-full md:w-80">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by Order #, Wholesaler or phone..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 h-8 bg-[#f7f7f8] focus:bg-white text-xs rounded-lg border border-slate-300 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-500 transition-all"
-              />
-            </div>
+          {/* ── Toolbar: Search, Date Filter & Status Filters ───────────────────── */}
+          <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col gap-3">
+            {/* Row 1: Search & Date Filters */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              {/* Search input */}
+              <div className="relative w-full lg:w-72">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by Order #, Wholesaler or phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 h-8.5 bg-[#f7f7f8] focus:bg-white text-xs rounded-lg border border-slate-300 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#02626D] transition-all"
+                />
+              </div>
 
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <span className="text-xs text-slate-500 font-semibold">Status:</span>
-              <div className="flex bg-[#f1f2f4] p-0.5 rounded-lg border border-slate-200">
-                {(['All', 'Pending', 'Approved', 'Processing', 'Delivered'] as const).map((st) => (
+              {/* Date Filters: All, Today, Yesterday, Custom */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-slate-500 font-semibold flex items-center gap-1 mr-1">
+                  <Calendar size={13} className="text-slate-400" />
+                  Date:
+                </span>
+
+                <div className="flex bg-[#f1f2f4] p-0.5 rounded-lg border border-slate-200 gap-0.5">
                   <button
-                    key={st}
-                    onClick={() => setSelectedStatusFilter(st)}
-                    className={`h-7 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                      selectedStatusFilter === st
-                        ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80'
+                    type="button"
+                    onClick={() => setDateFilterType('All')}
+                    className={`h-7.5 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                      dateFilterType === 'All'
+                        ? 'bg-white text-[#02626D] shadow-2xs border border-slate-200/80 font-bold'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    {st}
+                    All Dates
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setDateFilterType('today')}
+                    className={`h-7.5 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                      dateFilterType === 'today'
+                        ? 'bg-white text-[#02626D] shadow-2xs border border-slate-200/80 font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateFilterType('yesterday')}
+                    className={`h-7.5 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                      dateFilterType === 'yesterday'
+                        ? 'bg-white text-[#02626D] shadow-2xs border border-slate-200/80 font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Yesterday
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateFilterType('custom')}
+                    className={`h-7.5 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                      dateFilterType === 'custom'
+                        ? 'bg-white text-[#02626D] shadow-2xs border border-slate-200/80 font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Custom Date
+                  </button>
+                </div>
+
+                {/* Custom Date Picker & Prev/Next Day Controls */}
+                {dateFilterType === 'custom' && (
+                  <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-1.5 py-0.5 shadow-2xs animate-in fade-in duration-150">
+                    <button
+                      type="button"
+                      onClick={handlePrevDay}
+                      className="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                      title="Previous Day"
+                    >
+                      <ChevronLeft size={13} />
+                    </button>
+                    <CustomDatePicker
+                      value={customFilterDate}
+                      onChange={(newDate) => {
+                        setCustomFilterDate(newDate);
+                        setDateFilterType('custom');
+                      }}
+                      allowAll={false}
+                      size="sm"
+                      className="border-0 shadow-none bg-transparent p-0"
+                      buttonClassName="border-0 shadow-none bg-transparent hover:bg-slate-50 px-2 py-0.5 text-xs font-bold text-slate-800"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleNextDay}
+                      className="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                      title="Next Day"
+                    >
+                      <ChevronRight size={13} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Row 2: Status Filter & Filter Status info */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-slate-500 font-semibold">Status:</span>
+                <div className="flex bg-[#f1f2f4] p-0.5 rounded-lg border border-slate-200 gap-0.5">
+                  {(['All', 'Pending', 'Approved', 'Processing', 'Delivered'] as const).map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => setSelectedStatusFilter(st)}
+                      className={`h-7 px-2.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                        selectedStatusFilter === st
+                          ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <span>
+                  Showing <strong className="text-slate-800 font-bold">{filteredOrders.length}</strong> of{' '}
+                  <strong className="text-slate-800 font-bold">{orders.length}</strong> orders
+                </span>
+                {(dateFilterType !== 'today' || selectedStatusFilter !== 'All' || searchQuery) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateFilterType('today');
+                      setSelectedStatusFilter('All');
+                      setSearchQuery('');
+                    }}
+                    className="text-[11px] text-[#02626D] hover:underline font-bold cursor-pointer ml-1"
+                  >
+                    Reset filters
+                  </button>
+                )}
               </div>
             </div>
           </div>

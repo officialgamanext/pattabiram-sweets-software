@@ -499,7 +499,11 @@ export default function CreateOrderClient() {
     packingUnitName?: string;
   }>>({});
   const [configuringSlotIndex, setConfiguringSlotIndex] = useState<number | null>(null);
-  const [boxOrderCount, setBoxOrderCount] = useState<number>(1);
+  const [boxOrderCount, setBoxOrderCount] = useState<string | number>('');
+  const [boxHasSticker, setBoxHasSticker] = useState<boolean>(false);
+  const [boxStickerPrice, setBoxStickerPrice] = useState<string | number>(10);
+  const [boxHasShrink, setBoxHasShrink] = useState<boolean>(false);
+  const [boxShrinkPrice, setBoxShrinkPrice] = useState<string | number>(10);
   const [sweetSearchInBox, setSweetSearchInBox] = useState('');
   const [sweetCategoryInBox, setSweetCategoryInBox] = useState('All');
   const [piecesForSlot, setPiecesForSlot] = useState<number>(1);
@@ -1375,7 +1379,11 @@ export default function CreateOrderClient() {
   const handleOpenBoxConfigurator = useCallback((box: FestivalBoxRecord) => {
     setSelectedBoxForConfig(box);
     setBoxCompartmentFills({});
-    setBoxOrderCount(1);
+    setBoxOrderCount('');
+    setBoxHasSticker(false);
+    setBoxStickerPrice(10);
+    setBoxHasShrink(false);
+    setBoxShrinkPrice(10);
     setConfiguringSlotIndex(null);
   }, []);
 
@@ -1436,9 +1444,15 @@ export default function CreateOrderClient() {
       return;
     }
 
+    const numericBoxCount = Number(boxOrderCount);
+    if (!numericBoxCount || numericBoxCount <= 0) {
+      toast.warning('Box Count Required', 'Please enter how many boxes you want to order.');
+      return;
+    }
+
     const rows = selectedBoxForConfig.rows || 3;
     const cols = selectedBoxForConfig.cols || 3;
-    const boxCount = Math.max(1, boxOrderCount || 1);
+    const boxCount = numericBoxCount;
 
     const totalPiecesPerBox = Object.values(boxCompartmentFills).reduce((s, f) => s + (f.pieces || 0), 0);
     const totalWeightPerBoxKg = Object.values(boxCompartmentFills).reduce((s, f) => {
@@ -1446,10 +1460,13 @@ export default function CreateOrderClient() {
       return s + (f.pieces / pKg);
     }, 0);
 
-    const boxUnitPrice = Object.values(boxCompartmentFills).reduce(
+    const sweetsUnitPrice = Object.values(boxCompartmentFills).reduce(
       (s, f) => s + f.pieces * (f.piecePrice || 0),
       0
     );
+    const stickerCost = boxHasSticker ? (Number(boxStickerPrice) || 0) : 0;
+    const shrinkCost = boxHasShrink ? (Number(boxShrinkPrice) || 0) : 0;
+    const boxUnitPrice = Math.round((sweetsUnitPrice + stickerCost + shrinkCost) * 100) / 100;
     const boxLineTotal = Math.round(boxUnitPrice * boxCount * 100) / 100;
 
     const itemsBreakdown = Object.values(boxCompartmentFills).map((f) => {
@@ -1495,7 +1512,12 @@ export default function CreateOrderClient() {
         rows: rows,
         cols: cols,
         boxCount: boxCount,
-        basePrice: selectedBoxForConfig.basePrice || 0,
+        sweetsCostPerBox: sweetsUnitPrice,
+        hasSticker: boxHasSticker,
+        stickerPrice: stickerCost,
+        hasShrink: boxHasShrink,
+        shrinkPrice: shrinkCost,
+        boxUnitPrice: boxUnitPrice,
         totalPiecesPerBox: totalPiecesPerBox,
         totalPiecesAllBoxes: totalPiecesPerBox * boxCount,
         weightPerBoxKg: Math.round(totalWeightPerBoxKg * 1000) / 1000,
@@ -1504,7 +1526,7 @@ export default function CreateOrderClient() {
         compartments: boxCompartmentFills,
       },
       manufacturingDescription: `[Festival Box: ${selectedBoxForConfig.name}] ${mfgSummary}`,
-      packingDescription: `Pack in ${selectedBoxForConfig.name} (${rows}x${cols} grid)`,
+      packingDescription: `Pack in ${selectedBoxForConfig.name} (${rows}x${cols} grid)${boxHasSticker ? ` • Sticker (₹${stickerCost}/box)` : ''}${boxHasShrink ? ` • Shrink Wrap (₹${shrinkCost}/box)` : ''}`,
       needsManufacturing: true,
       mfgStatus: 'Pending',
       pckStatus: 'Pending',
@@ -1514,8 +1536,10 @@ export default function CreateOrderClient() {
     toast.success('Box Added', `Added ${boxCount}x ${selectedBoxForConfig.name} (Total: ₹${boxLineTotal})`);
     setSelectedBoxForConfig(null);
     setBoxCompartmentFills({});
-    setBoxOrderCount(1);
-  }, [selectedBoxForConfig, boxCompartmentFills, boxOrderCount]);
+    setBoxOrderCount('');
+    setBoxHasSticker(false);
+    setBoxHasShrink(false);
+  }, [selectedBoxForConfig, boxCompartmentFills, boxOrderCount, boxHasSticker, boxStickerPrice, boxHasShrink, boxShrinkPrice]);
 
   // Box Image File Upload
   const handleBoxImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4232,12 +4256,16 @@ export default function CreateOrderClient() {
                   {/* Quantity of Boxes to Order */}
                   <div className="p-3 rounded-xl bg-white border border-slate-200/90 space-y-1.5">
                     <label className="block text-xs font-bold text-slate-800">
-                      Number of Boxes to Order
+                      Number of Boxes to Order <span className="text-rose-500">*</span>
                     </label>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setBoxOrderCount((c) => Math.max(1, c - 1))}
+                        onClick={() => {
+                          const cur = Number(boxOrderCount) || 0;
+                          if (cur > 1) setBoxOrderCount(cur - 1);
+                          else setBoxOrderCount('');
+                        }}
                         className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center cursor-pointer active:scale-95 text-sm"
                       >
                         -
@@ -4245,17 +4273,96 @@ export default function CreateOrderClient() {
                       <input
                         type="number"
                         min="1"
+                        placeholder="Enter boxes qty..."
                         value={boxOrderCount}
-                        onChange={(e) => setBoxOrderCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '') {
+                            setBoxOrderCount('');
+                          } else {
+                            const parsed = parseInt(val, 10);
+                            setBoxOrderCount(isNaN(parsed) || parsed < 1 ? '' : parsed);
+                          }
+                        }}
                         className="w-full h-8 text-center font-extrabold text-sm border border-slate-300 rounded-lg bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D]"
                       />
                       <button
                         type="button"
-                        onClick={() => setBoxOrderCount((c) => c + 1)}
+                        onClick={() => {
+                          const cur = Number(boxOrderCount) || 0;
+                          setBoxOrderCount(cur + 1);
+                        }}
                         className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center cursor-pointer active:scale-95 text-sm"
                       >
                         +
                       </button>
+                    </div>
+                  </div>
+
+                  {/* Packaging Add-ons: Sticker & Shrink Wrap Toggles */}
+                  <div className="p-3 rounded-xl bg-white border border-slate-200/90 space-y-2">
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                      Box Add-ons (Per Box)
+                    </span>
+
+                    {/* Sticker Toggle */}
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200/80">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={boxHasSticker}
+                          onChange={(e) => setBoxHasSticker(e.target.checked)}
+                          className="w-4 h-4 rounded text-[#02626D] focus:ring-[#02626D] cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-slate-800">🏷️ Sticker</span>
+                      </label>
+
+                      {boxHasSticker ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] font-bold text-slate-500">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={boxStickerPrice}
+                            onChange={(e) => setBoxStickerPrice(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                            className="w-14 h-6 px-1 text-center text-xs font-bold border border-slate-300 rounded bg-white focus:outline-none focus:border-[#02626D]"
+                          />
+                          <span className="text-[10px] text-slate-400">/box</span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-medium">Not Included</span>
+                      )}
+                    </div>
+
+                    {/* Shrink Wrap Toggle */}
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200/80">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={boxHasShrink}
+                          onChange={(e) => setBoxHasShrink(e.target.checked)}
+                          className="w-4 h-4 rounded text-[#02626D] focus:ring-[#02626D] cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-slate-800">📦 Shrink Wrap</span>
+                      </label>
+
+                      {boxHasShrink ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] font-bold text-slate-500">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={boxShrinkPrice}
+                            onChange={(e) => setBoxShrinkPrice(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                            className="w-14 h-6 px-1 text-center text-xs font-bold border border-slate-300 rounded bg-white focus:outline-none focus:border-[#02626D]"
+                          />
+                          <span className="text-[10px] text-slate-400">/box</span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-medium">Not Included</span>
+                      )}
                     </div>
                   </div>
 
@@ -4275,12 +4382,14 @@ export default function CreateOrderClient() {
                       </span>
                     </div>
 
-                    <div className="flex justify-between py-0.5">
-                      <span className="text-slate-500">Total Pieces ({boxOrderCount} boxes):</span>
-                      <span className="font-extrabold text-[#02626D]">
-                        {Object.values(boxCompartmentFills).reduce((s, f) => s + (f.pieces || 0), 0) * boxOrderCount} pcs
-                      </span>
-                    </div>
+                    {Boolean(boxOrderCount && Number(boxOrderCount) > 0) && (
+                      <div className="flex justify-between py-0.5">
+                        <span className="text-slate-500">Total Pieces ({boxOrderCount} boxes):</span>
+                        <span className="font-extrabold text-[#02626D]">
+                          {Object.values(boxCompartmentFills).reduce((s, f) => s + (f.pieces || 0), 0) * (Number(boxOrderCount) || 1)} pcs
+                        </span>
+                      </div>
+                    )}
 
                     {/* Manufacturing Weight Projection */}
                     <div className="p-2.5 rounded-xl bg-teal-50 border border-teal-200 text-teal-900 space-y-1 my-1">
@@ -4291,9 +4400,9 @@ export default function CreateOrderClient() {
                             Object.values(boxCompartmentFills).reduce((s, f) => {
                               const pKg = f.piecesPerKg || 20;
                               return s + (f.pieces / pKg);
-                            }, 0) * boxOrderCount
+                            }, 0) * (Number(boxOrderCount) || 1)
                           ).toFixed(3)}{' '}
-                          KG
+                          KG {boxOrderCount && Number(boxOrderCount) > 0 ? `(${boxOrderCount} boxes)` : '(per box)'}
                         </span>
                       </div>
                       <p className="text-[9.5px] text-teal-700/90 leading-tight">
@@ -4302,40 +4411,67 @@ export default function CreateOrderClient() {
                     </div>
 
                     {/* Price Breakdown */}
-                    <div className="border-t border-slate-200 pt-1.5 space-y-1">
-                      <div className="flex justify-between text-slate-600">
-                        <span>Price Per Box (Sum of Pieces):</span>
-                        <span className="font-bold text-slate-800">
-                          ₹
-                          {Object.values(boxCompartmentFills)
-                            .reduce((s, f) => s + f.pieces * (f.piecePrice || 0), 0)
-                            .toFixed(2)}
-                        </span>
-                      </div>
+                    {(() => {
+                      const sweetsCostPerBox = Object.values(boxCompartmentFills).reduce(
+                        (s, f) => s + f.pieces * (f.piecePrice || 0),
+                        0
+                      );
+                      const stickerCost = boxHasSticker ? (Number(boxStickerPrice) || 0) : 0;
+                      const shrinkCost = boxHasShrink ? (Number(boxShrinkPrice) || 0) : 0;
+                      const perBoxPrice = sweetsCostPerBox + stickerCost + shrinkCost;
+                      const countNum = Number(boxOrderCount) || 0;
+                      const lineTotalPrice = countNum > 0 ? perBoxPrice * countNum : perBoxPrice;
 
-                      <div className="flex justify-between text-sm font-extrabold text-slate-900 border-t border-slate-200 pt-1">
-                        <span>Total ({boxOrderCount} Boxes):</span>
-                        <span className="text-[#02626D]">
-                          ₹
-                          {(
-                            Object.values(boxCompartmentFills).reduce(
-                              (s, f) => s + f.pieces * (f.piecePrice || 0),
-                              0
-                            ) * boxOrderCount
-                          ).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
+                      return (
+                        <div className="border-t border-slate-200 pt-2 space-y-1.5">
+                          <div className="flex justify-between text-slate-600">
+                            <span>Sweets Cost:</span>
+                            <span className="font-semibold text-slate-800">₹{sweetsCostPerBox.toFixed(2)}</span>
+                          </div>
+
+                          {boxHasSticker && (
+                            <div className="flex justify-between text-slate-600 text-[11px]">
+                              <span>🏷️ Sticker:</span>
+                              <span className="font-semibold text-slate-800">+₹{stickerCost.toFixed(2)} / box</span>
+                            </div>
+                          )}
+
+                          {boxHasShrink && (
+                            <div className="flex justify-between text-slate-600 text-[11px]">
+                              <span>📦 Shrink Wrap:</span>
+                              <span className="font-semibold text-slate-800">+₹{shrinkCost.toFixed(2)} / box</span>
+                            </div>
+                          )}
+
+                          <div className="flex justify-between text-slate-800 font-bold border-t border-slate-200/80 pt-1">
+                            <span>Price Per Box:</span>
+                            <span className="text-[#02626D]">₹{perBoxPrice.toFixed(2)}</span>
+                          </div>
+
+                          <div className="flex justify-between text-sm font-extrabold text-slate-900 border-t border-slate-200 pt-1">
+                            <span>Total ({countNum > 0 ? `${countNum} Boxes` : '—'}):</span>
+                            <span className="text-[#02626D]">
+                              {countNum > 0 ? `₹${lineTotalPrice.toFixed(2)}` : 'Enter Box Count'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Add to Order Button */}
                   <button
                     type="button"
                     onClick={handleAddFestivalBoxToOrder}
-                    className="w-full h-10 rounded-xl bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                    disabled={!boxOrderCount || Number(boxOrderCount) <= 0 || Object.keys(boxCompartmentFills).length === 0}
+                    className="w-full h-10 rounded-xl bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Check size={15} />
-                    <span>Select & Add {boxOrderCount} Box{boxOrderCount > 1 ? 'es' : ''} to Order</span>
+                    <span>
+                      {boxOrderCount && Number(boxOrderCount) > 0
+                        ? `Select & Add ${boxOrderCount} Box${Number(boxOrderCount) > 1 ? 'es' : ''} to Order`
+                        : 'Enter Number of Boxes'}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -4601,6 +4737,28 @@ export default function CreateOrderClient() {
                 </div>
               ))}
             </div>
+
+            {/* Packaging Add-ons Details */}
+            {(viewingBoxPreviewItem.festivalBoxDetails.hasSticker ||
+              viewingBoxPreviewItem.festivalBoxDetails.hasShrink) && (
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Packaging Add-ons:
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {viewingBoxPreviewItem.festivalBoxDetails.hasSticker && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      🏷️ Sticker (₹{viewingBoxPreviewItem.festivalBoxDetails.stickerPrice || 0}/box)
+                    </span>
+                  )}
+                  {viewingBoxPreviewItem.festivalBoxDetails.hasShrink && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-cyan-50 text-cyan-800 border border-cyan-200">
+                      📦 Shrink Wrap (₹{viewingBoxPreviewItem.festivalBoxDetails.shrinkPrice || 0}/box)
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end pt-2 border-t border-slate-100">
               <button

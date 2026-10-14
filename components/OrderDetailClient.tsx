@@ -1139,6 +1139,22 @@ export default function OrderDetailClient({ orderId }: Props) {
                                 </div>
                               </div>
                             )}
+
+                            {/* Festival Box Packaging Add-ons */}
+                            {item.isFestivalBox && (item.festivalBoxDetails?.hasSticker || item.festivalBoxDetails?.hasShrink) && (
+                              <div className="mt-1 flex flex-wrap gap-1.5">
+                                {item.festivalBoxDetails.hasSticker && (
+                                  <span className="inline-flex items-center gap-1 text-[9.5px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                    🏷️ Sticker (+₹{item.festivalBoxDetails.stickerPrice || 0}/box)
+                                  </span>
+                                )}
+                                {item.festivalBoxDetails.hasShrink && (
+                                  <span className="inline-flex items-center gap-1 text-[9.5px] font-bold px-2 py-0.5 rounded-md bg-cyan-50 text-cyan-800 border border-cyan-200">
+                                    📦 Shrink Wrap (+₹{item.festivalBoxDetails.shrinkPrice || 0}/box)
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>

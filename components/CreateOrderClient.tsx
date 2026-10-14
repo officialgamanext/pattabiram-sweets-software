@@ -23,11 +23,14 @@ import {
   CreditCard,
   Tag,
   Boxes,
+  Gift,
+  Grid3X3,
   FileText,
   Sparkles,
   Star,
   CheckCircle2,
   ChevronDown,
+  ChevronUp,
   ShoppingBag,
   Truck,
   MapPin,
@@ -36,6 +39,8 @@ import {
   Layers,
   Printer,
   ExternalLink,
+  Eye,
+  ArrowRight,
 } from 'lucide-react';
 import WhatsAppIcon from '@/components/WhatsAppIcon';
 import A4InvoiceDocument from '@/components/A4InvoiceDocument';
@@ -113,6 +118,9 @@ export interface OrderItemLine {
   needsManufacturing?: boolean;
   mfgStatus?: string;
   pckStatus?: string;
+  isFestivalBox?: boolean;
+  festivalBoxName?: string;
+  festivalBoxDetails?: any;
 }
 
 export interface ItemMasterOption {
@@ -121,6 +129,10 @@ export interface ItemMasterOption {
   name: string;
   category: string;
   price: number;
+  piecePrice?: number;
+  piecesPerKg?: number;
+  manufacturingUnitName?: string;
+  packingUnitName?: string;
   unit: string;
   imageUrl?: string;
   isFavorite?: boolean;
@@ -130,6 +142,18 @@ export interface ItemMasterOption {
     '3:00 PM - 6:00 PM'?: number;
     '6:00 PM - 9:00 PM'?: number;
   };
+}
+
+export interface FestivalBoxRecord {
+  id: string;
+  code: string;
+  name: string;
+  rows: number;
+  cols: number;
+  compartmentsCount?: number;
+  basePrice?: number;
+  description?: string;
+  status: 'Active' | 'Inactive';
 }
 
 export interface CustomerOption {
@@ -457,6 +481,30 @@ export default function CreateOrderClient() {
   const [utilitiesMaster, setUtilitiesMaster] = useState<UtilityOption[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItemLine[]>([]);
 
+  // Festival Boxes State
+  const [festivalBoxes, setFestivalBoxes] = useState<FestivalBoxRecord[]>([]);
+  const [isFestivalAccordionOpen, setIsFestivalAccordionOpen] = useState(false);
+  const [selectedBoxForConfig, setSelectedBoxForConfig] = useState<FestivalBoxRecord | null>(null);
+  const [boxCompartmentFills, setBoxCompartmentFills] = useState<Record<number, {
+    itemId: string;
+    itemCode: string;
+    itemName: string;
+    imageUrl?: string;
+    category?: string;
+    unit: string;
+    piecePrice: number;
+    piecesPerKg: number;
+    pieces: number;
+    manufacturingUnitName?: string;
+    packingUnitName?: string;
+  }>>({});
+  const [configuringSlotIndex, setConfiguringSlotIndex] = useState<number | null>(null);
+  const [boxOrderCount, setBoxOrderCount] = useState<number>(1);
+  const [sweetSearchInBox, setSweetSearchInBox] = useState('');
+  const [sweetCategoryInBox, setSweetCategoryInBox] = useState('All');
+  const [piecesForSlot, setPiecesForSlot] = useState<number>(1);
+  const [viewingBoxPreviewItem, setViewingBoxPreviewItem] = useState<OrderItemLine | null>(null);
+
   // Product Catalog Grid Search & Category Filters
   const [productGridSearch, setProductGridSearch] = useState('');
   const [productGridCategory, setProductGridCategory] = useState('All');
@@ -609,6 +657,9 @@ export default function CreateOrderClient() {
                 needsManufacturing: it.needsManufacturing !== undefined ? it.needsManufacturing : true,
                 mfgStatus: it.mfgStatus || (it.needsManufacturing === false ? 'Not Required' : 'Pending'),
                 pckStatus: it.pckStatus || 'Pending',
+                isFestivalBox: Boolean(it.isFestivalBox),
+                festivalBoxName: it.festivalBoxName || '',
+                festivalBoxDetails: it.festivalBoxDetails || null,
               };
             })
           );
@@ -750,6 +801,10 @@ export default function CreateOrderClient() {
           name: data.name || 'Unnamed Item',
           category: data.category || 'General',
           price: data.price || 0,
+          piecePrice: Number(data.piecePrice) || 0,
+          piecesPerKg: Number(data.piecesPerKg) || 0,
+          manufacturingUnitName: data.manufacturingUnitName || '',
+          packingUnitName: data.packingUnitName || '',
           unit: data.unit || 'KG',
           imageUrl: data.imageUrl || '',
           isFavorite: Boolean(data.isFavorite),
@@ -767,6 +822,30 @@ export default function CreateOrderClient() {
     });
 
     return () => unsubItems();
+  }, []);
+
+  // 2.1 Subscribe to Festival Boxes
+  useEffect(() => {
+    const unsub = onSnapshot(query(collection(db, 'festival_boxes')), (snap) => {
+      const boxes: FestivalBoxRecord[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          code: data.code || 'FBX-001',
+          name: data.name || 'Festival Box',
+          rows: Number(data.rows) || 3,
+          cols: Number(data.cols) || 3,
+          compartmentsCount: Number(data.compartmentsCount) || (Number(data.rows) || 3) * (Number(data.cols) || 3),
+          basePrice: Number(data.basePrice) || 0,
+          description: data.description || '',
+          status: data.status || 'Active',
+        };
+      });
+      boxes.sort((a, b) => (a.code || '').localeCompare(b.code || ''));
+      setFestivalBoxes(boxes);
+    });
+
+    return () => unsub();
   }, []);
 
   // 3. Subscribe to Utilities
@@ -931,7 +1010,13 @@ export default function CreateOrderClient() {
 
   // Product categories
   const productCategories = useMemo(() => {
-    const cats = Array.from(new Set(itemsMaster.map((i) => i.category).filter(Boolean)));
+    const cats = Array.from(
+      new Set(
+        itemsMaster
+          .map((i) => (i.category || '').trim())
+          .filter((c) => Boolean(c) && c.toLowerCase() !== 'all')
+      )
+    );
     return ['All', ...cats];
   }, [itemsMaster]);
 
@@ -1285,6 +1370,153 @@ export default function CreateOrderClient() {
       })
     );
   }, []);
+
+  // ── Festival Box Configurator Handlers ──
+  const handleOpenBoxConfigurator = useCallback((box: FestivalBoxRecord) => {
+    setSelectedBoxForConfig(box);
+    setBoxCompartmentFills({});
+    setBoxOrderCount(1);
+    setConfiguringSlotIndex(null);
+  }, []);
+
+  const handleSelectSweetForSlot = useCallback((sweet: ItemMasterOption, pieces: number) => {
+    if (configuringSlotIndex === null) return;
+    const piecesCount = Math.max(1, pieces || 1);
+    const piecePrice = sweet.piecePrice && sweet.piecePrice > 0
+      ? sweet.piecePrice
+      : (sweet.unit === 'Piece' ? sweet.price : Math.round((sweet.price / (sweet.piecesPerKg || 20)) * 100) / 100);
+
+    setBoxCompartmentFills((prev) => ({
+      ...prev,
+      [configuringSlotIndex]: {
+        itemId: sweet.id,
+        itemCode: sweet.code,
+        itemName: sweet.name,
+        imageUrl: sweet.imageUrl,
+        category: sweet.category,
+        unit: sweet.unit,
+        piecePrice: piecePrice,
+        piecesPerKg: sweet.piecesPerKg || 20,
+        pieces: piecesCount,
+        manufacturingUnitName: sweet.manufacturingUnitName,
+        packingUnitName: sweet.packingUnitName,
+      },
+    }));
+    setConfiguringSlotIndex(null);
+  }, [configuringSlotIndex]);
+
+  const handleRemoveSweetFromSlot = useCallback((slotIdx: number) => {
+    setBoxCompartmentFills((prev) => {
+      const copy = { ...prev };
+      delete copy[slotIdx];
+      return copy;
+    });
+  }, []);
+
+  const handleUpdateSlotPieces = useCallback((slotIdx: number, delta: number) => {
+    setBoxCompartmentFills((prev) => {
+      const current = prev[slotIdx];
+      if (!current) return prev;
+      const nextPieces = Math.max(1, current.pieces + delta);
+      return {
+        ...prev,
+        [slotIdx]: {
+          ...current,
+          pieces: nextPieces,
+        },
+      };
+    });
+  }, []);
+
+  const handleAddFestivalBoxToOrder = useCallback(() => {
+    if (!selectedBoxForConfig) return;
+    const filledEntries = Object.entries(boxCompartmentFills);
+    if (filledEntries.length === 0) {
+      toast.warning('Box is Empty', 'Please select at least one sweet for the festival box.');
+      return;
+    }
+
+    const rows = selectedBoxForConfig.rows || 3;
+    const cols = selectedBoxForConfig.cols || 3;
+    const boxCount = Math.max(1, boxOrderCount || 1);
+
+    const totalPiecesPerBox = Object.values(boxCompartmentFills).reduce((s, f) => s + (f.pieces || 0), 0);
+    const totalWeightPerBoxKg = Object.values(boxCompartmentFills).reduce((s, f) => {
+      const pKg = f.piecesPerKg || 20;
+      return s + (f.pieces / pKg);
+    }, 0);
+
+    const sweetsUnitPrice = Object.values(boxCompartmentFills).reduce(
+      (s, f) => s + f.pieces * (f.piecePrice || 0),
+      0
+    );
+    const boxUnitPrice = sweetsUnitPrice + (selectedBoxForConfig.basePrice || 0);
+    const boxLineTotal = Math.round(boxUnitPrice * boxCount * 100) / 100;
+
+    const itemsBreakdown = Object.values(boxCompartmentFills).map((f) => {
+      const pKg = f.piecesPerKg || 20;
+      const totalPieces = f.pieces * boxCount;
+      const weightKg = totalPieces / pKg;
+      return {
+        itemId: f.itemId,
+        itemCode: f.itemCode,
+        itemName: f.itemName,
+        category: f.category || 'Sweets',
+        unit: f.unit || 'KG',
+        piecesPerBox: f.pieces,
+        totalPieces: totalPieces,
+        piecesPerKg: pKg,
+        weightKg: Math.round(weightKg * 1000) / 1000,
+        piecePrice: f.piecePrice,
+        manufacturingUnitName: f.manufacturingUnitName || 'Main Factory',
+        packingUnitName: f.packingUnitName || 'Central Packing Unit',
+      };
+    });
+
+    const mfgSummary = itemsBreakdown
+      .map((it) => `${it.itemName}: ${it.totalPieces} pcs (${it.weightKg.toFixed(3)} KG)`)
+      .join(', ');
+
+    const newLine: OrderItemLine = {
+      lineId: `fbox-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      itemId: `fbox_${selectedBoxForConfig.id}`,
+      itemCode: selectedBoxForConfig.code || 'FBX',
+      itemName: `🎁 ${selectedBoxForConfig.name} (${boxCount} ${boxCount === 1 ? 'Box' : 'Boxes'})`,
+      category: 'Festival Boxes',
+      unit: 'Box',
+      unitPrice: boxUnitPrice,
+      quantity: boxCount,
+      lineTotal: boxLineTotal,
+      isFestivalBox: true,
+      festivalBoxName: selectedBoxForConfig.name,
+      festivalBoxDetails: {
+        boxId: selectedBoxForConfig.id,
+        boxCode: selectedBoxForConfig.code,
+        boxName: selectedBoxForConfig.name,
+        rows: rows,
+        cols: cols,
+        boxCount: boxCount,
+        basePrice: selectedBoxForConfig.basePrice || 0,
+        totalPiecesPerBox: totalPiecesPerBox,
+        totalPiecesAllBoxes: totalPiecesPerBox * boxCount,
+        weightPerBoxKg: Math.round(totalWeightPerBoxKg * 1000) / 1000,
+        totalWeightAllBoxesKg: Math.round(totalWeightPerBoxKg * boxCount * 1000) / 1000,
+        itemsBreakdown: itemsBreakdown,
+        compartments: boxCompartmentFills,
+      },
+      manufacturingDescription: `[Festival Box: ${selectedBoxForConfig.name}] ${mfgSummary}`,
+      packingDescription: `Pack in ${selectedBoxForConfig.name} (${rows}x${cols} grid)`,
+      needsManufacturing: true,
+      mfgStatus: 'Pending',
+      pckStatus: 'Pending',
+    };
+
+    setOrderItems((prev) => [...prev, newLine]);
+    toast.success('Box Added', `Added ${boxCount}x ${selectedBoxForConfig.name} (Total: ₹${boxLineTotal})`);
+    setSelectedBoxForConfig(null);
+    setBoxCompartmentFills({});
+    setBoxOrderCount(1);
+  }, [selectedBoxForConfig, boxCompartmentFills, boxOrderCount]);
 
   // Box Image File Upload
   const handleBoxImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2370,6 +2602,133 @@ export default function CreateOrderClient() {
 
             </div>
 
+            {/* ── 1.45 FESTIVAL BOXES ACCORDION (Above Items Catalog) ── */}
+            <div className="bg-white rounded-2xl border border-amber-200/90 shadow-2xs overflow-hidden transition-all">
+              {/* Accordion Header */}
+              <button
+                type="button"
+                onClick={() => setIsFestivalAccordionOpen(!isFestivalAccordionOpen)}
+                className="w-full p-3.5 sm:p-4 bg-gradient-to-r from-amber-500/10 via-amber-50/50 to-white hover:from-amber-500/15 transition-all flex items-center justify-between gap-3 text-left cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <Gift size={16} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>Festival Gift Boxes</span>
+                        <span className="text-[10px] font-bold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300">
+                          Special Compartment Assortments
+                        </span>
+                      </h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-[#02626D] border border-teal-200">
+                        {festivalBoxes.length} Box Templates
+                      </span>
+                    </div>
+                    <p className="text-[10.5px] text-slate-500 mt-0.5">
+                      Click to choose a gift box, configure sweets in each compartment with multiple pieces, and auto-compute manufacturing weight
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-bold text-amber-800 hidden sm:inline-block">
+                    {isFestivalAccordionOpen ? 'Hide Boxes' : 'Open Boxes'}
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-amber-100/70 text-amber-900 flex items-center justify-center">
+                    {isFestivalAccordionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </div>
+                </div>
+              </button>
+
+              {/* Accordion Body */}
+              {isFestivalAccordionOpen && (
+                <div className="p-3.5 sm:p-4 border-t border-amber-100 bg-[#fdfcf9]/80 space-y-3">
+                  {festivalBoxes.length === 0 ? (
+                    <div className="py-6 text-center text-slate-400 bg-white rounded-xl border border-dashed border-amber-200 p-4">
+                      <Gift size={24} className="mx-auto mb-1 text-amber-400" />
+                      <p className="text-xs font-bold text-slate-700">No Festival Boxes Created Yet</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Create box templates on the Festival Boxes page to configure rows and columns.
+                      </p>
+                      <Link
+                        href="/festival-boxes"
+                        className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#02626D] text-white text-xs font-bold hover:bg-[#014d56] transition-colors"
+                      >
+                        <Plus size={13} />
+                        <span>Go to Festival Boxes Setup</span>
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      {festivalBoxes.map((box) => {
+                        const rows = box.rows || 3;
+                        const cols = box.cols || 3;
+                        const totalCells = rows * cols;
+
+                        return (
+                          <div
+                            key={box.id}
+                            onClick={() => handleOpenBoxConfigurator(box)}
+                            className="bg-white rounded-xl p-3 border border-amber-200 hover:border-amber-400 shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-2.5 group"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <span className="text-[9.5px] font-mono font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                  {box.code}
+                                </span>
+                                <h4 className="text-xs font-bold text-slate-900 group-hover:text-[#02626D] transition-colors mt-1 line-clamp-1">
+                                  {box.name}
+                                </h4>
+                              </div>
+                              <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200 shrink-0">
+                                {rows}×{cols} Grid
+                              </span>
+                            </div>
+
+                            {/* Mini Visual Grid Box */}
+                            <div className="w-full p-2 rounded-lg bg-gradient-to-br from-amber-700 to-amber-900 shadow-2xs border border-amber-500/60">
+                              <div
+                                className="bg-[#fffdf9] rounded-md p-1 shadow-inner"
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                                  gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+                                  gap: '3px',
+                                  aspectRatio: `${cols} / ${rows}`,
+                                  maxHeight: '80px',
+                                }}
+                              >
+                                {Array.from({ length: totalCells }).map((_, cIdx) => (
+                                  <div
+                                    key={cIdx}
+                                    className="rounded bg-amber-100/70 border border-amber-200/80 flex items-center justify-center text-[7px] font-mono font-bold text-amber-900"
+                                  >
+                                    {cIdx + 1}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100">
+                              <span className="text-slate-500 font-medium">
+                                {totalCells} Slots {box.basePrice ? `• Box ₹${box.basePrice}` : ''}
+                              </span>
+                              <span className="font-bold text-[#02626D] flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                                <span>Configure</span>
+                                <span>→</span>
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* 1.5 Products List (Below Slot Capacity) */}
             <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-3">
               {/* Catalog Header with Search & Count */}
@@ -2560,6 +2919,17 @@ export default function CreateOrderClient() {
                             <span className="text-xs font-bold text-slate-900 truncate" title={item.itemName}>
                               {item.itemName}
                             </span>
+                            {item.isFestivalBox && (
+                              <button
+                                type="button"
+                                onClick={() => setViewingBoxPreviewItem(item)}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 transition-colors cursor-pointer shrink-0"
+                                title="Click to view sweet box compartment layout"
+                              >
+                                <Eye size={10} />
+                                <span>View Box Layout</span>
+                              </button>
+                            )}
                             {/* Packet toggle beside item name */}
                             <button
                               type="button"
@@ -3675,6 +4045,578 @@ export default function CreateOrderClient() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: FESTIVAL BOX CONFIGURATOR ──────────────────────────── */}
+      {selectedBoxForConfig && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl border border-slate-100 space-y-4 my-6 max-h-[92vh] flex flex-col">
+            
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <Gift size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                      Configure: {selectedBoxForConfig.name}
+                    </h3>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
+                      {selectedBoxForConfig.rows} Rows × {selectedBoxForConfig.cols} Columns ({selectedBoxForConfig.rows * selectedBoxForConfig.cols} Compartments)
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Click each compartment to choose sweets and set piece counts. The system calculates total box price & manufacturing KGs!
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedBoxForConfig(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+              
+              {/* Left Column: First One Big Box containing rows and columns of selected items */}
+              <div className="lg:col-span-8 space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                  <span className="flex items-center gap-1.5">
+                    <Grid3X3 size={14} className="text-[#02626D]" />
+                    <span>Compartment Grid Layout</span>
+                  </span>
+                  <span className="text-[11px] font-medium text-slate-500">
+                    {Object.keys(boxCompartmentFills).length} of {selectedBoxForConfig.rows * selectedBoxForConfig.cols} Slots Filled
+                  </span>
+                </div>
+
+                {/* The Big Luxury Box Frame */}
+                <div className="p-3 sm:p-4 rounded-3xl bg-gradient-to-br from-amber-800 via-amber-900 to-amber-950 border-3 border-amber-500 shadow-xl relative">
+                  {/* Outer Gold Inlay */}
+                  <div className="absolute inset-1 rounded-[22px] border border-amber-400/40 pointer-events-none" />
+
+                  {/* Inner Box Tray */}
+                  <div
+                    className="bg-[#faf6ee] rounded-2xl p-2.5 sm:p-3 shadow-inner"
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: `repeat(${selectedBoxForConfig.cols}, minmax(0, 1fr))`,
+                      gridTemplateRows: `repeat(${selectedBoxForConfig.rows}, minmax(0, 1fr))`,
+                      gap: '8px',
+                      aspectRatio: `${selectedBoxForConfig.cols} / ${selectedBoxForConfig.rows}`,
+                      minHeight: '260px',
+                    }}
+                  >
+                    {Array.from({ length: selectedBoxForConfig.rows * selectedBoxForConfig.cols }).map((_, slotIdx) => {
+                      const fill = boxCompartmentFills[slotIdx];
+
+                      return (
+                        <div
+                          key={slotIdx}
+                          onClick={() => {
+                            setConfiguringSlotIndex(slotIdx);
+                            setSweetSearchInBox('');
+                            setSweetCategoryInBox('All');
+                            setPiecesForSlot(fill?.pieces || 1);
+                          }}
+                          className={`relative rounded-xl transition-all cursor-pointer flex flex-col justify-between p-1.5 sm:p-2 text-center group ${
+                            fill
+                              ? 'bg-white border-2 border-amber-400 shadow-2xs hover:shadow-md'
+                              : 'bg-white/80 border-2 border-dashed border-amber-300/80 hover:bg-amber-50/70 hover:border-amber-500'
+                          }`}
+                        >
+                          {fill ? (
+                            <div className="w-full h-full flex flex-col items-center justify-between">
+                              {/* Top Bar with Slot # & Delete */}
+                              <div className="w-full flex items-center justify-between text-[8px] text-slate-400">
+                                <span className="font-mono font-bold text-amber-800">#{slotIdx + 1}</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveSweetFromSlot(slotIdx);
+                                  }}
+                                  className="w-4 h-4 rounded-full bg-slate-100 hover:bg-red-500 hover:text-white text-slate-400 flex items-center justify-center transition-colors"
+                                  title="Remove sweet"
+                                >
+                                  <X size={9} />
+                                </button>
+                              </div>
+
+                              {/* Sweet Image or Emoji */}
+                              {fill.imageUrl ? (
+                                <div className="relative w-9 h-9 sm:w-11 sm:h-11 rounded-lg overflow-hidden border border-slate-100 shadow-2xs shrink-0 my-0.5">
+                                  <img
+                                    src={fill.imageUrl}
+                                    alt={fill.itemName}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-900 flex items-center justify-center text-sm font-bold my-0.5">
+                                  🍬
+                                </div>
+                              )}
+
+                              {/* Sweet Name & Price */}
+                              <div className="w-full min-w-0">
+                                <p className="text-[10px] sm:text-[11px] font-bold text-slate-900 truncate" title={fill.itemName}>
+                                  {fill.itemName}
+                                </p>
+                                <p className="text-[8.5px] font-semibold text-teal-700">
+                                  ₹{fill.piecePrice}/pc
+                                </p>
+                              </div>
+
+                              {/* Multiple Pieces Stepper */}
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center justify-between bg-amber-50/90 rounded-lg p-0.5 border border-amber-200 mt-1 w-full max-w-[100px]"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateSlotPieces(slotIdx, -1)}
+                                  className="w-4 h-4 rounded bg-white hover:bg-amber-200 text-amber-900 font-bold text-xs flex items-center justify-center shadow-2xs cursor-pointer"
+                                >
+                                  -
+                                </button>
+                                <span className="text-[9.5px] font-extrabold text-amber-950 font-mono">
+                                  {fill.pieces} pc{fill.pieces > 1 ? 's' : ''}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateSlotPieces(slotIdx, 1)}
+                                  className="w-4 h-4 rounded bg-white hover:bg-amber-200 text-amber-900 font-bold text-xs flex items-center justify-center shadow-2xs cursor-pointer"
+                                >
+                                  +
+                                </button>
+                              </div>
+
+                              {/* Calculated Weight for Slot */}
+                              <span className="text-[8px] font-mono text-slate-400 mt-0.5">
+                                {((fill.pieces / (fill.piecesPerKg || 20))).toFixed(3)} KG
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center py-4 text-amber-900/50 group-hover:text-amber-900">
+                              <div className="w-7 h-7 rounded-full bg-amber-100/70 group-hover:bg-amber-200 flex items-center justify-center transition-colors mb-1">
+                                <Plus size={14} />
+                              </div>
+                              <span className="text-[9.5px] font-bold font-mono">Slot {slotIdx + 1}</span>
+                              <span className="text-[8.5px] text-slate-400">Click to choose sweet</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Order Quantity, Breakdown, Manufacturing Scale */}
+              <div className="lg:col-span-4 space-y-3">
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3 text-xs">
+                  <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px] pb-1.5 border-b border-slate-200 flex items-center justify-between">
+                    <span>Box Order Summary</span>
+                    <span className="text-teal-700 font-mono">Live</span>
+                  </h4>
+
+                  {/* Quantity of Boxes to Order */}
+                  <div className="p-3 rounded-xl bg-white border border-slate-200/90 space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-800">
+                      Number of Boxes to Order
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBoxOrderCount((c) => Math.max(1, c - 1))}
+                        className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center cursor-pointer active:scale-95 text-sm"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        value={boxOrderCount}
+                        onChange={(e) => setBoxOrderCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                        className="w-full h-8 text-center font-extrabold text-sm border border-slate-300 rounded-lg bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setBoxOrderCount((c) => c + 1)}
+                        className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center cursor-pointer active:scale-95 text-sm"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Stats & Projections */}
+                  <div className="space-y-1.5 text-slate-600">
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-slate-500">Filled Slots:</span>
+                      <span className="font-bold text-slate-800">
+                        {Object.keys(boxCompartmentFills).length} / {selectedBoxForConfig.rows * selectedBoxForConfig.cols}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-slate-500">Pieces Per Box:</span>
+                      <span className="font-extrabold text-slate-900">
+                        {Object.values(boxCompartmentFills).reduce((s, f) => s + (f.pieces || 0), 0)} pcs
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-slate-500">Total Pieces ({boxOrderCount} boxes):</span>
+                      <span className="font-extrabold text-[#02626D]">
+                        {Object.values(boxCompartmentFills).reduce((s, f) => s + (f.pieces || 0), 0) * boxOrderCount} pcs
+                      </span>
+                    </div>
+
+                    {/* Manufacturing Weight Projection */}
+                    <div className="p-2.5 rounded-xl bg-teal-50 border border-teal-200 text-teal-900 space-y-1 my-1">
+                      <div className="flex items-center justify-between font-bold text-[11px]">
+                        <span>🏭 Sweet Production (Mfg):</span>
+                        <span className="font-extrabold text-[#02626D] font-mono text-xs">
+                          {(
+                            Object.values(boxCompartmentFills).reduce((s, f) => {
+                              const pKg = f.piecesPerKg || 20;
+                              return s + (f.pieces / pKg);
+                            }, 0) * boxOrderCount
+                          ).toFixed(3)}{' '}
+                          KG
+                        </span>
+                      </div>
+                      <p className="text-[9.5px] text-teal-700/90 leading-tight">
+                        Calculated from each sweet's "Pieces Per KG" setting to dispatch exact bulk KGs to kitchen!
+                      </p>
+                    </div>
+
+                    {/* Price Breakdown */}
+                    <div className="border-t border-slate-200 pt-1.5 space-y-1">
+                      <div className="flex justify-between text-slate-600">
+                        <span>Price Per Box:</span>
+                        <span className="font-bold text-slate-800">
+                          ₹
+                          {(
+                            Object.values(boxCompartmentFills).reduce(
+                              (s, f) => s + f.pieces * (f.piecePrice || 0),
+                              0
+                            ) + (selectedBoxForConfig.basePrice || 0)
+                          ).toFixed(2)}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between text-sm font-extrabold text-slate-900 border-t border-slate-200 pt-1">
+                        <span>Total ({boxOrderCount} Boxes):</span>
+                        <span className="text-[#02626D]">
+                          ₹
+                          {(
+                            (Object.values(boxCompartmentFills).reduce(
+                              (s, f) => s + f.pieces * (f.piecePrice || 0),
+                              0
+                            ) +
+                              (selectedBoxForConfig.basePrice || 0)) *
+                            boxOrderCount
+                          ).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Add to Order Button */}
+                  <button
+                    type="button"
+                    onClick={handleAddFestivalBoxToOrder}
+                    className="w-full h-10 rounded-xl bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                  >
+                    <Check size={15} />
+                    <span>Select & Add {boxOrderCount} Box{boxOrderCount > 1 ? 'es' : ''} to Order</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SUB-MODAL: CHOOSE SWEET ITEM FOR SLOT ─────────────────────── */}
+      {configuringSlotIndex !== null && selectedBoxForConfig && (
+        <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl border border-slate-100 space-y-3.5 max-h-[88vh] flex flex-col">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center font-bold">
+                  #{configuringSlotIndex + 1}
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                    Choose Sweet for Slot #{configuringSlotIndex + 1}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Select a product and choose how many pieces go into this compartment
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfiguringSlotIndex(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Pieces in this compartment input */}
+            <div className="p-2.5 rounded-xl bg-teal-50/70 border border-teal-200 flex items-center justify-between gap-3 shrink-0">
+              <div>
+                <label className="block text-xs font-bold text-teal-950">
+                  Pieces in this Compartment
+                </label>
+                <p className="text-[10px] text-teal-700">Add multiple pieces into the same slot</p>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                {[1, 2, 3, 4].map((cnt) => (
+                  <button
+                    key={cnt}
+                    type="button"
+                    onClick={() => setPiecesForSlot(cnt)}
+                    className={`h-7 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      piecesForSlot === cnt
+                        ? 'bg-[#02626D] text-white shadow-2xs'
+                        : 'bg-white text-slate-700 border border-teal-200 hover:bg-teal-100/50'
+                    }`}
+                  >
+                    {cnt} pc{cnt > 1 ? 's' : ''}
+                  </button>
+                ))}
+                <div className="flex items-center rounded-lg border border-teal-200 bg-white px-1">
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={piecesForSlot}
+                    onChange={(e) => setPiecesForSlot(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    className="w-12 h-7 text-center font-bold text-xs focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-400 font-bold pr-1">pcs</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Search Input & Category Filter */}
+            <div className="space-y-2 shrink-0">
+              <div className="relative w-full">
+                <input
+                  type="text"
+                  placeholder="Search sweets by name or code..."
+                  value={sweetSearchInBox}
+                  onChange={(e) => setSweetSearchInBox(e.target.value)}
+                  className="w-full pl-8 pr-7 h-8.5 text-xs border border-slate-300 rounded-xl bg-[#f7f7f8] focus:bg-white focus:outline-none focus:border-[#02626D]"
+                />
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                {sweetSearchInBox && (
+                  <button
+                    type="button"
+                    onClick={() => setSweetSearchInBox('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Category Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-[11px]">
+                {productCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSweetCategoryInBox(cat)}
+                    className={`h-6.5 px-2.5 rounded-lg font-bold flex-shrink-0 transition-all cursor-pointer ${
+                      sweetCategoryInBox === cat
+                        ? 'bg-[#02626D] text-white shadow-2xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Items List */}
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 divide-y divide-slate-100">
+              {itemsMaster
+                .filter((sweet) => {
+                  const matchSearch =
+                    sweet.name.toLowerCase().includes(sweetSearchInBox.toLowerCase()) ||
+                    sweet.code.toLowerCase().includes(sweetSearchInBox.toLowerCase());
+                  const matchCat =
+                    sweetCategoryInBox === 'All' || sweet.category === sweetCategoryInBox;
+                  return matchSearch && matchCat;
+                })
+                .map((sweet) => {
+                  const pPrice =
+                    sweet.piecePrice && sweet.piecePrice > 0
+                      ? sweet.piecePrice
+                      : sweet.unit === 'Piece'
+                      ? sweet.price
+                      : Math.round((sweet.price / (sweet.piecesPerKg || 20)) * 100) / 100;
+
+                  return (
+                    <div
+                      key={sweet.id}
+                      onClick={() => handleSelectSweetForSlot(sweet, piecesForSlot)}
+                      className="pt-1.5 first:pt-0 flex items-center justify-between gap-3 p-2 rounded-xl hover:bg-teal-50/70 border border-transparent hover:border-teal-200 transition-all cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {/* Display Image if available */}
+                        {sweet.imageUrl ? (
+                          <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 shadow-2xs shrink-0">
+                            <img
+                              src={sweet.imageUrl}
+                              alt={sweet.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          /* If no image, display stylish sweet name initial / icon */
+                          <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-900 flex items-center justify-center font-bold text-sm shrink-0 border border-amber-200">
+                            {sweet.name.charAt(0)}
+                          </div>
+                        )}
+
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 group-hover:text-[#02626D] transition-colors truncate">
+                            {sweet.name}
+                          </p>
+                          <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
+                            {/* Display Per Piece Price */}
+                            <span className="font-extrabold text-[#02626D] bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                              ₹{pPrice} / piece
+                            </span>
+                            {Boolean(sweet.piecesPerKg) && (
+                              <span className="text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-semibold">
+                                {sweet.piecesPerKg} pcs/kg
+                              </span>
+                            )}
+                            <span className="text-slate-400 font-mono">({sweet.code})</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Select Action Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleSelectSweetForSlot(sweet, piecesForSlot)}
+                        className="h-7.5 px-3 rounded-lg bg-white group-hover:bg-[#02626D] text-[#02626D] group-hover:text-white border border-[#02626D]/30 group-hover:border-[#02626D] text-xs font-bold transition-all shrink-0 shadow-2xs cursor-pointer flex items-center gap-1"
+                      >
+                        <span>Choose ({piecesForSlot} pc{piecesForSlot > 1 ? 's' : ''})</span>
+                        <ArrowRight size={11} />
+                      </button>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: VIEW BOX LAYOUT (From Cart) ────────────────────────── */}
+      {viewingBoxPreviewItem && viewingBoxPreviewItem.festivalBoxDetails && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <div className="flex items-center gap-2">
+                <Gift size={18} className="text-[#02626D]" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  {viewingBoxPreviewItem.festivalBoxDetails.boxName} Layout
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingBoxPreviewItem(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Box Compartment Display */}
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-800 to-amber-950 border-2 border-amber-500 shadow-md">
+              <div
+                className="bg-[#faf5eb] rounded-xl p-2 shadow-inner"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${viewingBoxPreviewItem.festivalBoxDetails.cols || 3}, minmax(0, 1fr))`,
+                  gridTemplateRows: `repeat(${viewingBoxPreviewItem.festivalBoxDetails.rows || 3}, minmax(0, 1fr))`,
+                  gap: '6px',
+                }}
+              >
+                {Array.from({
+                  length:
+                    (viewingBoxPreviewItem.festivalBoxDetails.rows || 3) *
+                    (viewingBoxPreviewItem.festivalBoxDetails.cols || 3),
+                }).map((_, idx) => {
+                  const comp = viewingBoxPreviewItem.festivalBoxDetails.compartments?.[idx];
+                  return (
+                    <div
+                      key={idx}
+                      className="rounded-lg bg-white border border-amber-300/80 p-1 flex flex-col items-center justify-center text-center shadow-2xs min-h-[50px]"
+                    >
+                      {comp ? (
+                        <>
+                          <span className="text-[9.5px] font-bold text-slate-900 truncate w-full">
+                            {comp.itemName}
+                          </span>
+                          <span className="text-[8px] font-extrabold text-amber-900 bg-amber-100 px-1 py-0.2 rounded">
+                            {comp.pieces} pcs
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[8px] font-mono text-slate-300">Empty</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Breakdown Table */}
+            <div className="max-h-36 overflow-y-auto divide-y divide-slate-100 text-xs">
+              {viewingBoxPreviewItem.festivalBoxDetails.itemsBreakdown?.map((it: any, idx: number) => (
+                <div key={idx} className="py-1 flex justify-between">
+                  <span className="font-medium text-slate-800">{it.itemName}</span>
+                  <span className="font-mono text-teal-700 font-bold">
+                    {it.totalPieces} pcs ({it.weightKg} KG)
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setViewingBoxPreviewItem(null)}
+                className="px-4 py-1.5 text-xs font-bold bg-[#02626D] text-white rounded-xl"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

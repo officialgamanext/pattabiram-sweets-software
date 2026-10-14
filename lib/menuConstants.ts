@@ -22,6 +22,7 @@ export const APP_MENUS: MenuItemDefinition[] = [
   { key: 'customers', name: 'Customers', path: '/customers' },
   { key: 'wholesalers', name: 'Wholesalers', path: '/wholesalers' },
   { key: 'items', name: 'Item Master & Pricing', path: '/items' },
+  { key: 'festival_boxes', name: 'Festival Boxes', path: '/festival-boxes' },
   { key: 'price_list', name: 'Price List', path: '/price-list' },
   { key: 'inventory', name: 'Inventory & Stock', path: '/inventory' },
   { key: 'manufacturing_portal', name: 'Manufacturing Portal', path: '/manufacturing-portal' },

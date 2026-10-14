@@ -358,50 +358,69 @@ export default function ManufacturingPortalClient() {
 
     nextDayOrders.forEach((order) => {
       (order.items || []).forEach((item) => {
-        const name = (item.itemName || (item as any).name || '').trim();
-        if (!name) return;
-        const nameKey = name.toLowerCase();
-        const itemMaster = itemInfoMap.get(nameKey);
+        // If festival box with itemsBreakdown, expand into constituent sweets
+        const subItems = (item.isFestivalBox && (item as any).festivalBoxDetails?.itemsBreakdown?.length)
+          ? (item as any).festivalBoxDetails.itemsBreakdown.map((sb: any) => ({
+              name: (sb.itemName || '').trim(),
+              qty: parseFloat(sb.weightKg) || 0,
+              unit: 'KG',
+              category: sb.category || 'Sweets',
+              mfgUnit: sb.manufacturingUnitName,
+            }))
+          : [{
+              name: (item.itemName || (item as any).name || '').trim(),
+              qty: parseFloat(item.quantity as any) || 0,
+              unit: item.unit || 'KG',
+              category: item.category || 'Sweets',
+              mfgUnit: (item as any).manufacturingUnitName,
+            }];
 
-        // Check if item has 1-Day Advance Intimation enabled
-        const isIntimateEnabled = Boolean(
-          itemMaster?.intimateBeforeOneDay || (item as any).intimateBeforeOneDay
-        );
+        subItems.forEach((subItem: any) => {
+          const name = subItem.name;
+          if (!name) return;
+          const nameKey = name.toLowerCase();
+          const itemMaster = itemInfoMap.get(nameKey);
 
-        if (!isIntimateEnabled) return;
+          // Check if item has 1-Day Advance Intimation enabled
+          const isIntimateEnabled = Boolean(
+            itemMaster?.intimateBeforeOneDay || (item as any).intimateBeforeOneDay
+          );
 
-        const mfgUnit = itemMaster?.mfgUnitName || 'Main Factory';
+          if (!isIntimateEnabled) return;
 
-        // Check employee unit authorization
-        if (!isItemUnitAllowed(mfgUnit)) return;
+          const mfgUnit = subItem.mfgUnit || itemMaster?.mfgUnitName || 'Main Factory';
 
-        // Filter by selectedUnit if a specific unit is filtered
-        if (selectedUnit !== 'all' && mfgUnit.toLowerCase() !== selectedUnit.toLowerCase()) return;
+          // Check employee unit authorization
+          if (!isItemUnitAllowed(mfgUnit)) return;
 
-        const qty = parseFloat(item.quantity as any) || 0;
-        const unit = item.unit || 'KG';
-        const category = itemMaster?.category || item.category || 'Sweets';
-        const slot = order.slot || 'All Slots';
-        const ordCode = order.code || `#ORD-${order.id.slice(0, 4)}`;
+          // Filter by selectedUnit if a specific unit is filtered
+          if (selectedUnit !== 'all' && mfgUnit.toLowerCase() !== selectedUnit.toLowerCase()) return;
 
-        if (!map.has(nameKey)) {
-          map.set(nameKey, {
-            itemName: name,
-            category: category,
-            unit: unit,
-            mfgUnitName: mfgUnit,
-            totalQuantity: 0,
-            ordersCount: 0,
-            slots: [],
-            orderCodes: [],
-          });
-        }
+          const qty = subItem.qty || 0;
+          const unit = subItem.unit || 'KG';
+          const category = itemMaster?.category || subItem.category || 'Sweets';
+          const slot = order.slot || 'All Slots';
+          const ordCode = order.code || `#ORD-${order.id.slice(0, 4)}`;
 
-        const entry = map.get(nameKey)!;
-        entry.totalQuantity += qty;
-        entry.ordersCount += 1;
-        if (!entry.slots.includes(slot)) entry.slots.push(slot);
-        if (!entry.orderCodes.includes(ordCode)) entry.orderCodes.push(ordCode);
+          if (!map.has(nameKey)) {
+            map.set(nameKey, {
+              itemName: name,
+              category: category,
+              unit: unit,
+              mfgUnitName: mfgUnit,
+              totalQuantity: 0,
+              ordersCount: 0,
+              slots: [],
+              orderCodes: [],
+            });
+          }
+
+          const entry = map.get(nameKey)!;
+          entry.totalQuantity += qty;
+          entry.ordersCount += 1;
+          if (!entry.slots.includes(slot)) entry.slots.push(slot);
+          if (!entry.orderCodes.includes(ordCode)) entry.orderCodes.push(ordCode);
+        });
       });
     });
 
@@ -434,72 +453,107 @@ export default function ManufacturingPortalClient() {
         // If item has already moved to packing, omit it from manufacturing queue!
         if (itemMfgStatus === 'Moved to Packing') return;
 
-        const rawName = item.itemName || (item as any).name || 'Unknown Item';
-        const key = rawName.toLowerCase().trim();
-        const masterInfo = itemInfoMap.get(key);
+        const unitsToProduce = (item.isFestivalBox && (item as any).festivalBoxDetails?.itemsBreakdown?.length)
+          ? (item as any).festivalBoxDetails.itemsBreakdown
+              .filter((sb: any) => {
+                const completedSweets = Array.isArray((item as any).festivalBoxDetails?.completedSweets)
+                  ? (item as any).festivalBoxDetails.completedSweets
+                  : [];
+                return !completedSweets.includes((sb.itemName || '').toLowerCase().trim());
+              })
+              .map((sb: any) => ({
+                itemId: sb.itemId || sb.itemName,
+                itemCode: sb.itemCode || 'BOX-SWT',
+                rawName: sb.itemName,
+                quantity: parseFloat(sb.weightKg) || 0,
+                unit: 'KG',
+                imageUrl: sb.imageUrl,
+                manufacturingUnitName: sb.manufacturingUnitName,
+                packingUnitName: sb.packingUnitName,
+                category: sb.category || 'Sweets',
+                manufacturingDescription: `For ${item.festivalBoxName || item.itemName} (${sb.piecesCount} pcs, ${parseFloat(sb.weightKg).toFixed(2)} KG)${item.manufacturingDescription ? ' | ' + item.manufacturingDescription : ''}`,
+              }))
+          : [{
+              itemId: item.itemId,
+              itemCode: item.itemCode || (item as any).code || 'ITEM',
+              rawName: item.itemName || (item as any).name || 'Unknown Item',
+              quantity: item.quantity || 0,
+              unit: item.unit || 'kg',
+              imageUrl: item.imageUrl,
+              manufacturingUnitName: (item as any).manufacturingUnitName,
+              packingUnitName: (item as any).packingUnitName,
+              category: item.category,
+              manufacturingDescription: item.manufacturingDescription,
+            }];
 
-        const mfgUnitName = (item as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
-        const pckUnitName = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
-        const category = item.category || masterInfo?.category || 'General';
+        unitsToProduce.forEach((uItem: any) => {
+          const rawName = uItem.rawName;
+          const key = rawName.toLowerCase().trim();
+          const masterInfo = itemInfoMap.get(key);
 
-        // Check employee unit authorization
-        if (!isItemUnitAllowed(mfgUnitName)) return;
+          const mfgUnitName = uItem.manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
+          const pckUnitName = uItem.packingUnitName || masterInfo?.pckUnitName || 'General Packing';
+          const category = uItem.category || masterInfo?.category || 'General';
 
-        // Filter by selected Manufacturing Unit
-        if (selectedUnit !== 'all' && mfgUnitName.toLowerCase() !== selectedUnit.toLowerCase()) {
-          return;
-        }
+          // Check employee unit authorization
+          if (!isItemUnitAllowed(mfgUnitName)) return;
 
-        const orderCodeDisplay = order.code || (order as any).orderId || order.id || 'ORD';
+          // Filter by selected Manufacturing Unit
+          if (selectedUnit !== 'all' && mfgUnitName.toLowerCase() !== selectedUnit.toLowerCase()) {
+            return;
+          }
 
-        // Apply Search Term
-        if (
-          searchTerm &&
-          !rawName.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !(category || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !orderCodeDisplay.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !(order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase())
-        ) {
-          return;
-        }
+          const orderCodeDisplay = order.code || (order as any).orderId || order.id || 'ORD';
 
-        const existing = map.get(key);
+          // Apply Search Term
+          if (
+            searchTerm &&
+            !rawName.toLowerCase().includes(searchTerm.toLowerCase()) &&
+            !(category || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
+            !orderCodeDisplay.toLowerCase().includes(searchTerm.toLowerCase()) &&
+            !(order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase())
+          ) {
+            return;
+          }
 
-        if (existing) {
-          existing.totalQuantity += item.quantity || 0;
-          existing.orders.push({
-            orderId: order.id,
-            orderCode: orderCodeDisplay,
-            customerName: order.customerName || 'Customer',
-            slot: order.slot || 'Regular',
-            quantity: item.quantity || 0,
-            mfgStatus: itemMfgStatus,
-            manufacturingDescription: item.manufacturingDescription
-          });
-        } else {
-          map.set(key, {
-            itemId: item.itemId || key,
-            itemCode: item.itemCode || (item as any).code || 'ITEM',
-            itemName: rawName,
-            category: category,
-            unit: item.unit || 'kg',
-            imageUrl: item.imageUrl,
-            manufacturingUnitName: mfgUnitName,
-            packingUnitName: pckUnitName,
-            totalQuantity: item.quantity || 0,
-            orders: [
-              {
-                orderId: order.id,
-                orderCode: orderCodeDisplay,
-                customerName: order.customerName || 'Customer',
-                slot: order.slot || 'Regular',
-                quantity: item.quantity || 0,
-                mfgStatus: itemMfgStatus,
-                manufacturingDescription: item.manufacturingDescription
-              }
-            ]
-          });
-        }
+          const existing = map.get(key);
+
+          if (existing) {
+            existing.totalQuantity += uItem.quantity || 0;
+            existing.orders.push({
+              orderId: order.id,
+              orderCode: orderCodeDisplay,
+              customerName: order.customerName || 'Customer',
+              slot: order.slot || 'Regular',
+              quantity: uItem.quantity || 0,
+              mfgStatus: itemMfgStatus,
+              manufacturingDescription: uItem.manufacturingDescription,
+            });
+          } else {
+            map.set(key, {
+              itemId: uItem.itemId || key,
+              itemCode: uItem.itemCode,
+              itemName: rawName,
+              category: category,
+              unit: uItem.unit,
+              imageUrl: uItem.imageUrl,
+              manufacturingUnitName: mfgUnitName,
+              packingUnitName: pckUnitName,
+              totalQuantity: uItem.quantity || 0,
+              orders: [
+                {
+                  orderId: order.id,
+                  orderCode: orderCodeDisplay,
+                  customerName: order.customerName || 'Customer',
+                  slot: order.slot || 'Regular',
+                  quantity: uItem.quantity || 0,
+                  mfgStatus: itemMfgStatus,
+                  manufacturingDescription: uItem.manufacturingDescription,
+                },
+              ],
+            });
+          }
+        });
       });
     });
 
@@ -592,74 +646,109 @@ export default function ManufacturingPortalClient() {
 
         if (itemMfgStatus === 'Moved to Packing') return;
 
-        const rawName = item.itemName || (item as any).name || 'Unknown Item';
-        const key = rawName.toLowerCase().trim();
-        const masterInfo = itemInfoMap.get(key);
+        const unitsToProduce = (item.isFestivalBox && (item as any).festivalBoxDetails?.itemsBreakdown?.length)
+          ? (item as any).festivalBoxDetails.itemsBreakdown
+              .filter((sb: any) => {
+                const completedSweets = Array.isArray((item as any).festivalBoxDetails?.completedSweets)
+                  ? (item as any).festivalBoxDetails.completedSweets
+                  : [];
+                return !completedSweets.includes((sb.itemName || '').toLowerCase().trim());
+              })
+              .map((sb: any) => ({
+                itemId: sb.itemId || sb.itemName,
+                itemCode: sb.itemCode || 'BOX-SWT',
+                rawName: sb.itemName,
+                quantity: parseFloat(sb.weightKg) || 0,
+                unit: 'KG',
+                imageUrl: sb.imageUrl,
+                manufacturingUnitName: sb.manufacturingUnitName,
+                packingUnitName: sb.packingUnitName,
+                category: sb.category || 'Sweets',
+                manufacturingDescription: `For ${item.festivalBoxName || item.itemName} (${sb.piecesCount} pcs, ${parseFloat(sb.weightKg).toFixed(2)} KG)${item.manufacturingDescription ? ' | ' + item.manufacturingDescription : ''}`,
+              }))
+          : [{
+              itemId: item.itemId,
+              itemCode: item.itemCode || (item as any).code || 'ITEM',
+              rawName: item.itemName || (item as any).name || 'Unknown Item',
+              quantity: item.quantity || 0,
+              unit: item.unit || 'kg',
+              imageUrl: item.imageUrl,
+              manufacturingUnitName: (item as any).manufacturingUnitName,
+              packingUnitName: (item as any).packingUnitName,
+              category: item.category,
+              manufacturingDescription: item.manufacturingDescription,
+            }];
 
-        const mfgUnitName = (item as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
-        const pckUnitName = (item as any).packingUnitName || masterInfo?.pckUnitName || 'General Packing';
-        const category = item.category || masterInfo?.category || 'General';
+        unitsToProduce.forEach((uItem: any) => {
+          const rawName = uItem.rawName;
+          const key = rawName.toLowerCase().trim();
+          const masterInfo = itemInfoMap.get(key);
 
-        if (!isItemUnitAllowed(mfgUnitName)) return;
-        if (selectedUnit !== 'all' && mfgUnitName.toLowerCase() !== selectedUnit.toLowerCase()) return;
+          const mfgUnitName = uItem.manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
+          const pckUnitName = uItem.packingUnitName || masterInfo?.pckUnitName || 'General Packing';
+          const category = uItem.category || masterInfo?.category || 'General';
 
-        const orderCodeDisplay = order.code || (order as any).orderId || order.id || 'ORD';
+          if (!isItemUnitAllowed(mfgUnitName)) return;
+          if (selectedUnit !== 'all' && mfgUnitName.toLowerCase() !== selectedUnit.toLowerCase()) return;
 
-        if (
-          searchTerm &&
-          !rawName.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !(category || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !orderCodeDisplay.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !(order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !slot.toLowerCase().includes(searchTerm.toLowerCase())
-        ) {
-          return;
-        }
+          const orderCodeDisplay = order.code || (order as any).orderId || order.id || 'ORD';
 
-        if (!slotMap.has(slot)) {
-          slotMap.set(slot, new Map());
-          slotOrdersSet.set(slot, new Set());
-        }
+          if (
+            searchTerm &&
+            !rawName.toLowerCase().includes(searchTerm.toLowerCase()) &&
+            !(category || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
+            !orderCodeDisplay.toLowerCase().includes(searchTerm.toLowerCase()) &&
+            !(order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
+            !slot.toLowerCase().includes(searchTerm.toLowerCase())
+          ) {
+            return;
+          }
 
-        slotOrdersSet.get(slot)!.add(order.id);
-        const itemMap = slotMap.get(slot)!;
-        const existing = itemMap.get(key);
+          if (!slotMap.has(slot)) {
+            slotMap.set(slot, new Map());
+            slotOrdersSet.set(slot, new Set());
+          }
 
-        if (existing) {
-          existing.totalQuantity += item.quantity || 0;
-          existing.orders.push({
-            orderId: order.id,
-            orderCode: orderCodeDisplay,
-            customerName: order.customerName || 'Customer',
-            slot: slot,
-            quantity: item.quantity || 0,
-            mfgStatus: itemMfgStatus,
-            manufacturingDescription: item.manufacturingDescription,
-          });
-        } else {
-          itemMap.set(key, {
-            itemId: item.itemId || key,
-            itemCode: item.itemCode || (item as any).code || 'ITEM',
-            itemName: rawName,
-            category: category,
-            unit: item.unit || 'kg',
-            imageUrl: item.imageUrl,
-            manufacturingUnitName: mfgUnitName,
-            packingUnitName: pckUnitName,
-            totalQuantity: item.quantity || 0,
-            orders: [
-              {
-                orderId: order.id,
-                orderCode: orderCodeDisplay,
-                customerName: order.customerName || 'Customer',
-                slot: slot,
-                quantity: item.quantity || 0,
-                mfgStatus: itemMfgStatus,
-                manufacturingDescription: item.manufacturingDescription,
-              },
-            ],
-          });
-        }
+          slotOrdersSet.get(slot)!.add(order.id);
+          const itemMap = slotMap.get(slot)!;
+          const existing = itemMap.get(key);
+
+          if (existing) {
+            existing.totalQuantity += uItem.quantity || 0;
+            existing.orders.push({
+              orderId: order.id,
+              orderCode: orderCodeDisplay,
+              customerName: order.customerName || 'Customer',
+              slot: slot,
+              quantity: uItem.quantity || 0,
+              mfgStatus: itemMfgStatus,
+              manufacturingDescription: uItem.manufacturingDescription,
+            });
+          } else {
+            itemMap.set(key, {
+              itemId: uItem.itemId || key,
+              itemCode: uItem.itemCode,
+              itemName: rawName,
+              category: category,
+              unit: uItem.unit,
+              imageUrl: uItem.imageUrl,
+              manufacturingUnitName: mfgUnitName,
+              packingUnitName: pckUnitName,
+              totalQuantity: uItem.quantity || 0,
+              orders: [
+                {
+                  orderId: order.id,
+                  orderCode: orderCodeDisplay,
+                  customerName: order.customerName || 'Customer',
+                  slot: slot,
+                  quantity: uItem.quantity || 0,
+                  mfgStatus: itemMfgStatus,
+                  manufacturingDescription: uItem.manufacturingDescription,
+                },
+              ],
+            });
+          }
+        });
       });
     });
 
@@ -798,6 +887,38 @@ export default function ManufacturingPortalClient() {
               pckStatus: it.pckStatus || 'Pending',
             });
           }
+
+          if (it.isFestivalBox && (it as any).festivalBoxDetails?.itemsBreakdown) {
+            const hasSub = (it as any).festivalBoxDetails.itemsBreakdown.some(
+              (sb: any) => (sb.itemName || '').toLowerCase().trim() === targetName
+            );
+            if (hasSub) {
+              const completedSweets = Array.isArray((it as any).festivalBoxDetails.completedSweets)
+                ? [...(it as any).festivalBoxDetails.completedSweets]
+                : [];
+              if (!completedSweets.includes(targetName)) {
+                completedSweets.push(targetName);
+              }
+              const distinctBreakdownSweets = Array.from(
+                new Set(
+                  ((it as any).festivalBoxDetails?.itemsBreakdown || []).map((sb: any) =>
+                    (sb.itemName || '').toLowerCase().trim()
+                  )
+                )
+              );
+              const allDone = distinctBreakdownSweets.every((s) => completedSweets.includes(s));
+              return sanitizeForFirestore({
+                ...it,
+                mfgStatus: allDone ? 'Moved to Packing' : 'Manufacturing Started',
+                pckStatus: allDone ? (it.pckStatus || 'Pending') : it.pckStatus,
+                festivalBoxDetails: {
+                  ...(it as any).festivalBoxDetails,
+                  completedSweets,
+                },
+              });
+            }
+          }
+
           return sanitizeForFirestore(it);
         });
 
@@ -849,15 +970,55 @@ export default function ManufacturingPortalClient() {
           const targetName = (itemSummary.itemName || '').toLowerCase().trim();
           const isTarget = name && targetName && name === targetName;
 
-          const newMfgStatus = isTarget ? targetMfgStatus : (it.mfgStatus || 'Pending');
-          const newPckStatus = isTarget && targetMfgStatus === 'Moved to Packing'
-            ? (it.pckStatus || 'Pending')
-            : (it.pckStatus || 'Pending');
+          if (isTarget) {
+            const newMfgStatus = targetMfgStatus;
+            const newPckStatus = targetMfgStatus === 'Moved to Packing'
+              ? (it.pckStatus || 'Pending')
+              : (it.pckStatus || 'Pending');
+
+            const updated: any = {
+              ...it,
+              mfgStatus: newMfgStatus,
+              pckStatus: newPckStatus,
+            };
+            return sanitizeForFirestore(updated);
+          }
+
+          if (it.isFestivalBox && (it as any).festivalBoxDetails?.itemsBreakdown) {
+            const hasSub = (it as any).festivalBoxDetails.itemsBreakdown.some(
+              (sb: any) => (sb.itemName || '').toLowerCase().trim() === targetName
+            );
+            if (hasSub) {
+              const completedSweets = Array.isArray((it as any).festivalBoxDetails.completedSweets)
+                ? [...(it as any).festivalBoxDetails.completedSweets]
+                : [];
+              if (targetMfgStatus === 'Moved to Packing' && !completedSweets.includes(targetName)) {
+                completedSweets.push(targetName);
+              }
+              const distinctBreakdownSweets = Array.from(
+                new Set(
+                  ((it as any).festivalBoxDetails?.itemsBreakdown || []).map((sb: any) =>
+                    (sb.itemName || '').toLowerCase().trim()
+                  )
+                )
+              );
+              const allDone = distinctBreakdownSweets.every((s) => completedSweets.includes(s));
+              return sanitizeForFirestore({
+                ...it,
+                mfgStatus: allDone ? 'Moved to Packing' : 'Manufacturing Started',
+                pckStatus: allDone ? (it.pckStatus || 'Pending') : it.pckStatus,
+                festivalBoxDetails: {
+                  ...(it as any).festivalBoxDetails,
+                  completedSweets,
+                },
+              });
+            }
+          }
 
           const updated: any = {
             ...it,
-            mfgStatus: newMfgStatus,
-            pckStatus: newPckStatus,
+            mfgStatus: it.mfgStatus || 'Pending',
+            pckStatus: it.pckStatus || 'Pending',
           };
           return sanitizeForFirestore(updated);
         });
@@ -1527,9 +1688,39 @@ export default function ManufacturingPortalClient() {
                             <div key={idx} className="bg-white rounded-lg p-3 border border-slate-200 text-xs space-y-2 flex flex-col justify-between">
                               <div className="space-y-1">
                                 <div className="flex justify-between items-center font-bold text-slate-800">
-                                  <span>{rawItemName}</span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span>{rawItemName}</span>
+                                    {item.isFestivalBox && (
+                                      <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-2xs">
+                                        🎁 Festival Box
+                                      </span>
+                                    )}
+                                  </div>
                                   <span className="text-teal-600">{item.quantity} {item.unit || 'kg'}</span>
                                 </div>
+
+                                {item.isFestivalBox && (item as any).festivalBoxDetails?.itemsBreakdown && (
+                                  <div className="p-2 rounded-lg bg-amber-50/70 border border-amber-200/80 space-y-1">
+                                    <p className="text-[10px] font-bold text-amber-900 uppercase tracking-wide">
+                                      Box Contents to Cook:
+                                    </p>
+                                    <div className="space-y-0.5">
+                                      {(item as any).festivalBoxDetails.itemsBreakdown.map((sb: any, sbIdx: number) => {
+                                        const isSubDone = ((item as any).festivalBoxDetails?.completedSweets || []).includes((sb.itemName || '').toLowerCase().trim());
+                                        return (
+                                          <div key={sbIdx} className={`text-[10px] px-2 py-0.5 rounded border flex items-center justify-between ${
+                                            isSubDone ? 'bg-emerald-50 text-emerald-800 border-emerald-200 line-through' : 'bg-white text-slate-700 border-amber-100'
+                                          }`}>
+                                            <span className="font-semibold">{sb.itemName}</span>
+                                            <span className="font-mono font-bold text-amber-900">
+                                              {sb.piecesCount} pcs • {parseFloat(sb.weightKg).toFixed(2)} KG
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
                                 
                                 <div className="flex items-center justify-between">
                                   <p className="text-[10px] text-slate-400 flex items-center gap-1">

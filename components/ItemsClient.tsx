@@ -50,6 +50,8 @@ export interface ItemRecord {
   name: string;
   imageUrl?: string;
   price: number;
+  piecePrice?: number;
+  piecesPerKg?: number;
   category: string;
   unit: 'KG' | 'Piece' | 'Packet' | 'Litre';
   manufacturingUnitId?: string;
@@ -87,6 +89,8 @@ interface DropdownUnitOption {
 interface BulkParsedItem {
   name: string;
   price: number;
+  piecePrice?: number;
+  piecesPerKg?: number;
   category: string;
   unit: 'KG' | 'Piece' | 'Packet' | 'Litre';
   manufacturingUnitName: string;
@@ -133,6 +137,8 @@ export default function ItemsClient() {
   const emptyItemForm = {
     name: '',
     price: '',
+    piecePrice: '',
+    piecesPerKg: '',
     category: '',
     unit: 'KG' as 'KG' | 'Piece' | 'Packet' | 'Litre',
     manufacturingUnitName: '',
@@ -304,6 +310,8 @@ export default function ItemsClient() {
         code: nextCode,
         name: newItem.name,
         price: parseFloat(newItem.price) || 0,
+        piecePrice: newItem.piecePrice ? parseFloat(String(newItem.piecePrice)) || 0 : 0,
+        piecesPerKg: newItem.piecesPerKg ? parseFloat(String(newItem.piecesPerKg)) || 0 : 0,
         category: newItem.category || (categories[0]?.name || 'Sweets'),
         unit: newItem.unit,
         manufacturingUnitName: newItem.manufacturingUnitName || (mfgUnits[0]?.name || 'N/A'),
@@ -336,6 +344,8 @@ export default function ItemsClient() {
     setEditItemForm({
       name: item.name || '',
       price: item.price !== undefined ? String(item.price) : '',
+      piecePrice: item.piecePrice !== undefined && item.piecePrice !== null ? String(item.piecePrice) : '',
+      piecesPerKg: item.piecesPerKg !== undefined && item.piecesPerKg !== null ? String(item.piecesPerKg) : '',
       category: item.category || (categories[0]?.name || 'Sweets'),
       unit: item.unit || 'KG',
       manufacturingUnitName: item.manufacturingUnitName || (mfgUnits[0]?.name || 'N/A'),
@@ -382,6 +392,8 @@ export default function ItemsClient() {
       await updateDoc(itemRef, {
         name: editItemForm.name,
         price: parseFloat(editItemForm.price) || 0,
+        piecePrice: editItemForm.piecePrice ? parseFloat(String(editItemForm.piecePrice)) || 0 : 0,
+        piecesPerKg: editItemForm.piecesPerKg ? parseFloat(String(editItemForm.piecesPerKg)) || 0 : 0,
         category: editItemForm.category,
         unit: editItemForm.unit,
         manufacturingUnitName: editItemForm.manufacturingUnitName,
@@ -473,6 +485,8 @@ export default function ItemsClient() {
           return {
             name: String(row['Item Name'] || row['ItemName'] || row['name'] || 'Unnamed Item').trim(),
             price: parseFloat(row['Price'] || row['price'] || 0) || 0,
+            piecePrice: parseFloat(row['Piece Price'] || row['piecePrice'] || row['Per Piece Price'] || 0) || 0,
+            piecesPerKg: parseFloat(row['Pieces Per Kg'] || row['piecesPerKg'] || row['Pieces Per KG'] || 0) || 0,
             category: catRaw || 'Not Provided',
             unit: (row['Unit'] || row['unit'] || 'KG') as any,
             manufacturingUnitName: mfgRaw || 'Not Provided',
@@ -560,6 +574,8 @@ export default function ItemsClient() {
           code: nextCode,
           name: item.name,
           price: item.price,
+          piecePrice: item.piecePrice || 0,
+          piecesPerKg: item.piecesPerKg || 0,
           category: item.category || 'Not Provided',
           unit: item.unit,
           manufacturingUnitName: item.manufacturingUnitName || 'Not Provided',
@@ -868,7 +884,19 @@ export default function ItemsClient() {
                               <span className="truncate">{item.name}</span>
                               <span className="text-[10px] text-slate-400 font-mono">({item.code})</span>
                             </div>
-                            <p className="text-[11px] text-slate-500 font-normal">₹ {item.price} / {item.unit}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <span className="text-[11px] text-slate-600 font-medium">₹ {item.price} / {item.unit}</span>
+                              {Boolean(item.piecePrice) && (
+                                <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-teal-50 text-[#02626D] border border-teal-200 font-semibold" title="Per piece price">
+                                  ₹{item.piecePrice}/pc
+                                </span>
+                              )}
+                              {Boolean(item.piecesPerKg) && (
+                                <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold" title="Pieces per KG">
+                                  {item.piecesPerKg} pcs/kg
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -1086,6 +1114,42 @@ export default function ItemsClient() {
                     className="w-full"
                     buttonClassName="w-full"
                   />
+                </div>
+              </div>
+
+              {/* Per Piece Price & Per KG How Many Pieces */}
+              <div className="grid grid-cols-2 gap-3 p-3 bg-teal-50/60 rounded-xl border border-teal-100">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-teal-950">Per Piece Price (₹)</label>
+                    <span className="text-[10px] text-teal-700 font-semibold bg-teal-100/70 px-1.5 py-0.2 rounded">Box Slot</span>
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="e.g. 25.00"
+                    value={newItem.piecePrice}
+                    onChange={(e) => setNewItem({ ...newItem, piecePrice: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-teal-200 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
+                  />
+                  <p className="text-[9.5px] text-teal-700/80 mt-1">Price per individual piece in boxes</p>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-teal-950">Pieces Per KG</label>
+                    <span className="text-[10px] text-teal-700 font-semibold bg-teal-100/70 px-1.5 py-0.2 rounded">Mfg Scale</span>
+                  </div>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    placeholder="e.g. 20"
+                    value={newItem.piecesPerKg}
+                    onChange={(e) => setNewItem({ ...newItem, piecesPerKg: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-teal-200 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
+                  />
+                  <p className="text-[9.5px] text-teal-700/80 mt-1">How many pieces make 1 KG for Mfg</p>
                 </div>
               </div>
 
@@ -1317,6 +1381,42 @@ export default function ItemsClient() {
                     className="w-full"
                     buttonClassName="w-full"
                   />
+                </div>
+              </div>
+
+              {/* Per Piece Price & Per KG How Many Pieces */}
+              <div className="grid grid-cols-2 gap-3 p-3 bg-teal-50/60 rounded-xl border border-teal-100">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-teal-950">Per Piece Price (₹)</label>
+                    <span className="text-[10px] text-teal-700 font-semibold bg-teal-100/70 px-1.5 py-0.2 rounded">Box Slot</span>
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="e.g. 25.00"
+                    value={editItemForm.piecePrice}
+                    onChange={(e) => setEditItemForm({ ...editItemForm, piecePrice: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-teal-200 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
+                  />
+                  <p className="text-[9.5px] text-teal-700/80 mt-1">Price per individual piece in boxes</p>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-teal-950">Pieces Per KG</label>
+                    <span className="text-[10px] text-teal-700 font-semibold bg-teal-100/70 px-1.5 py-0.2 rounded">Mfg Scale</span>
+                  </div>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    placeholder="e.g. 20"
+                    value={editItemForm.piecesPerKg}
+                    onChange={(e) => setEditItemForm({ ...editItemForm, piecesPerKg: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-teal-200 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
+                  />
+                  <p className="text-[9.5px] text-teal-700/80 mt-1">How many pieces make 1 KG for Mfg</p>
                 </div>
               </div>
 
@@ -1731,6 +1831,18 @@ export default function ItemsClient() {
               <div className="flex justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-400">Price:</span>
                 <span className="font-extrabold text-slate-900">₹ {viewItem.price} / {viewItem.unit}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-400">Per Piece Price:</span>
+                <span className="font-extrabold text-teal-700">
+                  {viewItem.piecePrice ? `₹ ${viewItem.piecePrice} / piece` : 'Not Set'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-400">Pieces Per KG:</span>
+                <span className="font-extrabold text-amber-700">
+                  {viewItem.piecesPerKg ? `${viewItem.piecesPerKg} pcs = 1 KG` : 'Not Set'}
+                </span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-400">Category:</span>

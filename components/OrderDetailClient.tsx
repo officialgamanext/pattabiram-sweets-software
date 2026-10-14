@@ -1106,10 +1106,39 @@ export default function OrderDetailClient({ orderId }: Props) {
                             />
                           </div>
                           <div>
-                            <p className="text-xs font-bold text-slate-900">{item.itemName}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="text-xs font-bold text-slate-900">{item.itemName}</p>
+                              {item.isFestivalBox && (
+                                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-2xs flex items-center gap-1">
+                                  🎁 Festival Box {item.festivalBoxDetails?.boxRows ? `(${item.festivalBoxDetails.boxRows}×${item.festivalBoxDetails.boxCols})` : ''}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11px] text-slate-400 font-mono">
                               {item.itemCode || 'ITM-001'} • {item.category || 'Sweet'}
                             </p>
+
+                            {/* If Festival Box, show sweets breakdown with piece counts and KGs */}
+                            {item.isFestivalBox && item.festivalBoxDetails?.itemsBreakdown && (
+                              <div className="mt-1.5 p-2 rounded-lg bg-amber-50/70 border border-amber-200/80 space-y-1">
+                                <div className="flex items-center justify-between text-[10px] font-bold text-amber-900">
+                                  <span>Box Contents ({item.festivalBoxDetails.totalPiecesCount} pcs total):</span>
+                                  {item.festivalBoxDetails.totalWeightKg ? (
+                                    <span className="font-mono">{item.festivalBoxDetails.totalWeightKg.toFixed(2)} KG total</span>
+                                  ) : null}
+                                </div>
+                                <div className="space-y-0.5">
+                                  {item.festivalBoxDetails.itemsBreakdown.map((sb: any, sbIdx: number) => (
+                                    <div key={sbIdx} className="text-[10px] text-slate-700 bg-white/90 px-2 py-0.5 rounded border border-amber-100 flex items-center justify-between">
+                                      <span className="font-semibold">{sb.itemName}</span>
+                                      <span className="font-mono text-amber-900 font-bold">
+                                        {sb.piecesCount} pcs • {parseFloat(sb.weightKg).toFixed(2)} KG
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>

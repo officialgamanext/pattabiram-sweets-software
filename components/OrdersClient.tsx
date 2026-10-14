@@ -111,6 +111,9 @@ export interface OrderItemLine {
   needsManufacturing?: boolean;
   mfgStatus?: 'Pending' | 'Manufacturing Started' | 'Moved to Packing' | 'Not Required' | 'Skipped';
   pckStatus?: 'Pending' | 'Packing Started' | 'Moved to Store';
+  isFestivalBox?: boolean;
+  festivalBoxName?: string;
+  festivalBoxDetails?: any;
 }
 
 export interface CustomisationData {

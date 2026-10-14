@@ -79,7 +79,6 @@ export default function FestivalBoxesClient() {
     name: '',
     rows: 3,
     cols: 3,
-    basePrice: '',
     description: '',
     status: 'Active' as 'Active' | 'Inactive',
   };
@@ -156,7 +155,6 @@ export default function FestivalBoxesClient() {
       name: box.name,
       rows: box.rows || 3,
       cols: box.cols || 3,
-      basePrice: box.basePrice !== undefined ? String(box.basePrice) : '',
       description: box.description || '',
       status: box.status || 'Active',
     });
@@ -172,7 +170,6 @@ export default function FestivalBoxesClient() {
 
     const rows = Math.min(8, Math.max(1, parseInt(String(formData.rows), 10) || 1));
     const cols = Math.min(8, Math.max(1, parseInt(String(formData.cols), 10) || 1));
-    const basePrice = formData.basePrice ? parseFloat(formData.basePrice) || 0 : 0;
 
     try {
       setIsSubmitting(true);
@@ -184,7 +181,6 @@ export default function FestivalBoxesClient() {
           rows: rows,
           cols: cols,
           compartmentsCount: rows * cols,
-          basePrice: basePrice,
           description: formData.description.trim(),
           status: formData.status,
           updatedAt: serverTimestamp(),
@@ -202,7 +198,6 @@ export default function FestivalBoxesClient() {
           rows: rows,
           cols: cols,
           compartmentsCount: rows * cols,
-          basePrice: basePrice,
           description: formData.description.trim(),
           status: formData.status,
           createdAt: serverTimestamp(),
@@ -489,10 +484,10 @@ export default function FestivalBoxesClient() {
 
                     <div className="text-right">
                       <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold block">
-                        Base Box Price
+                        Box Pricing
                       </span>
-                      <span className="font-extrabold text-[#02626D]">
-                        ₹{box.basePrice || 0}
+                      <span className="text-[11px] font-bold text-[#02626D] bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                        Sum of Pieces
                       </span>
                     </div>
                   </div>
@@ -646,24 +641,8 @@ export default function FestivalBoxesClient() {
                 </div>
               </div>
 
-              {/* Base Price & Status */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Base Box Price (₹)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={formData.basePrice}
-                    onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:outline-none focus:border-[#02626D]"
-                  />
-                  <p className="text-[9.5px] text-slate-400 mt-1">Empty box charge (optional)</p>
-                </div>
-
+              {/* Status & Pricing Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
                   <select
@@ -676,6 +655,14 @@ export default function FestivalBoxesClient() {
                     <option value="Active">Active</option>
                     <option value="Inactive">Inactive</option>
                   </select>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-teal-50/80 border border-teal-200 text-[11px] text-teal-900 leading-tight flex items-start gap-2">
+                  <span className="text-base shrink-0">💡</span>
+                  <div>
+                    <span className="font-bold block text-teal-950">Dynamic Sweet Pricing:</span>
+                    Box price is purely the sum of the piece prices placed inside this box.
+                  </div>
                 </div>
               </div>
 
@@ -863,7 +850,7 @@ function SimulatorModal({
     (s, f) => s + (f.pieces || 0) * (f.piecePrice || 0),
     0
   );
-  const grandTotal = sweetsPrice + (box.basePrice || 0);
+  const grandTotal = sweetsPrice;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
@@ -1002,21 +989,9 @@ function SimulatorModal({
                 </p>
               </div>
 
-              <div className="flex justify-between py-0.5 border-t border-slate-200 pt-2">
-                <span className="text-slate-500">Sweets Total:</span>
-                <span className="font-bold text-slate-800">₹{sweetsPrice.toFixed(2)}</span>
-              </div>
-
-              {Boolean(box.basePrice) && (
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-500">Empty Box:</span>
-                  <span className="font-bold text-slate-800">₹{box.basePrice}</span>
-                </div>
-              )}
-
               <div className="flex justify-between py-1.5 border-t border-slate-200 text-sm font-extrabold text-[#02626D]">
-                <span>Box Price:</span>
-                <span>₹{grandTotal.toFixed(2)}</span>
+                <span>Box Price (Sum of Pieces):</span>
+                <span>₹{sweetsPrice.toFixed(2)}</span>
               </div>
             </div>
 

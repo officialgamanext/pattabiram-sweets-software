@@ -1446,11 +1446,10 @@ export default function CreateOrderClient() {
       return s + (f.pieces / pKg);
     }, 0);
 
-    const sweetsUnitPrice = Object.values(boxCompartmentFills).reduce(
+    const boxUnitPrice = Object.values(boxCompartmentFills).reduce(
       (s, f) => s + f.pieces * (f.piecePrice || 0),
       0
     );
-    const boxUnitPrice = sweetsUnitPrice + (selectedBoxForConfig.basePrice || 0);
     const boxLineTotal = Math.round(boxUnitPrice * boxCount * 100) / 100;
 
     const itemsBreakdown = Object.values(boxCompartmentFills).map((f) => {
@@ -2713,7 +2712,7 @@ export default function CreateOrderClient() {
 
                             <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100">
                               <span className="text-slate-500 font-medium">
-                                {totalCells} Slots {box.basePrice ? `• Box ₹${box.basePrice}` : ''}
+                                {totalCells} Slots • Sum of Pieces
                               </span>
                               <span className="font-bold text-[#02626D] flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                                 <span>Configure</span>
@@ -4305,15 +4304,12 @@ export default function CreateOrderClient() {
                     {/* Price Breakdown */}
                     <div className="border-t border-slate-200 pt-1.5 space-y-1">
                       <div className="flex justify-between text-slate-600">
-                        <span>Price Per Box:</span>
+                        <span>Price Per Box (Sum of Pieces):</span>
                         <span className="font-bold text-slate-800">
                           ₹
-                          {(
-                            Object.values(boxCompartmentFills).reduce(
-                              (s, f) => s + f.pieces * (f.piecePrice || 0),
-                              0
-                            ) + (selectedBoxForConfig.basePrice || 0)
-                          ).toFixed(2)}
+                          {Object.values(boxCompartmentFills)
+                            .reduce((s, f) => s + f.pieces * (f.piecePrice || 0), 0)
+                            .toFixed(2)}
                         </span>
                       </div>
 
@@ -4322,12 +4318,10 @@ export default function CreateOrderClient() {
                         <span className="text-[#02626D]">
                           ₹
                           {(
-                            (Object.values(boxCompartmentFills).reduce(
+                            Object.values(boxCompartmentFills).reduce(
                               (s, f) => s + f.pieces * (f.piecePrice || 0),
                               0
-                            ) +
-                              (selectedBoxForConfig.basePrice || 0)) *
-                            boxOrderCount
+                            ) * boxOrderCount
                           ).toFixed(2)}
                         </span>
                       </div>

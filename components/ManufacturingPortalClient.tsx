@@ -146,11 +146,216 @@ function getOrderEffectiveMfgDate(order: OrderRecord): string {
   if (order.orderDate && /^\d{4}-\d{2}-\d{2}$/.test(order.orderDate)) {
     return order.orderDate;
   }
+  if ((order as any).deliveryDate && /^\d{4}-\d{2}-\d{2}$/.test((order as any).deliveryDate)) {
+    return (order as any).deliveryDate;
+  }
+  if ((order as any).expectedDeliveryDate && /^\d{4}-\d{2}-\d{2}$/.test((order as any).expectedDeliveryDate)) {
+    return (order as any).expectedDeliveryDate;
+  }
   const createdRaw = (order as any).createdAt;
   if (createdRaw?.toDate) {
     return createdRaw.toDate().toISOString().split('T')[0];
   }
+  if (typeof createdRaw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(createdRaw)) {
+    return createdRaw.split('T')[0];
+  }
   return '';
+}
+
+export interface UnpackedSweet {
+  itemId: string;
+  itemCode: string;
+  rawName: string;
+  quantity: number; // in KG
+  unit: string;
+  imageUrl?: string;
+  manufacturingUnitName: string;
+  packingUnitName: string;
+  category: string;
+  manufacturingDescription: string;
+  isCompleted?: boolean;
+  piecesCount?: number;
+  boxName?: string;
+}
+
+export function isFestivalBoxItem(item: any): boolean {
+  if (!item) return false;
+  return Boolean(
+    item.isFestivalBox ||
+    item.category === 'Festival Boxes' ||
+    (typeof item.itemId === 'string' && item.itemId.startsWith('fbox_')) ||
+    (typeof item.itemName === 'string' && /🎁|Festival Box/i.test(item.itemName)) ||
+    (typeof (item as any).name === 'string' && /🎁|Festival Box/i.test((item as any).name)) ||
+    (typeof item.manufacturingDescription === 'string' && item.manufacturingDescription.includes('[Festival Box:')) ||
+    (typeof item.packingDescription === 'string' && (item.packingDescription.includes('grid)') || item.packingDescription.includes('Pack in'))) ||
+    (typeof (item as any).notes === 'string' && ((item as any).notes.includes('[Festival Box:') || (item as any).notes.includes('grid)'))) ||
+    item.festivalBoxDetails ||
+    item.festivalBoxName
+  );
+}
+
+export function unpackFestivalBoxSweets(
+  item: any,
+  order: any,
+  itemInfoMap: Map<string, ItemMasterInfo>
+): UnpackedSweet[] {
+  const isBox = isFestivalBoxItem(item);
+  const boxQty = parseFloat(item.quantity) || 1;
+  const boxName = item.festivalBoxName || item.itemName || 'Festival Box';
+  const completedSweets: string[] = Array.isArray(item.festivalBoxDetails?.completedSweets)
+    ? item.festivalBoxDetails.completedSweets.map((s: string) => (s || '').toLowerCase().trim())
+    : [];
+
+  if (isBox) {
+    // 1. Check if itemsBreakdown exists and has items
+    const breakdown = item.festivalBoxDetails?.itemsBreakdown;
+    if (Array.isArray(breakdown) && breakdown.length > 0) {
+      return breakdown.map((sb: any) => {
+        const sweetName = (sb.itemName || '').trim();
+        const key = sweetName.toLowerCase().trim();
+        const masterInfo = itemInfoMap.get(key);
+        // Master catalog kitchen assignment MUST take precedence over hardcoded/stale breakdown kitchen unit!
+        const mfgUnitName = masterInfo?.mfgUnitName || sb.manufacturingUnitName || 'General Kitchen';
+        const pckUnitName = masterInfo?.pckUnitName || sb.packingUnitName || 'General Packing';
+        const category = sb.category || masterInfo?.category || 'Sweets';
+        const weightKg = parseFloat(sb.weightKg) || 0;
+        const piecesCount = sb.totalPieces || (sb.piecesCount ? sb.piecesCount * boxQty : 0);
+        const isCompleted = completedSweets.includes(key);
+
+        return {
+          itemId: sb.itemId || sweetName,
+          itemCode: sb.itemCode || 'BOX-SWT',
+          rawName: sweetName,
+          quantity: weightKg,
+          unit: 'KG',
+          imageUrl: sb.imageUrl,
+          manufacturingUnitName: mfgUnitName,
+          packingUnitName: pckUnitName,
+          category: category,
+          manufacturingDescription: `For ${boxName} (${piecesCount || sb.piecesCount || 0} pcs, ${weightKg.toFixed(2)} KG)${item.manufacturingDescription ? ' | ' + item.manufacturingDescription : ''}`,
+          isCompleted,
+          piecesCount,
+          boxName,
+        };
+      });
+    }
+
+    // 2. Fallback: Check if compartments exist
+    const compartments = item.festivalBoxDetails?.compartments;
+    if (compartments && typeof compartments === 'object') {
+      const compValues = Object.values(compartments) as any[];
+      if (compValues.length > 0) {
+        const grouped = new Map<string, {
+          fill: any;
+          totalPieces: number;
+          weightKg: number;
+        }>();
+
+        compValues.forEach((fill: any) => {
+          if (!fill || !fill.itemName) return;
+          const sName = (fill.itemName || '').trim();
+          const pKg = fill.piecesPerKg || 20;
+          const piecesInSlot = fill.pieces || 0;
+          const totalSlotPieces = piecesInSlot * boxQty;
+          const slotWeight = totalSlotPieces / pKg;
+
+          if (!grouped.has(sName)) {
+            grouped.set(sName, {
+              fill,
+              totalPieces: totalSlotPieces,
+              weightKg: slotWeight,
+            });
+          } else {
+            const cur = grouped.get(sName)!;
+            cur.totalPieces += totalSlotPieces;
+            cur.weightKg += slotWeight;
+          }
+        });
+
+        if (grouped.size > 0) {
+          return Array.from(grouped.entries()).map(([sweetName, { fill, totalPieces, weightKg }]) => {
+            const key = sweetName.toLowerCase().trim();
+            const masterInfo = itemInfoMap.get(key);
+            const mfgUnitName = masterInfo?.mfgUnitName || fill.manufacturingUnitName || 'General Kitchen';
+            const pckUnitName = masterInfo?.pckUnitName || fill.packingUnitName || 'General Packing';
+            const category = fill.category || masterInfo?.category || 'Sweets';
+            const isCompleted = completedSweets.includes(key);
+
+            return {
+              itemId: fill.itemId || sweetName,
+              itemCode: fill.itemCode || 'BOX-SWT',
+              rawName: sweetName,
+              quantity: Math.round(weightKg * 1000) / 1000,
+              unit: 'KG',
+              imageUrl: fill.imageUrl,
+              manufacturingUnitName: mfgUnitName,
+              packingUnitName: pckUnitName,
+              category: category,
+              manufacturingDescription: `For ${boxName} (${totalPieces} pcs, ${weightKg.toFixed(2)} KG)${item.manufacturingDescription ? ' | ' + item.manufacturingDescription : ''}`,
+              isCompleted,
+              piecesCount: totalPieces,
+              boxName,
+            };
+          });
+        }
+      }
+    }
+
+    // 3. Fallback: Parse notes or manufacturingDescription e.g. "[Festival Box: Box Name] Sweet A: 120 pcs (6.000 KG), Sweet B: 60 pcs (3.000 KG)"
+    const descText = `${item.manufacturingDescription || ''} ${(item as any).notes || ''}`;
+    const sweetMatchRegex = /([A-Za-z0-9\s&'-]+):\s*(\d+)\s*pcs\s*\(([\d.]+)\s*KG\)/gi;
+    const matches = Array.from(descText.matchAll(sweetMatchRegex));
+    if (matches.length > 0) {
+      return matches.map((m) => {
+        const sweetName = m[1].replace(/\[.*?\]/g, '').trim();
+        const pieces = parseInt(m[2], 10) || 0;
+        const weightKg = parseFloat(m[3]) || 0;
+        const key = sweetName.toLowerCase().trim();
+        const masterInfo = itemInfoMap.get(key);
+        const mfgUnitName = masterInfo?.mfgUnitName || 'General Kitchen';
+        const isCompleted = completedSweets.includes(key);
+
+        return {
+          itemId: sweetName,
+          itemCode: 'BOX-SWT',
+          rawName: sweetName,
+          quantity: weightKg,
+          unit: 'KG',
+          manufacturingUnitName: mfgUnitName,
+          packingUnitName: masterInfo?.pckUnitName || 'General Packing',
+          category: masterInfo?.category || 'Sweets',
+          manufacturingDescription: `For ${boxName} (${pieces} pcs, ${weightKg.toFixed(2)} KG)`,
+          isCompleted,
+          piecesCount: pieces,
+          boxName,
+        };
+      });
+    }
+  }
+
+  // Regular non-box item fallback
+  const rawName = item.itemName || (item as any).name || 'Unknown Item';
+  const key = rawName.toLowerCase().trim();
+  const masterInfo = itemInfoMap.get(key);
+  const mfgUnitName = masterInfo?.mfgUnitName || (item as any).manufacturingUnitName || 'General Kitchen';
+  const pckUnitName = masterInfo?.pckUnitName || (item as any).packingUnitName || 'General Packing';
+  const category = item.category || masterInfo?.category || 'General';
+
+  return [{
+    itemId: item.itemId || item.id || rawName,
+    itemCode: item.itemCode || item.code || 'ITEM',
+    rawName: rawName,
+    quantity: parseFloat(item.quantity) || 0,
+    unit: item.unit || 'kg',
+    imageUrl: item.imageUrl,
+    manufacturingUnitName: mfgUnitName,
+    packingUnitName: pckUnitName,
+    category: category,
+    manufacturingDescription: item.manufacturingDescription,
+    isCompleted: (item.mfgStatus === 'Moved to Packing'),
+    piecesCount: undefined,
+    boxName: undefined,
+  }];
 }
 
 export default function ManufacturingPortalClient() {
@@ -358,22 +563,14 @@ export default function ManufacturingPortalClient() {
 
     nextDayOrders.forEach((order) => {
       (order.items || []).forEach((item) => {
-        // If festival box with itemsBreakdown, expand into constituent sweets
-        const subItems = (item.isFestivalBox && (item as any).festivalBoxDetails?.itemsBreakdown?.length)
-          ? (item as any).festivalBoxDetails.itemsBreakdown.map((sb: any) => ({
-              name: (sb.itemName || '').trim(),
-              qty: parseFloat(sb.weightKg) || 0,
-              unit: 'KG',
-              category: sb.category || 'Sweets',
-              mfgUnit: sb.manufacturingUnitName,
-            }))
-          : [{
-              name: (item.itemName || (item as any).name || '').trim(),
-              qty: parseFloat(item.quantity as any) || 0,
-              unit: item.unit || 'KG',
-              category: item.category || 'Sweets',
-              mfgUnit: (item as any).manufacturingUnitName,
-            }];
+        // Expand festival box into constituent sweets or use single item
+        const subItems = unpackFestivalBoxSweets(item, order, itemInfoMap).map((sb) => ({
+          name: sb.rawName,
+          qty: sb.quantity,
+          unit: sb.unit,
+          category: sb.category,
+          mfgUnit: sb.manufacturingUnitName,
+        }));
 
         subItems.forEach((subItem: any) => {
           const name = subItem.name;
@@ -437,8 +634,8 @@ export default function ManufacturingPortalClient() {
       if (st === 'Delivered' || st === 'Cancelled') return;
 
       (order.items || []).forEach((item) => {
-        // Skip items that don't need manufacturing or are not required
-        if (item.needsManufacturing === false || (item as any).mfgStatus === 'Not Required' || (item as any).mfgStatus === 'Skipped') {
+        // Skip items that don't need manufacturing or are not required (festival boxes always need manufacturing)
+        if (!isFestivalBoxItem(item) && (item.needsManufacturing === false || (item as any).mfgStatus === 'Not Required' || (item as any).mfgStatus === 'Skipped')) {
           return;
         }
 
@@ -453,46 +650,16 @@ export default function ManufacturingPortalClient() {
         // If item has already moved to packing, omit it from manufacturing queue!
         if (itemMfgStatus === 'Moved to Packing') return;
 
-        const unitsToProduce = (item.isFestivalBox && (item as any).festivalBoxDetails?.itemsBreakdown?.length)
-          ? (item as any).festivalBoxDetails.itemsBreakdown
-              .filter((sb: any) => {
-                const completedSweets = Array.isArray((item as any).festivalBoxDetails?.completedSweets)
-                  ? (item as any).festivalBoxDetails.completedSweets
-                  : [];
-                return !completedSweets.includes((sb.itemName || '').toLowerCase().trim());
-              })
-              .map((sb: any) => ({
-                itemId: sb.itemId || sb.itemName,
-                itemCode: sb.itemCode || 'BOX-SWT',
-                rawName: sb.itemName,
-                quantity: parseFloat(sb.weightKg) || 0,
-                unit: 'KG',
-                imageUrl: sb.imageUrl,
-                manufacturingUnitName: sb.manufacturingUnitName,
-                packingUnitName: sb.packingUnitName,
-                category: sb.category || 'Sweets',
-                manufacturingDescription: `For ${item.festivalBoxName || item.itemName} (${sb.piecesCount} pcs, ${parseFloat(sb.weightKg).toFixed(2)} KG)${item.manufacturingDescription ? ' | ' + item.manufacturingDescription : ''}`,
-              }))
-          : [{
-              itemId: item.itemId,
-              itemCode: item.itemCode || (item as any).code || 'ITEM',
-              rawName: item.itemName || (item as any).name || 'Unknown Item',
-              quantity: item.quantity || 0,
-              unit: item.unit || 'kg',
-              imageUrl: item.imageUrl,
-              manufacturingUnitName: (item as any).manufacturingUnitName,
-              packingUnitName: (item as any).packingUnitName,
-              category: item.category,
-              manufacturingDescription: item.manufacturingDescription,
-            }];
+        const unitsToProduce = unpackFestivalBoxSweets(item, order, itemInfoMap)
+          .filter((u) => !u.isCompleted);
 
         unitsToProduce.forEach((uItem: any) => {
           const rawName = uItem.rawName;
           const key = rawName.toLowerCase().trim();
           const masterInfo = itemInfoMap.get(key);
 
-          const mfgUnitName = uItem.manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
-          const pckUnitName = uItem.packingUnitName || masterInfo?.pckUnitName || 'General Packing';
+          const mfgUnitName = masterInfo?.mfgUnitName || uItem.manufacturingUnitName || 'General Kitchen';
+          const pckUnitName = masterInfo?.pckUnitName || uItem.packingUnitName || 'General Packing';
           const category = uItem.category || masterInfo?.category || 'General';
 
           // Check employee unit authorization
@@ -578,24 +745,43 @@ export default function ManufacturingPortalClient() {
 
       // Order must have at least 1 item that is accessible for this employee and pending manufacturing
       const hasPendingAccessibleItem = order.items?.some((item) => {
-        if (item.needsManufacturing === false || (item as any).mfgStatus === 'Not Required' || (item as any).mfgStatus === 'Skipped') {
-          return false;
+        const isBox = isFestivalBoxItem(item);
+        if (!isBox) {
+          if (item.needsManufacturing === false || (item as any).mfgStatus === 'Not Required' || (item as any).mfgStatus === 'Skipped') {
+            return false;
+          }
+          const key = (item.itemName || (item as any).name || '').toLowerCase().trim();
+          const masterInfo = itemInfoMap.get(key);
+          const unit = masterInfo?.mfgUnitName || (item as any).manufacturingUnitName || 'General Kitchen';
+
+          if (!isItemUnitAllowed(unit)) return false;
+          if (selectedUnit !== 'all' && unit.toLowerCase() !== selectedUnit.toLowerCase()) return false;
+
+          const status = item.mfgStatus || (
+            order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
+              ? 'Moved to Packing'
+              : order.orderStatus === 'Manufacturing Started'
+              ? 'Manufacturing Started'
+              : 'Pending'
+          );
+          return status !== 'Moved to Packing';
+        } else {
+          const status = item.mfgStatus || (
+            order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
+              ? 'Moved to Packing'
+              : 'Pending'
+          );
+          if (status === 'Moved to Packing') return false;
+
+          const sweets = unpackFestivalBoxSweets(item, order, itemInfoMap);
+          const hasPendingSub = sweets.some((sw) => {
+            if (sw.isCompleted) return false;
+            if (!isItemUnitAllowed(sw.manufacturingUnitName)) return false;
+            if (selectedUnit !== 'all' && sw.manufacturingUnitName.toLowerCase() !== selectedUnit.toLowerCase()) return false;
+            return true;
+          });
+          return hasPendingSub;
         }
-        const key = (item.itemName || (item as any).name || '').toLowerCase().trim();
-        const masterInfo = itemInfoMap.get(key);
-        const unit = (item as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
-
-        if (!isItemUnitAllowed(unit)) return false;
-        if (selectedUnit !== 'all' && unit.toLowerCase() !== selectedUnit.toLowerCase()) return false;
-
-        const status = item.mfgStatus || (
-          order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
-            ? 'Moved to Packing'
-            : order.orderStatus === 'Manufacturing Started'
-            ? 'Manufacturing Started'
-            : 'Pending'
-        );
-        return status !== 'Moved to Packing';
       });
 
       if (!hasPendingAccessibleItem) return false;
@@ -632,7 +818,8 @@ export default function ManufacturingPortalClient() {
       const slot = (order.slot || 'Regular / General Slot').trim();
 
       (order.items || []).forEach((item) => {
-        if (item.needsManufacturing === false || (item as any).mfgStatus === 'Not Required' || (item as any).mfgStatus === 'Skipped') {
+        // Skip items that don't need manufacturing (festival boxes always need manufacturing)
+        if (!isFestivalBoxItem(item) && (item.needsManufacturing === false || (item as any).mfgStatus === 'Not Required' || (item as any).mfgStatus === 'Skipped')) {
           return;
         }
 
@@ -646,46 +833,16 @@ export default function ManufacturingPortalClient() {
 
         if (itemMfgStatus === 'Moved to Packing') return;
 
-        const unitsToProduce = (item.isFestivalBox && (item as any).festivalBoxDetails?.itemsBreakdown?.length)
-          ? (item as any).festivalBoxDetails.itemsBreakdown
-              .filter((sb: any) => {
-                const completedSweets = Array.isArray((item as any).festivalBoxDetails?.completedSweets)
-                  ? (item as any).festivalBoxDetails.completedSweets
-                  : [];
-                return !completedSweets.includes((sb.itemName || '').toLowerCase().trim());
-              })
-              .map((sb: any) => ({
-                itemId: sb.itemId || sb.itemName,
-                itemCode: sb.itemCode || 'BOX-SWT',
-                rawName: sb.itemName,
-                quantity: parseFloat(sb.weightKg) || 0,
-                unit: 'KG',
-                imageUrl: sb.imageUrl,
-                manufacturingUnitName: sb.manufacturingUnitName,
-                packingUnitName: sb.packingUnitName,
-                category: sb.category || 'Sweets',
-                manufacturingDescription: `For ${item.festivalBoxName || item.itemName} (${sb.piecesCount} pcs, ${parseFloat(sb.weightKg).toFixed(2)} KG)${item.manufacturingDescription ? ' | ' + item.manufacturingDescription : ''}`,
-              }))
-          : [{
-              itemId: item.itemId,
-              itemCode: item.itemCode || (item as any).code || 'ITEM',
-              rawName: item.itemName || (item as any).name || 'Unknown Item',
-              quantity: item.quantity || 0,
-              unit: item.unit || 'kg',
-              imageUrl: item.imageUrl,
-              manufacturingUnitName: (item as any).manufacturingUnitName,
-              packingUnitName: (item as any).packingUnitName,
-              category: item.category,
-              manufacturingDescription: item.manufacturingDescription,
-            }];
+        const unitsToProduce = unpackFestivalBoxSweets(item, order, itemInfoMap)
+          .filter((u) => !u.isCompleted);
 
         unitsToProduce.forEach((uItem: any) => {
           const rawName = uItem.rawName;
           const key = rawName.toLowerCase().trim();
           const masterInfo = itemInfoMap.get(key);
 
-          const mfgUnitName = uItem.manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
-          const pckUnitName = uItem.packingUnitName || masterInfo?.pckUnitName || 'General Packing';
+          const mfgUnitName = masterInfo?.mfgUnitName || uItem.manufacturingUnitName || 'General Kitchen';
+          const pckUnitName = masterInfo?.pckUnitName || uItem.packingUnitName || 'General Packing';
           const category = uItem.category || masterInfo?.category || 'General';
 
           if (!isItemUnitAllowed(mfgUnitName)) return;
@@ -815,9 +972,46 @@ export default function ManufacturingPortalClient() {
         if (!fullOrder || !fullOrder.items) return;
 
         const updatedItems = fullOrder.items.map((it) => {
+          if (isFestivalBoxItem(it)) {
+            const sweets = unpackFestivalBoxSweets(it, fullOrder, itemInfoMap);
+            const completedSweets = Array.isArray((it as any).festivalBoxDetails?.completedSweets)
+              ? [...(it as any).festivalBoxDetails.completedSweets]
+              : [];
+
+            let anyModified = false;
+            sweets.forEach((sw) => {
+              const isItemInUnit =
+                isItemUnitAllowed(sw.manufacturingUnitName) &&
+                (selectedUnit === 'all' || sw.manufacturingUnitName.toLowerCase() === selectedUnit.toLowerCase());
+
+              if (isItemInUnit) {
+                const sKey = sw.rawName.toLowerCase().trim();
+                if (!completedSweets.includes(sKey)) {
+                  completedSweets.push(sKey);
+                  anyModified = true;
+                }
+              }
+            });
+
+            if (anyModified) {
+              const allDistinctSweets = Array.from(new Set(sweets.map((s) => s.rawName.toLowerCase().trim())));
+              const allDone = allDistinctSweets.length > 0 && allDistinctSweets.every((s) => completedSweets.includes(s));
+              return sanitizeForFirestore({
+                ...it,
+                mfgStatus: allDone ? 'Moved to Packing' : 'Manufacturing Started',
+                pckStatus: allDone ? (it.pckStatus || 'Pending') : it.pckStatus,
+                festivalBoxDetails: {
+                  ...(it as any).festivalBoxDetails,
+                  completedSweets,
+                },
+              });
+            }
+            return sanitizeForFirestore(it);
+          }
+
           const rawName = (it.itemName || (it as any).name || '').toLowerCase().trim();
           const masterInfo = itemInfoMap.get(rawName);
-          const mfgUnit = (it as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
+          const mfgUnit = masterInfo?.mfgUnitName || (it as any).manufacturingUnitName || 'General Kitchen';
 
           const isItemInUnit =
             isItemUnitAllowed(mfgUnit) &&
@@ -888,25 +1082,22 @@ export default function ManufacturingPortalClient() {
             });
           }
 
-          if (it.isFestivalBox && (it as any).festivalBoxDetails?.itemsBreakdown) {
-            const hasSub = (it as any).festivalBoxDetails.itemsBreakdown.some(
-              (sb: any) => (sb.itemName || '').toLowerCase().trim() === targetName
+          if (isFestivalBoxItem(it)) {
+            const sweets = unpackFestivalBoxSweets(it, fullOrder, itemInfoMap);
+            const hasSub = sweets.some(
+              (sb) => sb.rawName.toLowerCase().trim() === targetName
             );
             if (hasSub) {
-              const completedSweets = Array.isArray((it as any).festivalBoxDetails.completedSweets)
+              const completedSweets = Array.isArray((it as any).festivalBoxDetails?.completedSweets)
                 ? [...(it as any).festivalBoxDetails.completedSweets]
                 : [];
               if (!completedSweets.includes(targetName)) {
                 completedSweets.push(targetName);
               }
               const distinctBreakdownSweets = Array.from(
-                new Set(
-                  ((it as any).festivalBoxDetails?.itemsBreakdown || []).map((sb: any) =>
-                    (sb.itemName || '').toLowerCase().trim()
-                  )
-                )
+                new Set(sweets.map((sb) => sb.rawName.toLowerCase().trim()))
               );
-              const allDone = distinctBreakdownSweets.every((s) => completedSweets.includes(s));
+              const allDone = distinctBreakdownSweets.length > 0 && distinctBreakdownSweets.every((s) => completedSweets.includes(s));
               return sanitizeForFirestore({
                 ...it,
                 mfgStatus: allDone ? 'Moved to Packing' : 'Manufacturing Started',
@@ -976,33 +1167,41 @@ export default function ManufacturingPortalClient() {
               ? (it.pckStatus || 'Pending')
               : (it.pckStatus || 'Pending');
 
+            // If user moved the whole festival box to packing, mark all sub-sweets as completed
+            let fbd = (it as any).festivalBoxDetails;
+            if (isFestivalBoxItem(it) && targetMfgStatus === 'Moved to Packing') {
+              const sweets = unpackFestivalBoxSweets(it, fullOrder, itemInfoMap);
+              fbd = {
+                ...(fbd || {}),
+                completedSweets: sweets.map((s) => s.rawName.toLowerCase().trim()),
+              };
+            }
+
             const updated: any = {
               ...it,
               mfgStatus: newMfgStatus,
               pckStatus: newPckStatus,
+              festivalBoxDetails: fbd,
             };
             return sanitizeForFirestore(updated);
           }
 
-          if (it.isFestivalBox && (it as any).festivalBoxDetails?.itemsBreakdown) {
-            const hasSub = (it as any).festivalBoxDetails.itemsBreakdown.some(
-              (sb: any) => (sb.itemName || '').toLowerCase().trim() === targetName
+          if (isFestivalBoxItem(it)) {
+            const sweets = unpackFestivalBoxSweets(it, fullOrder, itemInfoMap);
+            const hasSub = sweets.some(
+              (sb) => sb.rawName.toLowerCase().trim() === targetName
             );
             if (hasSub) {
-              const completedSweets = Array.isArray((it as any).festivalBoxDetails.completedSweets)
+              const completedSweets = Array.isArray((it as any).festivalBoxDetails?.completedSweets)
                 ? [...(it as any).festivalBoxDetails.completedSweets]
                 : [];
               if (targetMfgStatus === 'Moved to Packing' && !completedSweets.includes(targetName)) {
                 completedSweets.push(targetName);
               }
               const distinctBreakdownSweets = Array.from(
-                new Set(
-                  ((it as any).festivalBoxDetails?.itemsBreakdown || []).map((sb: any) =>
-                    (sb.itemName || '').toLowerCase().trim()
-                  )
-                )
+                new Set(sweets.map((sb) => sb.rawName.toLowerCase().trim()))
               );
-              const allDone = distinctBreakdownSweets.every((s) => completedSweets.includes(s));
+              const allDone = distinctBreakdownSweets.length > 0 && distinctBreakdownSweets.every((s) => completedSweets.includes(s));
               return sanitizeForFirestore({
                 ...it,
                 mfgStatus: allDone ? 'Moved to Packing' : 'Manufacturing Started',
@@ -1071,6 +1270,53 @@ export default function ManufacturingPortalClient() {
         const newPckStatus = isTarget && targetMfgStatus === 'Moved to Packing'
           ? (it.pckStatus || 'Pending')
           : (it.pckStatus || 'Pending');
+
+        if (isTarget) {
+          let fbd = (it as any).festivalBoxDetails;
+          if (isFestivalBoxItem(it) && targetMfgStatus === 'Moved to Packing') {
+            const sweets = unpackFestivalBoxSweets(it, fullOrder, itemInfoMap);
+            fbd = {
+              ...(fbd || {}),
+              completedSweets: sweets.map((s) => s.rawName.toLowerCase().trim()),
+            };
+          }
+
+          const updated: any = {
+            ...it,
+            mfgStatus: newMfgStatus,
+            pckStatus: newPckStatus,
+            festivalBoxDetails: fbd,
+          };
+          return sanitizeForFirestore(updated);
+        }
+
+        if (isFestivalBoxItem(it)) {
+          const sweets = unpackFestivalBoxSweets(it, fullOrder, itemInfoMap);
+          const hasSub = sweets.some(
+            (sb) => sb.rawName.toLowerCase().trim() === targetName
+          );
+          if (hasSub) {
+            const completedSweets = Array.isArray((it as any).festivalBoxDetails?.completedSweets)
+              ? [...(it as any).festivalBoxDetails.completedSweets]
+              : [];
+            if (targetMfgStatus === 'Moved to Packing' && !completedSweets.includes(targetName)) {
+              completedSweets.push(targetName);
+            }
+            const distinctSweets = Array.from(
+              new Set(sweets.map((sb) => sb.rawName.toLowerCase().trim()))
+            );
+            const allDone = distinctSweets.length > 0 && distinctSweets.every((s) => completedSweets.includes(s));
+            return sanitizeForFirestore({
+              ...it,
+              mfgStatus: allDone ? 'Moved to Packing' : 'Manufacturing Started',
+              pckStatus: allDone ? (it.pckStatus || 'Pending') : it.pckStatus,
+              festivalBoxDetails: {
+                ...(it as any).festivalBoxDetails,
+                completedSweets,
+              },
+            });
+          }
+        }
 
         const updated: any = {
           ...it,
@@ -1659,19 +1905,34 @@ export default function ManufacturingPortalClient() {
                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Order Items to Produce</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                         {order.items?.filter((item) => {
-                          if (item.needsManufacturing === false || (item as any).mfgStatus === 'Not Required' || (item as any).mfgStatus === 'Skipped') return false;
-                          const rawItemName = item.itemName || (item as any).name || 'Unknown Item';
-                          const key = rawItemName.toLowerCase().trim();
-                          const masterInfo = itemInfoMap.get(key);
-                          const mfgUnit = (item as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
-                          if (!isItemUnitAllowed(mfgUnit)) return false;
-                          if (selectedUnit !== 'all' && mfgUnit.toLowerCase() !== selectedUnit.toLowerCase()) return false;
-                          return true;
+                          const isBox = isFestivalBoxItem(item);
+                          if (!isBox) {
+                            if (item.needsManufacturing === false || (item as any).mfgStatus === 'Not Required' || (item as any).mfgStatus === 'Skipped') return false;
+                            const rawItemName = item.itemName || (item as any).name || 'Unknown Item';
+                            const key = rawItemName.toLowerCase().trim();
+                            const masterInfo = itemInfoMap.get(key);
+                            const mfgUnit = masterInfo?.mfgUnitName || (item as any).manufacturingUnitName || 'General Kitchen';
+                            if (!isItemUnitAllowed(mfgUnit)) return false;
+                            if (selectedUnit !== 'all' && mfgUnit.toLowerCase() !== selectedUnit.toLowerCase()) return false;
+                            return true;
+                          } else {
+                            const sweets = unpackFestivalBoxSweets(item, order, itemInfoMap);
+                            const hasAllowedSweet = sweets.some((s) => {
+                              if (!isItemUnitAllowed(s.manufacturingUnitName)) return false;
+                              if (selectedUnit !== 'all' && s.manufacturingUnitName.toLowerCase() !== selectedUnit.toLowerCase()) return false;
+                              return true;
+                            });
+                            return hasAllowedSweet;
+                          }
                         }).map((item, idx) => {
+                          const isBox = isFestivalBoxItem(item);
+                          const boxSweets = isBox ? unpackFestivalBoxSweets(item, order, itemInfoMap) : [];
                           const rawItemName = item.itemName || (item as any).name || 'Unknown Item';
                           const key = rawItemName.toLowerCase().trim();
                           const masterInfo = itemInfoMap.get(key);
-                          const mfgUnit = (item as any).manufacturingUnitName || masterInfo?.mfgUnitName || 'General Kitchen';
+                          const mfgUnit = isBox
+                            ? (Array.from(new Set(boxSweets.map((s) => s.manufacturingUnitName))).join(', ') || 'Kitchen')
+                            : (masterInfo?.mfgUnitName || (item as any).manufacturingUnitName || 'General Kitchen');
 
                           const itemMfgStatus = item.mfgStatus || (
                             order.orderStatus === 'Moved to Packing' || order.orderStatus === 'Packing Started' || order.orderStatus === 'Moved to Store'
@@ -1690,31 +1951,61 @@ export default function ManufacturingPortalClient() {
                                 <div className="flex justify-between items-center font-bold text-slate-800">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span>{rawItemName}</span>
-                                    {item.isFestivalBox && (
+                                    {isBox && (
                                       <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-2xs">
                                         🎁 Festival Box
                                       </span>
                                     )}
                                   </div>
-                                  <span className="text-teal-600">{item.quantity} {item.unit || 'kg'}</span>
+                                  <span className="text-teal-600">{item.quantity} {item.unit || (isBox ? 'Boxes' : 'kg')}</span>
                                 </div>
 
-                                {item.isFestivalBox && (item as any).festivalBoxDetails?.itemsBreakdown && (
+                                {isBox && boxSweets.length > 0 && (
                                   <div className="p-2 rounded-lg bg-amber-50/70 border border-amber-200/80 space-y-1">
-                                    <p className="text-[10px] font-bold text-amber-900 uppercase tracking-wide">
-                                      Box Contents to Cook:
-                                    </p>
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-[10px] font-bold text-amber-900 uppercase tracking-wide">
+                                        Box Contents to Cook:
+                                      </p>
+                                      <span className="text-[10px] font-bold text-amber-800">
+                                        {boxSweets.filter((s) => s.isCompleted).length}/{boxSweets.length} Done
+                                      </span>
+                                    </div>
                                     <div className="space-y-0.5">
-                                      {(item as any).festivalBoxDetails.itemsBreakdown.map((sb: any, sbIdx: number) => {
-                                        const isSubDone = ((item as any).festivalBoxDetails?.completedSweets || []).includes((sb.itemName || '').toLowerCase().trim());
+                                      {boxSweets.map((sb, sbIdx) => {
+                                        const isSubDone = sb.isCompleted;
+                                        const isUpdatingSub = updatingId === `${order.id}_${sb.rawName}`;
                                         return (
-                                          <div key={sbIdx} className={`text-[10px] px-2 py-0.5 rounded border flex items-center justify-between ${
-                                            isSubDone ? 'bg-emerald-50 text-emerald-800 border-emerald-200 line-through' : 'bg-white text-slate-700 border-amber-100'
-                                          }`}>
-                                            <span className="font-semibold">{sb.itemName}</span>
-                                            <span className="font-mono font-bold text-amber-900">
-                                              {sb.piecesCount} pcs • {parseFloat(sb.weightKg).toFixed(2)} KG
-                                            </span>
+                                          <div
+                                            key={sbIdx}
+                                            className={`text-[10px] px-2 py-1 rounded border flex items-center justify-between gap-1.5 ${
+                                              isSubDone
+                                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 line-through'
+                                                : 'bg-white text-slate-700 border-amber-100 shadow-2xs'
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-1 min-w-0">
+                                              <span className="font-semibold truncate">{sb.rawName}</span>
+                                              <span className="text-[8px] px-1 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200 shrink-0">
+                                                {sb.manufacturingUnitName}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                              <span className="font-mono font-bold text-amber-900">
+                                                {sb.piecesCount ? `${sb.piecesCount} pcs • ` : ''}{parseFloat(String(sb.quantity)).toFixed(2)} KG
+                                              </span>
+                                              {!isSubDone && !isMovedToPacking && (
+                                                <button
+                                                  type="button"
+                                                  disabled={isUpdatingSub}
+                                                  onClick={() => handleSingleItemMfgStatusUpdate(order.id, sb.rawName, 'Moved to Packing')}
+                                                  className="px-1.5 py-0.2 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold transition-all flex items-center gap-0.5 cursor-pointer disabled:opacity-50"
+                                                  title={`Mark ${sb.rawName} cooked`}
+                                                >
+                                                  {isUpdatingSub ? <Loader2 size={9} className="animate-spin" /> : <Check size={9} />}
+                                                  <span>Done</span>
+                                                </button>
+                                              )}
+                                            </div>
                                           </div>
                                         );
                                       })}
@@ -1722,7 +2013,7 @@ export default function ManufacturingPortalClient() {
                                   </div>
                                 )}
                                 
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center justify-between pt-1">
                                   <p className="text-[10px] text-slate-400 flex items-center gap-1">
                                     <Building2 size={10} className="text-teal-600" /> {mfgUnit}
                                   </p>
@@ -1754,7 +2045,7 @@ export default function ManufacturingPortalClient() {
                                     onClick={() => handleSingleItemMfgStatusUpdate(order.id, item.itemName, 'Moved to Packing')}
                                     className="w-full py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                                   >
-                                    {isUpdatingSingle ? <Loader2 size={11} className="animate-spin" /> : <Package size={11} />} Move to Packing
+                                    {isUpdatingSingle ? <Loader2 size={11} className="animate-spin" /> : <Package size={11} />} {isBox ? 'Move Box to Packing' : 'Move to Packing'}
                                   </button>
                                 </div>
                               ) : (

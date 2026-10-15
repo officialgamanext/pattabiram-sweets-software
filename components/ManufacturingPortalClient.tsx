@@ -194,6 +194,13 @@ export function isFestivalBoxItem(item: any): boolean {
   );
 }
 
+export function roundUpMfgQty(qty: number | string | undefined, unit?: string): number {
+  const num = typeof qty === 'number' ? qty : (parseFloat(String(qty || 0)) || 0);
+  if (num <= 0 || isNaN(num)) return 0;
+  // In manufacturing, if any decimal points exist (e.g. 1.1), round off to next whole number (e.g. 1.1 -> 2)
+  return Math.ceil(num);
+}
+
 export function unpackFestivalBoxSweets(
   item: any,
   order: any,
@@ -232,7 +239,7 @@ export function unpackFestivalBoxSweets(
           manufacturingUnitName: mfgUnitName,
           packingUnitName: pckUnitName,
           category: category,
-          manufacturingDescription: `For ${boxName} (${piecesCount || sb.piecesCount || 0} pcs, ${weightKg.toFixed(2)} KG)${item.manufacturingDescription ? ' | ' + item.manufacturingDescription : ''}`,
+          manufacturingDescription: `For ${boxName} (${piecesCount || sb.piecesCount || 0} pcs, ${roundUpMfgQty(weightKg, 'KG')} KG)${item.manufacturingDescription ? ' | ' + item.manufacturingDescription : ''}`,
           isCompleted,
           piecesCount,
           boxName,
@@ -291,7 +298,7 @@ export function unpackFestivalBoxSweets(
               manufacturingUnitName: mfgUnitName,
               packingUnitName: pckUnitName,
               category: category,
-              manufacturingDescription: `For ${boxName} (${totalPieces} pcs, ${weightKg.toFixed(2)} KG)${item.manufacturingDescription ? ' | ' + item.manufacturingDescription : ''}`,
+              manufacturingDescription: `For ${boxName} (${totalPieces} pcs, ${roundUpMfgQty(weightKg, 'KG')} KG)${item.manufacturingDescription ? ' | ' + item.manufacturingDescription : ''}`,
               isCompleted,
               piecesCount: totalPieces,
               boxName,
@@ -324,7 +331,7 @@ export function unpackFestivalBoxSweets(
           manufacturingUnitName: mfgUnitName,
           packingUnitName: masterInfo?.pckUnitName || 'General Packing',
           category: masterInfo?.category || 'Sweets',
-          manufacturingDescription: `For ${boxName} (${pieces} pcs, ${weightKg.toFixed(2)} KG)`,
+          manufacturingDescription: `For ${boxName} (${pieces} pcs, ${roundUpMfgQty(weightKg, 'KG')} KG)`,
           isCompleted,
           piecesCount: pieces,
           boxName,
@@ -621,7 +628,10 @@ export default function ManufacturingPortalClient() {
       });
     });
 
-    return Array.from(map.values());
+    return Array.from(map.values()).map((alert) => ({
+      ...alert,
+      totalQuantity: roundUpMfgQty(alert.totalQuantity, alert.unit),
+    }));
   }, [orders, itemInfoMap, nextDayDateStr, selectedUnit, isAllUnitsAllowed, assignedMfgUnits]);
 
   // Aggregate items across active orders that are still pending cooking in Manufacturing (mfgStatus !== 'Moved to Packing')
@@ -727,7 +737,13 @@ export default function ManufacturingPortalClient() {
     return Array.from(map.values())
       .map((item) => ({
         ...item,
-        orders: item.orders.sort((a, b) => getSlotOrderWeight(a.slot) - getSlotOrderWeight(b.slot)),
+        totalQuantity: roundUpMfgQty(item.totalQuantity, item.unit),
+        orders: item.orders
+          .map((o) => ({
+            ...o,
+            quantity: roundUpMfgQty(o.quantity, item.unit),
+          }))
+          .sort((a, b) => getSlotOrderWeight(a.slot) - getSlotOrderWeight(b.slot)),
       }))
       .sort((a, b) => {
         const aMin = Math.min(...a.orders.map((o) => getSlotOrderWeight(o.slot)));
@@ -925,13 +941,22 @@ export default function ManufacturingPortalClient() {
     const groups: SlotGroup[] = allSlotNames.map((slotName) => {
       const itemMap = slotMap.get(slotName);
       const itemsList = itemMap
-        ? Array.from(itemMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity)
+        ? Array.from(itemMap.values())
+            .map((it) => ({
+              ...it,
+              totalQuantity: roundUpMfgQty(it.totalQuantity, it.unit),
+              orders: it.orders.map((o) => ({
+                ...o,
+                quantity: roundUpMfgQty(o.quantity, it.unit),
+              })),
+            }))
+            .sort((a, b) => b.totalQuantity - a.totalQuantity)
         : [];
       const totalQty = itemsList.reduce((sum, it) => sum + it.totalQuantity, 0);
       return {
         slotName,
         ordersCount: slotOrdersSet.get(slotName)?.size || 0,
-        totalQuantity: totalQty,
+        totalQuantity: roundUpMfgQty(totalQty),
         items: itemsList,
       };
     });
@@ -1957,7 +1982,7 @@ export default function ManufacturingPortalClient() {
                                       </span>
                                     )}
                                   </div>
-                                  <span className="text-teal-600">{item.quantity} {item.unit || (isBox ? 'Boxes' : 'kg')}</span>
+                                  <span className="text-teal-600">{roundUpMfgQty(item.quantity, item.unit)} {item.unit || (isBox ? 'Boxes' : 'kg')}</span>
                                 </div>
 
                                 {isBox && boxSweets.length > 0 && (
@@ -1991,7 +2016,7 @@ export default function ManufacturingPortalClient() {
                                             </div>
                                             <div className="flex items-center gap-1.5 shrink-0">
                                               <span className="font-mono font-bold text-amber-900">
-                                                {sb.piecesCount ? `${sb.piecesCount} pcs • ` : ''}{parseFloat(String(sb.quantity)).toFixed(2)} KG
+                                                {sb.piecesCount ? `${sb.piecesCount} pcs • ` : ''}{roundUpMfgQty(sb.quantity, 'KG')} KG
                                               </span>
                                               {!isSubDone && !isMovedToPacking && (
                                                 <button

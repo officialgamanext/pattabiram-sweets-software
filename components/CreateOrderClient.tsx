@@ -1586,9 +1586,37 @@ export default function CreateOrderClient() {
       basePrice: fbd?.boxPrice !== undefined ? fbd.boxPrice : (matchedTemplate?.basePrice || 20),
     };
 
+    const fills: Record<number, any> = {};
+    if (fbd?.compartments) {
+      Object.entries(fbd.compartments).forEach(([k, comp]: [string, any]) => {
+        const sIdx = Number(k);
+        let pPrice = comp.piecePrice || 0;
+        let pKg = comp.piecesPerKg || 20;
+        let img = comp.imageUrl || '';
+        if (!pPrice || pPrice === 0 || !img) {
+          const match = itemsMaster.find(
+            (m) => m.name.toLowerCase() === (comp.itemName || '').toLowerCase() || m.id === comp.itemId
+          );
+          if (match) {
+            if (!pPrice || pPrice === 0) {
+              pPrice = match.piecePrice || Math.round((match.price / (match.piecesPerKg || 20)) * 100) / 100;
+            }
+            if (!pKg) pKg = match.piecesPerKg || 20;
+            if (!img) img = match.imageUrl || '';
+          }
+        }
+        fills[sIdx] = {
+          ...comp,
+          piecePrice: pPrice,
+          piecesPerKg: pKg,
+          imageUrl: img,
+        };
+      });
+    }
+
     setEditingBoxLineId(item.lineId || item.itemId);
     setSelectedBoxForConfig(boxRecord);
-    setBoxCompartmentFills(fbd?.compartments ? { ...fbd.compartments } : {});
+    setBoxCompartmentFills(fills);
     setBoxOrderCount(item.quantity || fbd?.boxCount || 1);
     setBoxHasBoxPrice(Boolean(fbd?.hasBoxPrice));
     setBoxBoxPrice(fbd?.boxPrice !== undefined ? fbd.boxPrice : (matchedTemplate?.price || 20));
@@ -1597,7 +1625,7 @@ export default function CreateOrderClient() {
     setBoxHasShrink(Boolean(fbd?.hasShrink));
     setBoxShrinkPrice(fbd?.shrinkPrice !== undefined ? fbd.shrinkPrice : 10);
     setConfiguringSlotIndex(null);
-  }, [festivalBoxes]);
+  }, [festivalBoxes, itemsMaster]);
 
   const handleSelectSweetForSlot = useCallback((sweet: ItemMasterOption, pieces: number) => {
     if (configuringSlotIndex === null) return;
@@ -4752,7 +4780,7 @@ export default function CreateOrderClient() {
       {/* ── MODAL: FESTIVAL BOX CONFIGURATOR ──────────────────────────── */}
       {selectedBoxForConfig && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl border border-slate-100 space-y-4 my-6 max-h-[92vh] flex flex-col">
+          <div className="bg-white rounded-3xl max-w-6xl w-full p-4 sm:p-6 shadow-2xl border border-slate-100 space-y-4 my-4 max-h-[94vh] flex flex-col">
             
             {/* Header */}
             <div className="flex items-start justify-between border-b border-slate-100 pb-3 shrink-0">
@@ -4808,23 +4836,37 @@ export default function CreateOrderClient() {
                 </div>
 
                 {/* The Big Luxury Box Frame */}
-                <div className="p-3 sm:p-4 rounded-3xl bg-gradient-to-br from-amber-800 via-amber-900 to-amber-950 border-3 border-amber-500 shadow-xl relative">
+                <div className="p-3 sm:p-4 rounded-3xl bg-gradient-to-br from-amber-800 via-amber-900 to-amber-950 border-3 border-amber-500 shadow-xl relative overflow-hidden">
                   {/* Outer Gold Inlay */}
                   <div className="absolute inset-1 rounded-[22px] border border-amber-400/40 pointer-events-none" />
 
+                  {/* Column Headers */}
+                  <div
+                    className="grid gap-2 mb-2 relative z-10"
+                    style={{ gridTemplateColumns: `repeat(${selectedBoxForConfig.cols}, minmax(0, 1fr))` }}
+                  >
+                    {Array.from({ length: selectedBoxForConfig.cols }).map((_, cIdx) => (
+                      <div
+                        key={cIdx}
+                        className="bg-amber-100/95 text-amber-950 font-black text-[10px] sm:text-[11px] py-1 px-1 rounded-lg text-center uppercase tracking-wider shadow-2xs border border-amber-300 truncate"
+                      >
+                        Col {cIdx + 1}
+                      </div>
+                    ))}
+                  </div>
+
                   {/* Inner Box Tray */}
                   <div
-                    className="bg-[#faf6ee] rounded-2xl p-2.5 sm:p-3 shadow-inner"
+                    className="bg-[#faf6ee] rounded-2xl p-2 sm:p-3 shadow-inner relative z-10"
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: `repeat(${selectedBoxForConfig.cols}, minmax(0, 1fr))`,
-                      gridTemplateRows: `repeat(${selectedBoxForConfig.rows}, minmax(0, 1fr))`,
+                      gridTemplateColumns: `repeat(${selectedBoxForConfig.cols}, minmax(0, 1fr))` ,
                       gap: '8px',
-                      aspectRatio: `${selectedBoxForConfig.cols} / ${selectedBoxForConfig.rows}`,
-                      minHeight: '260px',
                     }}
                   >
                     {Array.from({ length: selectedBoxForConfig.rows * selectedBoxForConfig.cols }).map((_, slotIdx) => {
+                      const rIdx = Math.floor(slotIdx / selectedBoxForConfig.cols);
+                      const cIdx = slotIdx % selectedBoxForConfig.cols;
                       const fill = boxCompartmentFills[slotIdx];
 
                       return (
@@ -4836,24 +4878,29 @@ export default function CreateOrderClient() {
                             setSweetCategoryInBox('All');
                             setPiecesForSlot(fill?.pieces || 1);
                           }}
-                          className={`relative rounded-xl transition-all cursor-pointer flex flex-col justify-between p-1.5 sm:p-2 text-center group ${
+                          className={`relative rounded-xl transition-all cursor-pointer flex flex-col justify-between p-1.5 sm:p-2 text-center group min-h-[120px] ${
                             fill
-                              ? 'bg-white border-2 border-amber-400 shadow-2xs hover:shadow-md'
+                              ? 'bg-white border-2 border-amber-400 shadow-2xs hover:shadow-md hover:border-[#02626D]'
                               : 'bg-white/80 border-2 border-dashed border-amber-300/80 hover:bg-amber-50/70 hover:border-amber-500'
                           }`}
                         >
                           {fill ? (
-                            <div className="w-full h-full flex flex-col items-center justify-between">
+                            <div className="w-full h-full flex flex-col justify-between items-center">
                               {/* Top Bar with Slot # & Delete */}
-                              <div className="w-full flex items-center justify-between text-[8px] text-slate-400">
-                                <span className="font-mono font-bold text-amber-800">#{slotIdx + 1}</span>
+                              <div className="w-full flex items-center justify-between text-[8px] text-slate-400 pb-0.5 border-b border-amber-100/60">
+                                <span className="font-mono font-bold text-amber-800 bg-amber-50 px-1 rounded">
+                                  #{slotIdx + 1}
+                                </span>
+                                <span className="text-[7.5px] font-mono text-slate-400">
+                                  R{rIdx + 1}C{cIdx + 1}
+                                </span>
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleRemoveSweetFromSlot(slotIdx);
                                   }}
-                                  className="w-4 h-4 rounded-full bg-slate-100 hover:bg-red-500 hover:text-white text-slate-400 flex items-center justify-center transition-colors"
+                                  className="w-4 h-4 rounded-full bg-slate-100 hover:bg-red-500 hover:text-white text-slate-400 flex items-center justify-center transition-colors cursor-pointer"
                                   title="Remove sweet"
                                 >
                                   <X size={9} />
@@ -4862,7 +4909,7 @@ export default function CreateOrderClient() {
 
                               {/* Sweet Image or Emoji */}
                               {fill.imageUrl ? (
-                                <div className="relative w-9 h-9 sm:w-11 sm:h-11 rounded-lg overflow-hidden border border-slate-100 shadow-2xs shrink-0 my-0.5">
+                                <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-lg overflow-hidden border border-slate-100 shadow-2xs shrink-0 my-0.5">
                                   <img
                                     src={fill.imageUrl}
                                     alt={fill.itemName}
@@ -4870,57 +4917,57 @@ export default function CreateOrderClient() {
                                   />
                                 </div>
                               ) : (
-                                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-900 flex items-center justify-center text-sm font-bold my-0.5">
+                                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-100 text-amber-900 flex items-center justify-center text-xs font-bold my-0.5">
                                   🍬
                                 </div>
                               )}
 
                               {/* Sweet Name & Price */}
                               <div className="w-full min-w-0">
-                                <p className="text-[10px] sm:text-[11px] font-bold text-slate-900 truncate" title={fill.itemName}>
+                                <p className="text-[10px] sm:text-[11px] font-bold text-slate-900 truncate leading-tight" title={fill.itemName}>
                                   {fill.itemName}
                                 </p>
                                 <p className="text-[8.5px] font-semibold text-teal-700">
-                                  ₹{fill.piecePrice}/pc
+                                  {fill.piecePrice ? `₹${fill.piecePrice}/pc` : ''}
                                 </p>
                               </div>
 
                               {/* Multiple Pieces Stepper */}
                               <div
                                 onClick={(e) => e.stopPropagation()}
-                                className="flex items-center justify-between bg-amber-50/90 rounded-lg p-0.5 border border-amber-200 mt-1 w-full max-w-[100px]"
+                                className="flex items-center justify-between bg-amber-50 rounded-lg p-0.5 border border-amber-200 mt-1 w-full"
                               >
                                 <button
                                   type="button"
                                   onClick={() => handleUpdateSlotPieces(slotIdx, -1)}
-                                  className="w-4 h-4 rounded bg-white hover:bg-amber-200 text-amber-900 font-bold text-xs flex items-center justify-center shadow-2xs cursor-pointer"
+                                  className="w-4 h-4 rounded bg-white hover:bg-amber-200 text-amber-900 font-bold text-xs flex items-center justify-center shadow-2xs cursor-pointer shrink-0"
                                 >
                                   -
                                 </button>
-                                <span className="text-[9.5px] font-extrabold text-amber-950 font-mono">
+                                <span className="text-[9px] font-extrabold text-amber-950 font-mono px-0.5 truncate">
                                   {fill.pieces} pc{fill.pieces > 1 ? 's' : ''}
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => handleUpdateSlotPieces(slotIdx, 1)}
-                                  className="w-4 h-4 rounded bg-white hover:bg-amber-200 text-amber-900 font-bold text-xs flex items-center justify-center shadow-2xs cursor-pointer"
+                                  className="w-4 h-4 rounded bg-white hover:bg-amber-200 text-amber-900 font-bold text-xs flex items-center justify-center shadow-2xs cursor-pointer shrink-0"
                                 >
                                   +
                                 </button>
                               </div>
 
                               {/* Calculated Weight for Slot */}
-                              <span className="text-[8px] font-mono text-slate-400 mt-0.5">
+                              <span className="text-[7.5px] sm:text-[8px] font-mono text-slate-400 mt-0.5 block">
                                 {((fill.pieces / (fill.piecesPerKg || 20))).toFixed(3)} KG
                               </span>
                             </div>
                           ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center py-4 text-amber-900/50 group-hover:text-amber-900">
-                              <div className="w-7 h-7 rounded-full bg-amber-100/70 group-hover:bg-amber-200 flex items-center justify-center transition-colors mb-1">
-                                <Plus size={14} />
+                            <div className="w-full h-full min-h-[100px] flex flex-col items-center justify-center py-2 text-amber-900/50 group-hover:text-amber-900">
+                              <div className="w-6 h-6 rounded-full bg-amber-100/70 group-hover:bg-amber-200 flex items-center justify-center transition-colors mb-1">
+                                <Plus size={12} />
                               </div>
-                              <span className="text-[9.5px] font-bold font-mono">Slot {slotIdx + 1}</span>
-                              <span className="text-[8.5px] text-slate-400">Click to choose sweet</span>
+                              <span className="text-[9px] font-bold font-mono">Slot {slotIdx + 1}</span>
+                              <span className="text-[7.5px] text-slate-400">Click to add</span>
                             </div>
                           )}
                         </div>

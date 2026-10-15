@@ -123,6 +123,19 @@ export interface OrderItemLine {
   festivalBoxDetails?: any;
 }
 
+export function isFestivalBoxItem(item: OrderItemLine | any): boolean {
+  if (!item) return false;
+  return Boolean(
+    item.isFestivalBox ||
+    item.category === 'Festival Boxes' ||
+    (typeof item.itemId === 'string' && item.itemId.startsWith('fbox_')) ||
+    (typeof item.itemName === 'string' && /🎁|Festival Box/i.test(item.itemName)) ||
+    (typeof item.manufacturingDescription === 'string' && item.manufacturingDescription.includes('[Festival Box:')) ||
+    (typeof item.packingDescription === 'string' && (item.packingDescription.includes('grid)') || item.packingDescription.includes('Pack in'))) ||
+    (typeof item.notes === 'string' && (item.notes.includes('[Festival Box:') || item.notes.includes('grid)')))
+  );
+}
+
 export interface ItemMasterOption {
   id: string;
   code: string;
@@ -511,6 +524,8 @@ export default function CreateOrderClient() {
   const [sweetCategoryInBox, setSweetCategoryInBox] = useState('All');
   const [piecesForSlot, setPiecesForSlot] = useState<number>(1);
   const [viewingBoxPreviewItem, setViewingBoxPreviewItem] = useState<OrderItemLine | null>(null);
+  const [editingBoxLineId, setEditingBoxLineId] = useState<string | null>(null);
+  const [showAddBoxTemplates, setShowAddBoxTemplates] = useState<boolean>(false);
 
   // Product Catalog Grid Search & Category Filters
   const [productGridSearch, setProductGridSearch] = useState('');
@@ -641,35 +656,151 @@ export default function CreateOrderClient() {
         }
 
         if (Array.isArray(data.items)) {
-          setOrderItems(
-            data.items.map((it: any, index: number) => {
-              const qty = typeof it.quantity === 'number' ? it.quantity : (parseFloat(it.quantity || it.qty) || 1);
-              const price = typeof it.unitPrice === 'number' ? it.unitPrice : (parseFloat(it.price || it.unitPrice || it.rate) || 0);
-              const total = typeof it.lineTotal === 'number' ? it.lineTotal : (parseFloat(it.totalPrice || it.lineTotal || it.amount || it.total) || (qty * price));
-              return {
-                lineId: it.lineId || `line-${index}-${Date.now()}`,
-                itemId: it.itemId || it.id || '',
-                itemCode: it.itemCode || it.code || '',
-                itemName: it.itemName || it.name || '',
-                category: it.category || 'General',
-                unit: it.unit || 'KG',
-                imageUrl: it.imageUrl || '',
-                quantity: qty,
-                unitPrice: price,
-                lineTotal: total,
-                hasPacket: Boolean(it.hasPacket),
-                packetCharge: it.hasPacket ? 5 : (it.packetCharge || 0),
-                manufacturingDescription: it.manufacturingDescription || it.mfgDesc || it.notes || '',
-                packingDescription: it.packingDescription || it.pckDesc || it.packingInstructions || '',
-                needsManufacturing: it.needsManufacturing !== undefined ? it.needsManufacturing : true,
-                mfgStatus: it.mfgStatus || (it.needsManufacturing === false ? 'Not Required' : 'Pending'),
-                pckStatus: it.pckStatus || 'Pending',
-                isFestivalBox: Boolean(it.isFestivalBox),
-                festivalBoxName: it.festivalBoxName || '',
-                festivalBoxDetails: it.festivalBoxDetails || null,
-              };
-            })
-          );
+          const loadedOrderItems = data.items.map((it: any, index: number) => {
+            const qty = typeof it.quantity === 'number' ? it.quantity : (parseFloat(it.quantity || it.qty) || 1);
+            const price = typeof it.unitPrice === 'number' ? it.unitPrice : (parseFloat(it.price || it.unitPrice || it.rate) || 0);
+            const total = typeof it.lineTotal === 'number' ? it.lineTotal : (parseFloat(it.totalPrice || it.lineTotal || it.amount || it.total) || (qty * price));
+            
+            const isFest = isFestivalBoxItem(it);
+            let fbd = it.festivalBoxDetails ? { ...it.festivalBoxDetails } : null;
+            let fBoxName = it.festivalBoxName || '';
+
+            if (isFest) {
+              if (!fBoxName) {
+                const cleanedName = (it.itemName || '').replace(/^🎁\s*/, '').replace(/\s*\(\d+.*Boxes?\)$/i, '').trim();
+                fBoxName = cleanedName || 'Festival Box';
+              }
+
+              let extractedRows = 2;
+              let extractedCols = 3;
+              if (it.packingDescription) {
+                const matchGrid = it.packingDescription.match(/(\d+)\s*x\s*(\d+)\s*grid/i);
+                if (matchGrid) {
+                  extractedRows = parseInt(matchGrid[1], 10) || 2;
+                  extractedCols = parseInt(matchGrid[2], 10) || 3;
+                }
+              }
+
+              if (!fbd) {
+                fbd = {
+                  boxName: fBoxName,
+                  boxCode: it.itemCode || 'FBX',
+                  rows: extractedRows,
+                  cols: extractedCols,
+                  boxCount: qty,
+                  compartments: {},
+                  itemsBreakdown: [],
+                };
+              } else {
+                if (!fbd.rows) fbd.rows = extractedRows;
+                if (!fbd.cols) fbd.cols = extractedCols;
+                if (!fbd.boxName) fbd.boxName = fBoxName;
+                if (!fbd.compartments) fbd.compartments = {};
+              }
+
+              if (Object.keys(fbd.compartments || {}).length === 0) {
+                if (Array.isArray(fbd.itemsBreakdown) && fbd.itemsBreakdown.length > 0) {
+                  fbd.itemsBreakdown.forEach((sb: any, idx: number) => {
+                    fbd.compartments[idx] = {
+                      itemId: sb.itemId || `sweet-${idx}`,
+                      itemCode: sb.itemCode || '',
+                      itemName: sb.itemName || '',
+                      imageUrl: sb.imageUrl || '',
+                      category: sb.category || 'Sweets',
+                      unit: sb.unit || 'Piece',
+                      piecePrice: sb.piecePrice || 0,
+                      piecesPerKg: sb.piecesPerKg || 20,
+                      pieces: sb.piecesPerBox || sb.piecesCount || 1,
+                      manufacturingUnitName: sb.manufacturingUnitName || '',
+                      packingUnitName: sb.packingUnitName || '',
+                    };
+                  });
+                } else if (
+                  (it.manufacturingDescription && it.manufacturingDescription.includes('[Festival Box:')) ||
+                  (it.notes && it.notes.includes('[Festival Box:'))
+                ) {
+                  const rawDesc = (it.manufacturingDescription || it.notes || '').replace(/^\[Festival Box:[^\]]*\]\s*/i, '').trim();
+                  const parts = rawDesc.split(',').map((s: string) => s.trim()).filter(Boolean);
+                  const itemsBrk: any[] = [];
+                  parts.forEach((part: string, idx: number) => {
+                    let sweetName = part.replace(/:\s*\d+.*$/, '').trim();
+                    let pieceCount = 1;
+                    const digitMatch = sweetName.match(/^(\d+)\s*(.*)$/);
+                    if (digitMatch) {
+                      pieceCount = parseInt(digitMatch[1], 10) || 1;
+                      sweetName = digitMatch[2].trim();
+                    }
+                    itemsBrk.push({
+                      itemId: `sweet-${idx}`,
+                      itemCode: '',
+                      itemName: sweetName,
+                      piecesPerBox: pieceCount,
+                      totalPieces: pieceCount * qty,
+                      weightKg: Math.round((pieceCount / 20) * qty * 1000) / 1000,
+                    });
+
+                    // If single sweet with multiple pieces (e.g. 3 pieces in a 6-compartment box), fill the first N slots
+                    if (parts.length === 1 && pieceCount > 1 && pieceCount <= extractedRows * extractedCols) {
+                      for (let sIdx = 0; sIdx < pieceCount; sIdx++) {
+                        fbd.compartments[sIdx] = {
+                          itemId: `sweet-${sIdx}`,
+                          itemCode: '',
+                          itemName: sweetName,
+                          unit: 'Piece',
+                          piecePrice: 0,
+                          piecesPerKg: 20,
+                          pieces: 1,
+                        };
+                      }
+                    } else {
+                      fbd.compartments[idx] = {
+                        itemId: `sweet-${idx}`,
+                        itemCode: '',
+                        itemName: sweetName,
+                        unit: 'Piece',
+                        piecePrice: 0,
+                        piecesPerKg: 20,
+                        pieces: pieceCount,
+                      };
+                    }
+                  });
+                  if (!fbd.itemsBreakdown || fbd.itemsBreakdown.length === 0) {
+                    fbd.itemsBreakdown = itemsBrk;
+                  }
+                  if (!fbd.totalPiecesPerBox) {
+                    fbd.totalPiecesPerBox = itemsBrk.reduce((acc, itm) => acc + (itm.piecesPerBox || 1), 0);
+                  }
+                }
+              }
+            }
+
+            return {
+              lineId: it.lineId || `line-${index}-${Date.now()}`,
+              itemId: it.itemId || it.id || '',
+              itemCode: it.itemCode || it.code || '',
+              itemName: it.itemName || it.name || '',
+              category: isFest ? 'Festival Boxes' : (it.category || 'General'),
+              unit: it.unit || (isFest ? 'Box' : 'KG'),
+              imageUrl: it.imageUrl || '',
+              quantity: qty,
+              unitPrice: price,
+              lineTotal: total,
+              hasPacket: Boolean(it.hasPacket),
+              packetCharge: it.hasPacket ? 5 : (it.packetCharge || 0),
+              manufacturingDescription: it.manufacturingDescription || it.mfgDesc || it.notes || '',
+              packingDescription: it.packingDescription || it.pckDesc || it.packingInstructions || '',
+              needsManufacturing: it.needsManufacturing !== undefined ? it.needsManufacturing : true,
+              mfgStatus: it.mfgStatus || (it.needsManufacturing === false ? 'Not Required' : 'Pending'),
+              pckStatus: it.pckStatus || 'Pending',
+              isFestivalBox: isFest,
+              festivalBoxName: fBoxName,
+              festivalBoxDetails: fbd,
+            };
+          });
+          setOrderItems(loadedOrderItems);
+          if (loadedOrderItems.some((it) => isFestivalBoxItem(it))) {
+            setIsFestivalAccordionOpen(true);
+          }
         }
 
         setDiscountAmount(data.discountAmount !== undefined ? String(data.discountAmount) : '');
@@ -1351,10 +1482,44 @@ export default function CreateOrderClient() {
     setOrderItems((prev) =>
       prev.map((item) => {
         if (item.itemId !== itemId) return item;
+        const newTotal = Math.round(safeQty * item.unitPrice * 100) / 100;
+        if (isFestivalBoxItem(item) && item.festivalBoxDetails) {
+          const fbd = item.festivalBoxDetails;
+          const piecesPerBox = fbd.totalPiecesPerBox || 0;
+          const weightPerBox = fbd.weightPerBoxKg || 0;
+          const updatedBreakdown = (fbd.itemsBreakdown || []).map((it: any) => {
+            const pCount = it.piecesPerBox || it.piecesCount || 1;
+            const pKg = it.piecesPerKg || 20;
+            const totPieces = pCount * safeQty;
+            return {
+              ...it,
+              totalPieces: totPieces,
+              weightKg: Math.round((totPieces / pKg) * 1000) / 1000,
+            };
+          });
+          const mfgSummary = updatedBreakdown
+            .map((it: any) => `${it.itemName}: ${it.totalPieces} pcs (${it.weightKg.toFixed(3)} KG)`)
+            .join(', ');
+
+          return {
+            ...item,
+            quantity: safeQty,
+            lineTotal: newTotal,
+            itemName: `🎁 ${fbd.boxName} (${safeQty} ${safeQty === 1 ? 'Box' : 'Boxes'})`,
+            manufacturingDescription: `[Festival Box: ${fbd.boxName}] ${mfgSummary}`,
+            festivalBoxDetails: {
+              ...fbd,
+              boxCount: safeQty,
+              totalPiecesAllBoxes: piecesPerBox * safeQty,
+              totalWeightAllBoxesKg: Math.round(weightPerBox * safeQty * 1000) / 1000,
+              itemsBreakdown: updatedBreakdown,
+            },
+          };
+        }
         return {
           ...item,
           quantity: safeQty,
-          lineTotal: Math.round(safeQty * item.unitPrice * 100) / 100,
+          lineTotal: newTotal,
         };
       })
     );
@@ -1380,6 +1545,7 @@ export default function CreateOrderClient() {
 
   // ── Festival Box Configurator Handlers ──
   const handleOpenBoxConfigurator = useCallback((box: FestivalBoxRecord) => {
+    setEditingBoxLineId(null);
     setSelectedBoxForConfig(box);
     setBoxCompartmentFills({});
     setBoxOrderCount('');
@@ -1391,6 +1557,47 @@ export default function CreateOrderClient() {
     setBoxShrinkPrice(10);
     setConfiguringSlotIndex(null);
   }, []);
+
+  const handleEditFestivalBox = useCallback((item: OrderItemLine) => {
+    const fbd = item.festivalBoxDetails;
+    const cleanName = (fbd?.boxName || item.festivalBoxName || item.itemName).replace(/^🎁\s*/, '').replace(/\s*\(\d+.*Boxes?\)$/i, '').trim();
+    const matchedTemplate = festivalBoxes.find(
+      (b) => b.id === fbd?.boxId || b.code === item.itemCode || b.name.toLowerCase() === cleanName.toLowerCase()
+    );
+
+    let rows = fbd?.rows || matchedTemplate?.rows || 2;
+    let cols = fbd?.cols || matchedTemplate?.cols || 3;
+    if (item.packingDescription) {
+      const matchGrid = item.packingDescription.match(/(\d+)\s*x\s*(\d+)\s*grid/i);
+      if (matchGrid) {
+        rows = parseInt(matchGrid[1], 10) || rows;
+        cols = parseInt(matchGrid[2], 10) || cols;
+      }
+    }
+
+    const boxRecord: FestivalBoxRecord = {
+      id: fbd?.boxId || item.itemId.replace('fbox_', '') || (matchedTemplate ? matchedTemplate.id : 'fbx-custom'),
+      code: fbd?.boxCode || item.itemCode || (matchedTemplate ? matchedTemplate.code : 'FBX-001'),
+      name: cleanName,
+      rows: rows,
+      cols: cols,
+      status: 'Active',
+      price: fbd?.boxPrice !== undefined ? fbd.boxPrice : (matchedTemplate?.price || matchedTemplate?.basePrice || 20),
+      basePrice: fbd?.boxPrice !== undefined ? fbd.boxPrice : (matchedTemplate?.basePrice || 20),
+    };
+
+    setEditingBoxLineId(item.lineId || item.itemId);
+    setSelectedBoxForConfig(boxRecord);
+    setBoxCompartmentFills(fbd?.compartments ? { ...fbd.compartments } : {});
+    setBoxOrderCount(item.quantity || fbd?.boxCount || 1);
+    setBoxHasBoxPrice(Boolean(fbd?.hasBoxPrice));
+    setBoxBoxPrice(fbd?.boxPrice !== undefined ? fbd.boxPrice : (matchedTemplate?.price || 20));
+    setBoxHasSticker(Boolean(fbd?.hasSticker));
+    setBoxStickerPrice(fbd?.stickerPrice !== undefined ? fbd.stickerPrice : 10);
+    setBoxHasShrink(Boolean(fbd?.hasShrink));
+    setBoxShrinkPrice(fbd?.shrinkPrice !== undefined ? fbd.shrinkPrice : 10);
+    setConfiguringSlotIndex(null);
+  }, [festivalBoxes]);
 
   const handleSelectSweetForSlot = useCallback((sweet: ItemMasterOption, pieces: number) => {
     if (configuringSlotIndex === null) return;
@@ -1486,6 +1693,7 @@ export default function CreateOrderClient() {
         category: f.category || 'Sweets',
         unit: f.unit || 'KG',
         piecesPerBox: f.pieces,
+        piecesCount: f.pieces,
         totalPieces: totalPieces,
         piecesPerKg: pKg,
         weightKg: Math.round(weightKg * 1000) / 1000,
@@ -1500,7 +1708,7 @@ export default function CreateOrderClient() {
       .join(', ');
 
     const newLine: OrderItemLine = {
-      lineId: `fbox-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      lineId: editingBoxLineId || `fbox-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       itemId: `fbox_${selectedBoxForConfig.id}`,
       itemCode: selectedBoxForConfig.code || 'FBX',
       itemName: `🎁 ${selectedBoxForConfig.name} (${boxCount} ${boxCount === 1 ? 'Box' : 'Boxes'})`,
@@ -1540,15 +1748,39 @@ export default function CreateOrderClient() {
       pckStatus: 'Pending',
     };
 
-    setOrderItems((prev) => [...prev, newLine]);
-    toast.success('Box Added', `Added ${boxCount}x ${selectedBoxForConfig.name} (Total: ₹${boxLineTotal})`);
+    if (editingBoxLineId) {
+      setOrderItems((prev) =>
+        prev.map((it) =>
+          it.lineId === editingBoxLineId || it.itemId === editingBoxLineId
+            ? { ...newLine, lineId: it.lineId || editingBoxLineId }
+            : it
+        )
+      );
+      toast.success('Box Updated', `Updated ${boxCount}x ${selectedBoxForConfig.name} in order.`);
+    } else {
+      setOrderItems((prev) => [...prev, newLine]);
+      toast.success('Box Added', `Added ${boxCount}x ${selectedBoxForConfig.name} (Total: ₹${boxLineTotal})`);
+    }
+
     setSelectedBoxForConfig(null);
+    setEditingBoxLineId(null);
     setBoxCompartmentFills({});
     setBoxOrderCount('');
     setBoxHasBoxPrice(false);
     setBoxHasSticker(false);
     setBoxHasShrink(false);
-  }, [selectedBoxForConfig, boxCompartmentFills, boxOrderCount, boxHasSticker, boxStickerPrice, boxHasShrink, boxShrinkPrice]);
+  }, [
+    selectedBoxForConfig,
+    boxCompartmentFills,
+    boxOrderCount,
+    boxHasBoxPrice,
+    boxBoxPrice,
+    boxHasSticker,
+    boxStickerPrice,
+    boxHasShrink,
+    boxShrinkPrice,
+    editingBoxLineId,
+  ]);
 
   // Box Image File Upload
   const handleBoxImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1918,6 +2150,9 @@ export default function CreateOrderClient() {
             needsManufacturing: item.needsManufacturing !== undefined ? item.needsManufacturing : true,
             mfgStatus: item.mfgStatus || (item.needsManufacturing === false ? 'Not Required' : 'Pending'),
             pckStatus: item.pckStatus || 'Pending',
+            isFestivalBox: Boolean(isFestivalBoxItem(item)),
+            festivalBoxName: item.festivalBoxName || '',
+            festivalBoxDetails: item.festivalBoxDetails || null,
           })),
           totalItems: validItems.length,
           subTotal: taxCalculation.taxType === 'inclusive' ? taxCalculation.taxableAmount : subTotal,
@@ -2172,7 +2407,7 @@ export default function CreateOrderClient() {
         note: mfgNote,
         manufacturingDescription: mfgNote,
         packingDescription: pckNote,
-        isFestivalBox: it.isFestivalBox,
+        isFestivalBox: isFestivalBoxItem(it),
         festivalBoxDetails: it.festivalBoxDetails,
       };
     });
@@ -2659,6 +2894,11 @@ export default function CreateOrderClient() {
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-[#02626D] border border-teal-200">
                         {festivalBoxes.length} Box Templates
                       </span>
+                      {orderItems.some((it) => isFestivalBoxItem(it)) && (
+                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs animate-pulse">
+                          {orderItems.filter((it) => isFestivalBoxItem(it)).length} Selected in Order
+                        </span>
+                      )}
                     </div>
                     <p className="text-[10.5px] text-slate-500 mt-0.5">
                       Click to choose a gift box, configure sweets in each compartment with multiple pieces, and auto-compute manufacturing weight
@@ -2678,87 +2918,502 @@ export default function CreateOrderClient() {
 
               {/* Accordion Body */}
               {isFestivalAccordionOpen && (
-                <div className="p-3.5 sm:p-4 border-t border-amber-100 bg-[#fdfcf9]/80 space-y-3">
-                  {festivalBoxes.length === 0 ? (
-                    <div className="py-6 text-center text-slate-400 bg-white rounded-xl border border-dashed border-amber-200 p-4">
-                      <Gift size={24} className="mx-auto mb-1 text-amber-400" />
-                      <p className="text-xs font-bold text-slate-700">No Festival Boxes Created Yet</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        Create box templates on the Festival Boxes page to configure rows and columns.
-                      </p>
-                      <Link
-                        href="/festival-boxes"
-                        className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#02626D] text-white text-xs font-bold hover:bg-[#014d56] transition-colors"
-                      >
-                        <Plus size={13} />
-                        <span>Go to Festival Boxes Setup</span>
-                      </Link>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                      {festivalBoxes.map((box) => {
-                        const rows = box.rows || 3;
-                        const cols = box.cols || 3;
-                        const totalCells = rows * cols;
+                <div className="p-3.5 sm:p-4 border-t border-amber-100 bg-[#fdfcf9]/80 space-y-4">
+                  {(() => {
+                    const configuredBoxes = orderItems.filter((it) => isFestivalBoxItem(it));
+                    const hasConfiguredBoxes = configuredBoxes.length > 0;
 
-                        return (
-                          <div
-                            key={box.id}
-                            onClick={() => handleOpenBoxConfigurator(box)}
-                            className="bg-white rounded-xl p-3 border border-amber-200 hover:border-amber-400 shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-2.5 group"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <span className="text-[9.5px] font-mono font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                                  {box.code}
-                                </span>
-                                <h4 className="text-xs font-bold text-slate-900 group-hover:text-[#02626D] transition-colors mt-1 line-clamp-1">
-                                  {box.name}
-                                </h4>
+                    return (
+                      <>
+                        {/* ── 1. SELECTED FESTIVAL BOXES IN THIS ORDER (DISPLAY ONLY SELECTED BOXES) ── */}
+                        {hasConfiguredBoxes && (
+                          <div className="space-y-4 pb-4 border-b border-amber-200/80">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-lg bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                                  <Check size={13} strokeWidth={3} />
+                                </div>
+                                <div>
+                                  <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                                    <span>Selected Festive Boxes in this Order</span>
+                                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                      {configuredBoxes.length} Configured
+                                    </span>
+                                  </h4>
+                                  <p className="text-[10.5px] text-slate-500">
+                                    Below are the selected boxes with what sweet item is selected in which column and row. Click any compartment or &quot;Change Items&quot; to edit.
+                                  </p>
+                                </div>
                               </div>
-                              <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200 shrink-0">
-                                {rows}×{cols} Grid
-                              </span>
                             </div>
 
-                            {/* Mini Visual Grid Box */}
-                            <div className="w-full p-2 rounded-lg bg-gradient-to-br from-amber-700 to-amber-900 shadow-2xs border border-amber-500/60">
-                              <div
-                                className="bg-[#fffdf9] rounded-md p-1 shadow-inner"
-                                style={{
-                                  display: 'grid',
-                                  gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                                  gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-                                  gap: '3px',
-                                  aspectRatio: `${cols} / ${rows}`,
-                                  maxHeight: '80px',
-                                }}
-                              >
-                                {Array.from({ length: totalCells }).map((_, cIdx) => (
+                            <div className="grid grid-cols-1 gap-4">
+                              {configuredBoxes.map((boxItem) => {
+                                const fbd = boxItem.festivalBoxDetails;
+                                const rows = fbd?.rows || 2;
+                                const cols = fbd?.cols || 3;
+                                const totalSlots = rows * cols;
+                                const compartments = fbd?.compartments || {};
+                                const filledCount = Object.keys(compartments).length;
+
+                                return (
                                   <div
-                                    key={cIdx}
-                                    className="rounded bg-amber-100/70 border border-amber-200/80 flex items-center justify-center text-[7px] font-mono font-bold text-amber-900"
+                                    key={boxItem.lineId || boxItem.itemId}
+                                    className="bg-white rounded-2xl p-4 border-2 border-amber-300 shadow-sm space-y-4 transition-all hover:border-amber-400"
                                   >
-                                    {cIdx + 1}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
+                                    {/* Top Bar: Title, Count, Line Total, Actions */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-amber-100">
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="text-sm font-black text-slate-900">
+                                            {fbd?.boxName ? `🎁 ${fbd.boxName}` : boxItem.itemName}
+                                          </span>
+                                          <span className="text-[10px] font-mono font-extrabold px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200">
+                                            {fbd?.boxCode || boxItem.itemCode || 'FBX'}
+                                          </span>
+                                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-teal-50 text-[#02626D] border border-teal-200">
+                                            {rows} Rows × {cols} Columns ({totalSlots} Slots)
+                                          </span>
+                                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-amber-500 text-white shadow-2xs">
+                                            {boxItem.quantity} {boxItem.quantity === 1 ? 'Box' : 'Boxes'} Ordered
+                                          </span>
+                                        </div>
+                                        <p className="text-[11px] text-slate-500">
+                                          {filledCount} of {totalSlots} compartments filled • {fbd?.totalPiecesPerBox || 0} pcs/box • Total {fbd?.totalPiecesAllBoxes || ((fbd?.totalPiecesPerBox || 0) * boxItem.quantity)} pcs
+                                        </p>
+                                      </div>
 
-                            <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100">
-                              <span className="text-slate-500 font-medium">
-                                {totalCells} Slots • Sum of Pieces
-                              </span>
-                              <span className="font-bold text-[#02626D] flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                                <span>Configure</span>
-                                <span>→</span>
-                              </span>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        <div className="text-right mr-1">
+                                          <span className="text-[10px] text-slate-400 block font-medium">Line Total</span>
+                                          <span className="text-sm font-black text-[#02626D]">
+                                            ₹{boxItem.lineTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                                          </span>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleEditFestivalBox(boxItem)}
+                                          className="px-3 py-1.5 rounded-xl bg-[#02626D] hover:bg-[#014d56] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                          title="Edit sweet items and pieces in this box"
+                                        >
+                                          <Pencil size={12} />
+                                          <span>Change Items</span>
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSummaryRemoveItem(boxItem.itemId)}
+                                          className="w-8 h-8 rounded-xl bg-red-50 hover:bg-red-500 text-red-600 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+                                          title="Remove this box from order"
+                                        >
+                                          <Trash2 size={13} />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Visual Compartment Box Tray: In which column and row what item is selected */}
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                                        <span className="flex items-center gap-1.5 text-amber-900">
+                                          <Grid3X3 size={13} className="text-amber-700" />
+                                          <span>Box Compartments Tray (Columns &amp; Rows Grid)</span>
+                                        </span>
+                                        <span className="text-[10.5px] text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                          Click any compartment cell to change sweet
+                                        </span>
+                                      </div>
+
+                                      {/* Outer Tray Box Container */}
+                                      <div className="p-3 sm:p-3.5 rounded-2xl bg-gradient-to-br from-amber-800 via-amber-900 to-amber-950 border-2 border-amber-500 shadow-md">
+                                        {/* Top Column Headers */}
+                                        <div
+                                          className="grid gap-2 mb-2"
+                                          style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+                                        >
+                                          {Array.from({ length: cols }).map((_, cIdx) => (
+                                            <div
+                                              key={cIdx}
+                                              className="bg-amber-100/90 text-amber-950 font-black text-[10px] sm:text-[11px] py-1 px-1.5 rounded-lg text-center uppercase tracking-wider shadow-2xs border border-amber-300 truncate"
+                                            >
+                                              Column {cIdx + 1}
+                                            </div>
+                                          ))}
+                                        </div>
+
+                                        {/* Main Grid with Cells */}
+                                        <div
+                                          className="bg-[#faf6ee] rounded-xl p-2.5 shadow-inner"
+                                          style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                                            gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+                                            gap: '8px',
+                                            minHeight: '140px',
+                                          }}
+                                        >
+                                          {Array.from({ length: totalSlots }).map((_, slotIdx) => {
+                                            const rIdx = Math.floor(slotIdx / cols);
+                                            const cIdx = slotIdx % cols;
+                                            const fill = compartments[slotIdx];
+
+                                            return (
+                                              <div
+                                                key={slotIdx}
+                                                onClick={() => handleEditFestivalBox(boxItem)}
+                                                className={`rounded-xl p-2 flex flex-col justify-between text-center transition-all cursor-pointer group relative ${
+                                                  fill
+                                                    ? 'bg-white border-2 border-amber-400 shadow-2xs hover:border-[#02626D] hover:shadow-md'
+                                                    : 'bg-white/60 border border-dashed border-amber-200/80 hover:bg-amber-50/80'
+                                                }`}
+                                                title={
+                                                  fill
+                                                    ? `${fill.itemName} (${fill.pieces} pcs) • Column ${cIdx + 1}, Row ${rIdx + 1} • Click to change`
+                                                    : `Column ${cIdx + 1}, Row ${rIdx + 1} Empty • Click to configure`
+                                                }
+                                              >
+                                                {/* Slot Coordinates Bar */}
+                                                <div className="w-full flex items-center justify-between text-[8px] font-mono text-slate-400 pb-1 border-b border-amber-100/60">
+                                                  <span className="font-extrabold text-amber-900 bg-amber-50 px-1 rounded border border-amber-200">
+                                                    Col {cIdx + 1} • Row {rIdx + 1}
+                                                  </span>
+                                                  {fill && (
+                                                    <span className="text-[#02626D] font-bold">
+                                                      {fill.piecePrice ? `₹${fill.piecePrice}/pc` : `#${slotIdx + 1}`}
+                                                    </span>
+                                                  )}
+                                                </div>
+
+                                                {fill ? (
+                                                  <div className="w-full flex flex-col items-center my-1">
+                                                    {fill.imageUrl ? (
+                                                      <div className="relative w-9 h-9 rounded-lg overflow-hidden border border-slate-100 shadow-2xs mb-1">
+                                                        <img
+                                                          src={fill.imageUrl}
+                                                          alt={fill.itemName}
+                                                          className="w-full h-full object-cover"
+                                                        />
+                                                      </div>
+                                                    ) : (
+                                                      <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-900 flex items-center justify-center text-xs font-bold mb-1 shadow-2xs">
+                                                        {fill.itemName?.charAt(0) || '🍬'}
+                                                      </div>
+                                                    )}
+                                                    <p
+                                                      className="text-[11px] font-black text-slate-900 truncate w-full group-hover:text-[#02626D] transition-colors"
+                                                      title={fill.itemName}
+                                                    >
+                                                      {fill.itemName}
+                                                    </p>
+                                                    <div className="flex items-center gap-1 mt-0.5 flex-wrap justify-center">
+                                                      <span className="text-[9px] font-extrabold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200">
+                                                        {fill.pieces} pc{fill.pieces > 1 ? 's' : ''}
+                                                      </span>
+                                                      {fill.piecesPerKg && (
+                                                        <span className="text-[8.5px] font-mono text-slate-500">
+                                                          {((fill.pieces / fill.piecesPerKg)).toFixed(3)} KG
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                ) : (
+                                                  <div className="py-3 text-[9px] font-mono text-slate-400 flex flex-col items-center justify-center">
+                                                    <span className="font-semibold text-slate-400">Empty</span>
+                                                    <span className="text-[7.5px] text-amber-600 mt-0.5">+ Add Sweet</span>
+                                                  </div>
+                                                )}
+
+                                                <div className="text-[8px] text-[#02626D] font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                                                  Click to Change
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* ── COLUMN-BY-COLUMN SWEETS PLACEMENT BREAKDOWN ── */}
+                                    <div className="space-y-2 pt-1">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[11px] font-extrabold text-amber-950 uppercase tracking-wider flex items-center gap-1.5">
+                                          <Layers size={13} className="text-amber-700" />
+                                          <span>Column-Wise Sweets Selection ({cols} Columns)</span>
+                                        </span>
+                                        <span className="text-[10px] text-slate-500">
+                                          Direct breakdown of what item is selected in what column
+                                        </span>
+                                      </div>
+
+                                      <div
+                                        className="grid gap-2.5"
+                                        style={{
+                                          gridTemplateColumns: `repeat(auto-fit, minmax(180px, 1fr))`,
+                                        }}
+                                      >
+                                        {Array.from({ length: cols }).map((_, cIdx) => {
+                                          const colSlots = Array.from({ length: rows }).map((__, rIdx) => {
+                                            const slotIdx = rIdx * cols + cIdx;
+                                            return {
+                                              rIdx,
+                                              slotIdx,
+                                              fill: compartments[slotIdx],
+                                            };
+                                          });
+
+                                          return (
+                                            <div
+                                              key={cIdx}
+                                              className="bg-amber-50/50 rounded-xl p-2.5 border border-amber-200/80 space-y-2"
+                                            >
+                                              <div className="flex items-center justify-between pb-1 border-b border-amber-200/60">
+                                                <span className="text-[11px] font-black text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded border border-amber-300">
+                                                  Column {cIdx + 1}
+                                                </span>
+                                                <span className="text-[10px] text-slate-500 font-medium">
+                                                  {colSlots.filter((s) => s.fill).length}/{rows} slots filled
+                                                </span>
+                                              </div>
+
+                                              <div className="space-y-1.5">
+                                                {colSlots.map(({ rIdx, slotIdx, fill }) => (
+                                                  <div
+                                                    key={slotIdx}
+                                                    onClick={() => handleEditFestivalBox(boxItem)}
+                                                    className={`p-1.5 rounded-lg text-xs flex items-center justify-between gap-1.5 cursor-pointer transition-all ${
+                                                      fill
+                                                        ? 'bg-white border border-amber-200 hover:border-[#02626D] shadow-2xs'
+                                                        : 'bg-white/60 border border-dashed border-slate-200 text-slate-400 hover:bg-white'
+                                                    }`}
+                                                    title="Click to edit sweet for this slot"
+                                                  >
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                      <span className="text-[9px] font-mono font-bold text-slate-400 bg-slate-100 px-1 py-0.2 rounded shrink-0">
+                                                        Row {rIdx + 1}
+                                                      </span>
+                                                      {fill ? (
+                                                        <span className="font-bold text-slate-900 truncate text-[11px]">
+                                                          {fill.itemName}
+                                                        </span>
+                                                      ) : (
+                                                        <span className="text-[10px] italic text-slate-400">Empty</span>
+                                                      )}
+                                                    </div>
+
+                                                    {fill ? (
+                                                      <div className="flex items-center gap-1 shrink-0">
+                                                        <span className="text-[9.5px] font-bold text-amber-900 bg-amber-100 px-1 py-0.2 rounded">
+                                                          {fill.pieces} pc{fill.pieces > 1 ? 's' : ''}
+                                                        </span>
+                                                        <Pencil size={10} className="text-[#02626D]" />
+                                                      </div>
+                                                    ) : (
+                                                      <span className="text-[9px] text-[#02626D] font-bold">+ Add</span>
+                                                    )}
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+
+                                    {/* Assortment Breakdown & Add-ons Summary */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1 text-xs">
+                                      <div className="p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/70 space-y-1">
+                                        <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider block">
+                                          Sweets Breakdown ({fbd?.itemsBreakdown?.length || 0} unique sweets)
+                                        </span>
+                                        <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+                                          {(fbd?.itemsBreakdown || []).map((it: any, itIdx: number) => (
+                                            <div
+                                              key={itIdx}
+                                              className="flex items-center justify-between text-[10.5px] bg-white px-2 py-0.5 rounded border border-amber-100"
+                                            >
+                                              <span className="font-semibold text-slate-800 truncate mr-2">
+                                                {it.itemName}
+                                              </span>
+                                              <span className="font-mono font-bold text-amber-950 shrink-0">
+                                                {it.totalPieces || (it.piecesPerBox * boxItem.quantity)} pcs • {it.weightKg} KG
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 flex flex-col justify-between">
+                                        <div className="space-y-1">
+                                          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
+                                            Packaging &amp; Manufacturing
+                                          </span>
+                                          <div className="flex flex-wrap gap-1.5">
+                                            {fbd?.hasBoxPrice && (
+                                              <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-white text-slate-700 border border-slate-200">
+                                                🎁 Box: ₹{fbd.boxPrice}/box
+                                              </span>
+                                            )}
+                                            {fbd?.hasSticker && (
+                                              <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-white text-slate-700 border border-slate-200">
+                                                🏷️ Sticker: ₹{fbd.stickerPrice}/box
+                                              </span>
+                                            )}
+                                            {fbd?.hasShrink && (
+                                              <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-white text-slate-700 border border-slate-200">
+                                                📦 Shrink: ₹{fbd.shrinkPrice}/box
+                                              </span>
+                                            )}
+                                            <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-[#02626D] border border-teal-200">
+                                              Total Mfg: {fbd?.totalWeightAllBoxesKg || (fbd?.weightPerBoxKg * boxItem.quantity) || 0} KG
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleEditFestivalBox(boxItem)}
+                                          className="w-full py-1.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs transition-all shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                                        >
+                                          <Pencil size={11} />
+                                          <span>Click to Change Sweets or Quantities</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        )}
+
+                        {/* ── 2. AVAILABLE GIFT BOX TEMPLATES ── */}
+                        {/* Only show templates if NO boxes are configured OR if user clicks "+ Add Another Box Template" */}
+                        {(!hasConfiguredBoxes || showAddBoxTemplates) ? (
+                          <div className="space-y-2.5 pt-1">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <Gift size={13} className="text-amber-600" />
+                                <span>
+                                  {hasConfiguredBoxes ? 'Add Another Gift Box Template' : 'Available Gift Box Templates'}
+                                </span>
+                              </h4>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-slate-400">
+                                  Select a box template below to configure
+                                </span>
+                                {hasConfiguredBoxes && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowAddBoxTemplates(false)}
+                                    className="text-xs font-bold text-amber-800 hover:underline cursor-pointer"
+                                  >
+                                    Hide Templates
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {festivalBoxes.length === 0 ? (
+                              <div className="py-6 text-center text-slate-400 bg-white rounded-xl border border-dashed border-amber-200 p-4">
+                                <Gift size={24} className="mx-auto mb-1 text-amber-400" />
+                                <p className="text-xs font-bold text-slate-700">No Festival Boxes Created Yet</p>
+                                <p className="text-[11px] text-slate-400 mt-0.5">
+                                  Create box templates on the Festival Boxes page to configure rows and columns.
+                                </p>
+                                <Link
+                                  href="/festival-boxes"
+                                  className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#02626D] text-white text-xs font-bold hover:bg-[#014d56] transition-colors"
+                                >
+                                  <Plus size={13} />
+                                  <span>Go to Festival Boxes Setup</span>
+                                </Link>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                {festivalBoxes.map((box) => {
+                                  const rows = box.rows || 3;
+                                  const cols = box.cols || 3;
+                                  const totalCells = rows * cols;
+
+                                  return (
+                                    <div
+                                      key={box.id}
+                                      onClick={() => handleOpenBoxConfigurator(box)}
+                                      className="bg-white rounded-xl p-3 border border-amber-200 hover:border-amber-400 shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-2.5 group"
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                          <span className="text-[9.5px] font-mono font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                            {box.code}
+                                          </span>
+                                          <h4 className="text-xs font-bold text-slate-900 group-hover:text-[#02626D] transition-colors mt-1 line-clamp-1">
+                                            {box.name}
+                                          </h4>
+                                        </div>
+                                        <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200 shrink-0">
+                                          {rows}×{cols} Grid
+                                        </span>
+                                      </div>
+
+                                      {/* Mini Visual Grid Box */}
+                                      <div className="w-full p-2 rounded-lg bg-gradient-to-br from-amber-700 to-amber-900 shadow-2xs border border-amber-500/60">
+                                        <div
+                                          className="bg-[#fffdf9] rounded-md p-1 shadow-inner"
+                                          style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                                            gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+                                            gap: '3px',
+                                            aspectRatio: `${cols} / ${rows}`,
+                                            maxHeight: '80px',
+                                          }}
+                                        >
+                                          {Array.from({ length: totalCells }).map((_, cIdx) => (
+                                            <div
+                                              key={cIdx}
+                                              className="rounded bg-amber-100/70 border border-amber-200/80 flex items-center justify-center text-[7px] font-mono font-bold text-amber-900"
+                                            >
+                                              {cIdx + 1}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100">
+                                        <span className="text-slate-500 font-medium">
+                                          {totalCells} Slots • Sum of Pieces
+                                        </span>
+                                        <span className="font-bold text-[#02626D] flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                                          <span>Configure</span>
+                                          <span>→</span>
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          /* If boxes are configured and showAddBoxTemplates is false: render clean add button */
+                          <div className="pt-1 flex items-center justify-between">
+                            <button
+                              type="button"
+                              onClick={() => setShowAddBoxTemplates(true)}
+                              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-amber-50 text-amber-900 border border-amber-300 transition-all cursor-pointer shadow-2xs active:scale-95"
+                            >
+                              <Plus size={14} className="text-amber-600" />
+                              <Gift size={14} className="text-amber-600" />
+                              <span>Add Another Box Template to Order</span>
+                            </button>
+                            <span className="text-[11px] text-slate-500">
+                              {configuredBoxes.length} festival box{configuredBoxes.length > 1 ? 'es' : ''} configured in this order
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -2953,16 +3608,27 @@ export default function CreateOrderClient() {
                             <span className="text-xs font-bold text-slate-900 truncate" title={item.itemName}>
                               {item.itemName}
                             </span>
-                            {item.isFestivalBox && (
-                              <button
-                                type="button"
-                                onClick={() => setViewingBoxPreviewItem(item)}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 transition-colors cursor-pointer shrink-0"
-                                title="Click to view sweet box compartment layout"
-                              >
-                                <Eye size={10} />
-                                <span>View Box Layout</span>
-                              </button>
+                            {isFestivalBoxItem(item) && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditFestivalBox(item)}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-2xs transition-all cursor-pointer active:scale-95"
+                                  title="Change sweets and quantities in this box"
+                                >
+                                  <Pencil size={9.5} />
+                                  <span>Change Items</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingBoxPreviewItem(item)}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 transition-colors cursor-pointer"
+                                  title="Click to view sweet box compartment layout"
+                                >
+                                  <Eye size={10} />
+                                  <span>View Layout</span>
+                                </button>
+                              </div>
                             )}
                             {/* Packet toggle beside item name */}
                             <button
@@ -4096,22 +4762,30 @@ export default function CreateOrderClient() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
-                      Configure: {selectedBoxForConfig.name}
+                    <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2 flex-wrap">
+                      <span>{editingBoxLineId ? 'Edit Festival Box:' : 'Configure:'} {selectedBoxForConfig.name}</span>
+                      {editingBoxLineId && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs">
+                          Editing Mode
+                        </span>
+                      )}
                     </h3>
                     <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
                       {selectedBoxForConfig.rows} Rows × {selectedBoxForConfig.cols} Columns ({selectedBoxForConfig.rows * selectedBoxForConfig.cols} Compartments)
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Click each compartment to choose sweets and set piece counts. The system calculates total box price & manufacturing KGs!
+                    Click each compartment to choose sweets and set piece counts. The system calculates total box price &amp; manufacturing KGs!
                   </p>
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => setSelectedBoxForConfig(null)}
+                onClick={() => {
+                  setSelectedBoxForConfig(null);
+                  setEditingBoxLineId(null);
+                }}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
               >
                 <X size={18} />
@@ -4508,7 +5182,7 @@ export default function CreateOrderClient() {
                     })()}
                   </div>
 
-                  {/* Add to Order Button */}
+                  {/* Add / Update Order Button */}
                   <button
                     type="button"
                     onClick={handleAddFestivalBoxToOrder}
@@ -4518,7 +5192,9 @@ export default function CreateOrderClient() {
                     <Check size={15} />
                     <span>
                       {boxOrderCount && Number(boxOrderCount) > 0
-                        ? `Select & Add ${boxOrderCount} Box${Number(boxOrderCount) > 1 ? 'es' : ''} to Order`
+                        ? editingBoxLineId
+                          ? `Update ${boxOrderCount} Box${Number(boxOrderCount) > 1 ? 'es' : ''} in Order`
+                          : `Select & Add ${boxOrderCount} Box${Number(boxOrderCount) > 1 ? 'es' : ''} to Order`
                         : 'Enter Number of Boxes'}
                     </span>
                   </button>
@@ -4815,11 +5491,23 @@ export default function CreateOrderClient() {
               </div>
             )}
 
-            <div className="flex justify-end pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  const it = viewingBoxPreviewItem;
+                  setViewingBoxPreviewItem(null);
+                  handleEditFestivalBox(it);
+                }}
+                className="px-3.5 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+              >
+                <Pencil size={12} />
+                <span>Change Items in this Box</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setViewingBoxPreviewItem(null)}
-                className="px-4 py-1.5 text-xs font-bold bg-[#02626D] text-white rounded-xl"
+                className="px-4 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer"
               >
                 Close
               </button>

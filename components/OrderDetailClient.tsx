@@ -189,13 +189,87 @@ function fmtCurrency(n: number) {
   return '₹ ' + (n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 }
 
-function fmtDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleString('en-IN', {
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
+function formatCreatedDateTime(
+  createdAt: any,
+  fallbackDate?: string,
+  fallbackTime?: string
+): { dateStr: string; timeStr: string; fullStr: string } {
+  let d: Date | null = null;
+  if (createdAt) {
+    if (typeof createdAt.toDate === 'function') {
+      d = createdAt.toDate();
+    } else if (createdAt.seconds) {
+      d = new Date(createdAt.seconds * 1000);
+    } else if (typeof createdAt === 'string' || typeof createdAt === 'number') {
+      const parsed = new Date(createdAt);
+      if (!isNaN(parsed.getTime())) d = parsed;
+    }
+  }
+
+  if (d && !isNaN(d.getTime())) {
+    const datePart = d.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
     });
-  } catch { return iso; }
+    const timePart = d.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    return {
+      dateStr: datePart,
+      timeStr: timePart,
+      fullStr: `${datePart}, ${timePart}`,
+    };
+  }
+
+  if (fallbackDate) {
+    let datePart = fallbackDate;
+    const parsed = new Date(fallbackDate.includes('T') ? fallbackDate : `${fallbackDate}T00:00:00`);
+    if (!isNaN(parsed.getTime())) {
+      datePart = parsed.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+    }
+    const timePart = fallbackTime || '';
+    return {
+      dateStr: datePart,
+      timeStr: timePart,
+      fullStr: timePart ? `${datePart}, ${timePart}` : datePart,
+    };
+  }
+
+  return {
+    dateStr: '—',
+    timeStr: '',
+    fullStr: '—',
+  };
+}
+
+function fmtDate(val: any) {
+  if (!val) return '—';
+  let d: Date | null = null;
+  if (typeof val?.toDate === 'function') {
+    d = val.toDate();
+  } else if (val?.seconds) {
+    d = new Date(val.seconds * 1000);
+  } else {
+    d = new Date(val);
+  }
+  if (d && !isNaN(d.getTime())) {
+    return d.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+  return String(val);
 }
 
 /**
@@ -686,8 +760,10 @@ export default function OrderDetailClient({ orderId }: Props) {
     toast.success(`Copied ${label} to clipboard`);
   };
 
+  const createdInfo = formatCreatedDateTime(order.createdAt, order.orderDate, order.orderTime);
+
   const DISPLAY_TIMELINE = [
-    { id: 'Order Created',           label: 'Order Created',           time: order.orderTime || '04:00 PM', icon: <FileText size={13} /> },
+    { id: 'Order Created',           label: 'Order Created',           time: createdInfo.timeStr || order.orderTime || '—', icon: <FileText size={13} /> },
     { id: 'Moved to Manufacturing',  label: 'Moved to Manufacturing',  time: '04:05 PM', icon: <Factory size={13} /> },
     { id: 'Manufacturing Started',   label: 'Manufacturing Started',   time: '05:00 PM', icon: <Factory size={13} /> },
     { id: 'Manufacturing Completed', label: 'Manufacturing Completed', time: '05:30 PM', icon: <CheckCircle2 size={13} /> },
@@ -874,7 +950,9 @@ export default function OrderDetailClient({ orderId }: Props) {
                     {step.label}
                   </p>
                   <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">
-                    {order.orderDate
+                    {step.id === 'Order Created' && createdInfo.dateStr !== '—'
+                      ? `${createdInfo.dateStr}, `
+                      : order.orderDate
                       ? `${order.orderDate.split('-').slice(1).reverse().join(' ')}, `
                       : ''}
                     {step.time}
@@ -917,16 +995,19 @@ export default function OrderDetailClient({ orderId }: Props) {
                   <h1 className="text-2xl font-extrabold text-slate-900 mt-1 tracking-tight">
                     {order.customerName}
                   </h1>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mt-1">
-                    <Calendar size={13} className="text-slate-400" />
-                    <span>
-                      Created on{' '}
-                      {order.orderDate
-                        ? `${order.orderDate}, ${order.orderTime || '04:00 PM'}`
-                        : order.createdAt
-                        ? fmtDate(order.createdAt)
-                        : '21 Sept 2026, 04:00 PM'}
-                    </span>
+                  <div className="flex items-center gap-2 text-xs font-medium mt-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 bg-slate-100/90 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
+                      <Calendar size={13} className="text-[#5B4EFF]" />
+                      <span className="text-slate-500 font-normal">Created At:</span>
+                      <span className="font-bold text-slate-900">{createdInfo.fullStr}</span>
+                    </div>
+                    {order.orderDate && (
+                      <div className="flex items-center gap-1.5 bg-amber-50 text-amber-900 px-2.5 py-1 rounded-lg border border-amber-200 shadow-2xs">
+                        <Clock size={13} className="text-amber-600" />
+                        <span className="text-amber-700 font-normal">Slot:</span>
+                        <span className="font-bold text-amber-950">{order.slot || 'Standard'} ({order.orderDate})</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -941,9 +1022,15 @@ export default function OrderDetailClient({ orderId }: Props) {
               </div>
             </div>
 
-            {/* 6 Metric capsules */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6 pt-5 border-t border-slate-100 relative z-10">
+            {/* Metric capsules */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5 mt-6 pt-5 border-t border-slate-100 relative z-10">
               {[
+                {
+                  icon: <Calendar size={15} className="text-purple-600" />,
+                  bg: 'bg-purple-50',
+                  label: 'Created At',
+                  val: createdInfo.fullStr,
+                },
                 {
                   icon: <Clock size={15} className="text-indigo-600" />,
                   bg: 'bg-indigo-50',
@@ -953,8 +1040,8 @@ export default function OrderDetailClient({ orderId }: Props) {
                 {
                   icon: <Clock size={15} className="text-sky-600" />,
                   bg: 'bg-sky-50',
-                  label: 'Order Time',
-                  val: order.orderTime || '04:00 PM',
+                  label: 'Delivery Time',
+                  val: (order as any).deliveryTime || order.orderTime || '—',
                 },
                 {
                   icon: <Calendar size={15} className="text-teal-600" />,

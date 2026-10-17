@@ -567,6 +567,66 @@ export default function OrdersClient() {
     return getTodayDateStr();
   };
 
+  const formatCreatedDateTime = (
+    createdAt: any,
+    fallbackDate?: string,
+    fallbackTime?: string
+  ): { dateStr: string; timeStr: string; fullStr: string } => {
+    let d: Date | null = null;
+    if (createdAt) {
+      if (typeof createdAt.toDate === 'function') {
+        d = createdAt.toDate();
+      } else if (createdAt.seconds) {
+        d = new Date(createdAt.seconds * 1000);
+      } else if (typeof createdAt === 'string' || typeof createdAt === 'number') {
+        const parsed = new Date(createdAt);
+        if (!isNaN(parsed.getTime())) d = parsed;
+      }
+    }
+
+    if (d && !isNaN(d.getTime())) {
+      const datePart = d.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+      const timePart = d.toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+      return {
+        dateStr: datePart,
+        timeStr: timePart,
+        fullStr: `${datePart}, ${timePart}`,
+      };
+    }
+
+    if (fallbackDate) {
+      let datePart = fallbackDate;
+      const parsed = new Date(fallbackDate.includes('T') ? fallbackDate : `${fallbackDate}T00:00:00`);
+      if (!isNaN(parsed.getTime())) {
+        datePart = parsed.toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        });
+      }
+      const timePart = fallbackTime || '';
+      return {
+        dateStr: datePart,
+        timeStr: timePart,
+        fullStr: timePart ? `${datePart}, ${timePart}` : datePart,
+      };
+    }
+
+    return {
+      dateStr: '—',
+      timeStr: '',
+      fullStr: '—',
+    };
+  };
+
   const handlePrevDate = () => {
     const baseDate = selectedDate && selectedDate !== 'All' ? new Date(selectedDate + 'T00:00:00') : new Date();
     if (isNaN(baseDate.getTime())) return;
@@ -2383,6 +2443,26 @@ export default function OrdersClient() {
                                 </span>
                               </div>
 
+                              {/* Created Date & Time Badge */}
+                              {(() => {
+                                const createdInfo = formatCreatedDateTime(order.createdAt, order.orderDate, order.orderTime);
+                                return (
+                                  <div className="flex items-center justify-between text-[10.5px] bg-slate-50/90 border border-slate-100 rounded-lg px-2.5 py-1 text-slate-600">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <Calendar size={11} className="text-[#02626D] flex-shrink-0" />
+                                      <span className="text-slate-400 text-[9.5px] font-medium uppercase tracking-wider">Created:</span>
+                                      <span className="font-semibold text-slate-700 truncate">{createdInfo.dateStr}</span>
+                                    </div>
+                                    {createdInfo.timeStr && (
+                                      <div className="flex items-center gap-1 text-slate-600 font-medium text-[10px] flex-shrink-0">
+                                        <Clock size={10} className="text-slate-400" />
+                                        <span>{createdInfo.timeStr}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+
                               {/* Second Row: Customer Name & Status Badges */}
                               <div className="flex items-center justify-between gap-1.5">
                                 <h4 className="text-xs font-bold text-slate-900 truncate max-w-[130px]" title={order.customerName}>
@@ -2609,10 +2689,11 @@ export default function OrdersClient() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[900px]">
+            <table className="w-full text-left border-collapse min-w-[1020px]">
               <thead>
                 <tr className="bg-[#f7f7f8] border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   <th className="py-2.5 px-4 sm:px-6">Order Code</th>
+                  <th className="py-2.5 px-4">Created Date & Time</th>
                   <th className="py-2.5 px-4">Customer</th>
                   <th className="py-2.5 px-4">Slot Time</th>
                   <th className="py-2.5 px-4">Items Count</th>
@@ -2625,19 +2706,33 @@ export default function OrdersClient() {
               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
                 {filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
+                    <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
                       No orders found matching the selected date and status filters.
                     </td>
                   </tr>
                 ) : (
-                  paginatedOrders.map((order) => (
-                    <tr
-                      key={order.id}
-                      onClick={() => navigateToOrder(order.id)}
-                      className="hover:bg-slate-50/60 cursor-pointer transition-colors"
-                    >
-                      <td className="py-3 px-4 sm:px-6 font-bold text-[#02626D] font-mono">{order.code}</td>
-                      <td className="py-3 px-4">
+                  paginatedOrders.map((order) => {
+                    const createdInfo = formatCreatedDateTime(order.createdAt, order.orderDate, order.orderTime);
+                    return (
+                      <tr
+                        key={order.id}
+                        onClick={() => navigateToOrder(order.id)}
+                        className="hover:bg-slate-50/60 cursor-pointer transition-colors"
+                      >
+                        <td className="py-3 px-4 sm:px-6 font-bold text-[#02626D] font-mono">{order.code}</td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 text-slate-800 font-semibold text-xs">
+                            <Calendar size={12} className="text-[#02626D] flex-shrink-0" />
+                            <span>{createdInfo.dateStr}</span>
+                          </div>
+                          {createdInfo.timeStr && (
+                            <div className="flex items-center gap-1.5 text-slate-500 text-[11px] mt-0.5">
+                              <Clock size={11} className="text-slate-400 flex-shrink-0" />
+                              <span>{createdInfo.timeStr}</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
                         <div className="font-semibold text-slate-900">{order.customerName}</div>
                         {(order.isCustomisation || order.isTransportRequired || (order as any).isFestivalOrder || (order.items || []).some((it: any) => it.isFestivalBox || it.festivalBoxDetails)) && (
                           <div className="flex items-center gap-1 flex-wrap mt-1">
@@ -2762,7 +2857,8 @@ export default function OrdersClient() {
                         </div>
                       </td>
                     </tr>
-                  ))
+                  );
+                })
                 )}
               </tbody>
             </table>

@@ -45,6 +45,7 @@ import {
   Moon,
   ArrowUp,
   ArrowDown,
+  ArrowRight,
 } from 'lucide-react';
 import CustomSelect, { CustomSelectOption } from '@/components/CustomSelect';
 import CustomDatePicker from '@/components/CustomDatePicker';
@@ -351,6 +352,7 @@ export default function OrdersClient() {
       const dy = String(dateObj.getDate()).padStart(2, '0');
       setSelectedDate(`${yr}-${mo}-${dy}`);
     }
+    setDateFilterMode('single');
   };
 
   const handleNextDay = () => {
@@ -367,6 +369,7 @@ export default function OrdersClient() {
       const dy = String(dateObj.getDate()).padStart(2, '0');
       setSelectedDate(`${yr}-${mo}-${dy}`);
     }
+    setDateFilterMode('single');
   };
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -391,6 +394,34 @@ export default function OrdersClient() {
 
   const [itemsPerPage, setItemsPerPage] = useState('10');
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
+  const [dateFilterMode, setDateFilterMode] = useState<'single' | 'range' | 'all'>('single');
+  const [fromDate, setFromDate] = useState<string>(getTodayDateStr());
+  const [toDate, setToDate] = useState<string>(getTodayDateStr());
+
+  const handleSetLast7Days = () => {
+    const today = new Date();
+    const past = new Date();
+    past.setDate(today.getDate() - 6);
+    const yr = today.getFullYear();
+    const mo = String(today.getMonth() + 1).padStart(2, '0');
+    const dy = String(today.getDate()).padStart(2, '0');
+    const pYr = past.getFullYear();
+    const pMo = String(past.getMonth() + 1).padStart(2, '0');
+    const pDy = String(past.getDate()).padStart(2, '0');
+    setFromDate(`${pYr}-${pMo}-${pDy}`);
+    setToDate(`${yr}-${mo}-${dy}`);
+    setDateFilterMode('range');
+  };
+
+  const handleSetThisMonth = () => {
+    const today = new Date();
+    const yr = today.getFullYear();
+    const mo = String(today.getMonth() + 1).padStart(2, '0');
+    const dy = String(today.getDate()).padStart(2, '0');
+    setFromDate(`${yr}-${mo}-01`);
+    setToDate(`${yr}-${mo}-${dy}`);
+    setDateFilterMode('range');
+  };
   const [slotCategories, setSlotCategories] = useState<SlotCategory[]>([]);
   const { user, employeeProfile } = useAuth();
   const { isConnected: isPrinterConnected, printerType, printReceipt } = usePrinter();
@@ -566,6 +597,47 @@ export default function OrdersClient() {
 
     return getTodayDateStr();
   };
+
+  const isDateBetween = (dateStr?: string, minDate?: string, maxDate?: string) => {
+    if (!dateStr) return false;
+    const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) return false;
+    if (minDate && maxDate) {
+      return cleanDate >= minDate && cleanDate <= maxDate;
+    }
+    if (minDate) return cleanDate >= minDate;
+    if (maxDate) return cleanDate <= maxDate;
+    return true;
+  };
+
+  const matchesDateFilter = useCallback((order: OrderRecord) => {
+    if (dateFilterMode === 'all' || selectedDate === 'All') {
+      return true;
+    }
+
+    const orderDate = getOrderDateStr(order);
+    const mfgDate = order.manufacturingDate || '';
+    const delivDate = order.expectedDeliveryDate || '';
+
+    if (dateFilterMode === 'range') {
+      if (!fromDate && !toDate) return true;
+      const minDate = fromDate && toDate ? (fromDate <= toDate ? fromDate : toDate) : (fromDate || toDate);
+      const maxDate = fromDate && toDate ? (fromDate <= toDate ? toDate : fromDate) : (fromDate || toDate);
+
+      return (
+        isDateBetween(orderDate, minDate, maxDate) ||
+        isDateBetween(mfgDate, minDate, maxDate) ||
+        isDateBetween(delivDate, minDate, maxDate)
+      );
+    }
+
+    // Single Date mode
+    if (selectedDate && selectedDate !== 'All') {
+      return orderDate === selectedDate || mfgDate === selectedDate || delivDate === selectedDate;
+    }
+
+    return true;
+  }, [dateFilterMode, selectedDate, fromDate, toDate]);
 
   const formatCreatedDateTime = (
     createdAt: any,
@@ -1629,16 +1701,11 @@ export default function OrdersClient() {
     })
     : [];
 
-  // Filter orders by selectedDate, orderStatusFilter, paymentStatusFilter, and searchTerm
+  // Filter orders by date, orderStatusFilter, paymentStatusFilter, and searchTerm
   const filteredOrders = orders.filter((order) => {
-    // 1. Date Filter (default today's date)
-    if (selectedDate && selectedDate !== 'All') {
-      const orderDate = getOrderDateStr(order);
-      const mfgDate = order.manufacturingDate || '';
-      const delivDate = order.expectedDeliveryDate || '';
-      if (orderDate !== selectedDate && mfgDate !== selectedDate && delivDate !== selectedDate) {
-        return false;
-      }
+    // 1. Date Filter (Single date or Custom Range)
+    if (!matchesDateFilter(order)) {
+      return false;
     }
 
     // 2. Order Status Filter (default 'All')
@@ -1720,7 +1787,7 @@ export default function OrdersClient() {
   useEffect(() => {
     setCurrentPage(1);
     setSlotPages({});
-  }, [selectedDate, orderStatusFilter, paymentStatusFilter, orderTypeFilter, selectedItemFilter, searchTerm]);
+  }, [selectedDate, dateFilterMode, fromDate, toDate, orderStatusFilter, paymentStatusFilter, orderTypeFilter, selectedItemFilter, searchTerm]);
 
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * 24;
@@ -1811,48 +1878,27 @@ export default function OrdersClient() {
   // Calculate Date-filtered counts for Customisation and Transport
   const customOrdersCount = useMemo(() => {
     return orders.filter((o) => {
-      if (selectedDate && selectedDate !== 'All') {
-        const orderDate = getOrderDateStr(o);
-        const mfgDate = o.manufacturingDate || '';
-        const delivDate = o.expectedDeliveryDate || '';
-        if (orderDate !== selectedDate && mfgDate !== selectedDate && delivDate !== selectedDate) {
-          return false;
-        }
-      }
+      if (!matchesDateFilter(o)) return false;
       return Boolean(o.isCustomisation);
     }).length;
-  }, [orders, selectedDate]);
+  }, [orders, matchesDateFilter]);
 
   const transportOrdersCount = useMemo(() => {
     return orders.filter((o) => {
-      if (selectedDate && selectedDate !== 'All') {
-        const orderDate = getOrderDateStr(o);
-        const mfgDate = o.manufacturingDate || '';
-        const delivDate = o.expectedDeliveryDate || '';
-        if (orderDate !== selectedDate && mfgDate !== selectedDate && delivDate !== selectedDate) {
-          return false;
-        }
-      }
+      if (!matchesDateFilter(o)) return false;
       return Boolean(o.isTransportRequired);
     }).length;
-  }, [orders, selectedDate]);
+  }, [orders, matchesDateFilter]);
 
   const festivalOrdersCount = useMemo(() => {
     return orders.filter((o) => {
-      if (selectedDate && selectedDate !== 'All') {
-        const orderDate = getOrderDateStr(o);
-        const mfgDate = o.manufacturingDate || '';
-        const delivDate = o.expectedDeliveryDate || '';
-        if (orderDate !== selectedDate && mfgDate !== selectedDate && delivDate !== selectedDate) {
-          return false;
-        }
-      }
+      if (!matchesDateFilter(o)) return false;
       return Boolean(
         (o as any).isFestivalOrder ||
         (o.items || []).some((it: any) => it.isFestivalBox || it.festivalBoxDetails)
       );
     }).length;
-  }, [orders, selectedDate]);
+  }, [orders, matchesDateFilter]);
 
   // Calculate Order Statistics for Summary Bar from filtered orders
   const totalOrdersCount = filteredOrders.length;
@@ -1933,42 +1979,97 @@ export default function OrdersClient() {
       <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs flex flex-col gap-3.5">
         {/* Top Sub-row: Date Navigation Capsule & Quick Presets */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Date Capsule with Prev/Next buttons */}
-          <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-2xs">
-            <CustomDatePicker
-              value={selectedDate}
-              onChange={setSelectedDate}
-              allowAll={true}
-              size="md"
-              className="border-0 shadow-none bg-transparent p-0"
-              buttonClassName="border-0 shadow-none bg-transparent hover:bg-slate-50 px-2 py-1 text-xs font-bold"
-            />
-            <div className="flex items-center border-l border-slate-200 pl-1.5 ml-1.5 gap-0.5">
-              <button
-                type="button"
-                onClick={handlePrevDay}
-                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-                title="Previous Day"
-              >
-                <ChevronLeft size={13} />
-              </button>
-              <button
-                type="button"
-                onClick={handleNextDay}
-                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-                title="Next Day"
-              >
-                <ChevronRight size={13} />
-              </button>
+          {dateFilterMode === 'range' ? (
+            /* Custom Range Capsule (From & To) */
+            <div className="flex items-center bg-white border border-[#02626D]/40 rounded-xl px-2.5 py-1 shadow-2xs gap-1.5 animate-in fade-in duration-150">
+              {/* From Date */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">From</span>
+                <CustomDatePicker
+                  value={fromDate}
+                  onChange={(d) => {
+                    setFromDate(d);
+                    if (toDate && d > toDate) {
+                      setToDate(d);
+                    }
+                  }}
+                  allowAll={false}
+                  size="md"
+                  placeholder="From Date"
+                  className="border-0 shadow-none bg-transparent p-0"
+                  buttonClassName="border-0 shadow-none bg-transparent hover:bg-slate-50 px-2 py-1 text-xs font-bold text-slate-800"
+                />
+              </div>
+
+              <span className="text-slate-300 font-bold px-0.5 text-xs">—</span>
+
+              {/* To Date */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">To</span>
+                <CustomDatePicker
+                  value={toDate}
+                  onChange={(d) => {
+                    setToDate(d);
+                    if (fromDate && d < fromDate) {
+                      setFromDate(d);
+                    }
+                  }}
+                  allowAll={false}
+                  size="md"
+                  placeholder="To Date"
+                  className="border-0 shadow-none bg-transparent p-0"
+                  buttonClassName="border-0 shadow-none bg-transparent hover:bg-slate-50 px-2 py-1 text-xs font-bold text-slate-800"
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            /* Single Date Capsule with Prev/Next buttons */
+            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-2xs">
+              <CustomDatePicker
+                value={selectedDate}
+                onChange={(d) => {
+                  setSelectedDate(d);
+                  if (d === 'All') {
+                    setDateFilterMode('all');
+                  } else {
+                    setDateFilterMode('single');
+                  }
+                }}
+                allowAll={true}
+                size="md"
+                className="border-0 shadow-none bg-transparent p-0"
+                buttonClassName="border-0 shadow-none bg-transparent hover:bg-slate-50 px-2 py-1 text-xs font-bold"
+              />
+              <div className="flex items-center border-l border-slate-200 pl-1.5 ml-1.5 gap-0.5">
+                <button
+                  type="button"
+                  onClick={handlePrevDay}
+                  className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                  title="Previous Day"
+                >
+                  <ChevronLeft size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNextDay}
+                  className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                  title="Next Day"
+                >
+                  <ChevronRight size={13} />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Today Button */}
           <button
             type="button"
-            onClick={() => setSelectedDate(getTodayDateStr())}
-            className={`px-4 py-1.5 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              selectedDate === getTodayDateStr()
+            onClick={() => {
+              setDateFilterMode('single');
+              setSelectedDate(getTodayDateStr());
+            }}
+            className={`px-3.5 py-1.5 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              dateFilterMode === 'single' && selectedDate === getTodayDateStr()
                 ? 'bg-[#d9eff1] text-[#02626D] border border-[#b2e0e4] shadow-2xs'
                 : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
             }`}
@@ -1976,12 +2077,69 @@ export default function OrdersClient() {
             Today
           </button>
 
+          {/* Custom Range Button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (dateFilterMode === 'range') {
+                setDateFilterMode('single');
+              } else {
+                setDateFilterMode('range');
+                if (!fromDate) setFromDate(selectedDate !== 'All' ? selectedDate : getTodayDateStr());
+                if (!toDate) setToDate(getTodayDateStr());
+              }
+            }}
+            className={`px-3.5 py-1.5 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              dateFilterMode === 'range'
+                ? 'bg-[#d9eff1] text-[#02626D] border border-[#b2e0e4] shadow-2xs font-extrabold'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+            }`}
+            title="Filter orders by Custom From & To Date Range"
+          >
+            <Calendar size={13} className={dateFilterMode === 'range' ? 'text-[#02626D]' : 'text-slate-500'} />
+            <span>Custom Range (From - To)</span>
+          </button>
+
+          {/* Quick presets when in Range Mode */}
+          {dateFilterMode === 'range' && (
+            <div className="flex items-center gap-1.5 animate-in fade-in duration-150">
+              <button
+                type="button"
+                onClick={handleSetLast7Days}
+                className="px-2.5 py-1 h-9 rounded-xl text-[11px] font-semibold bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 transition-colors cursor-pointer"
+                title="Filter Last 7 Days"
+              >
+                Last 7 Days
+              </button>
+              <button
+                type="button"
+                onClick={handleSetThisMonth}
+                className="px-2.5 py-1 h-9 rounded-xl text-[11px] font-semibold bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 transition-colors cursor-pointer"
+                title="Filter This Month"
+              >
+                This Month
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateFilterMode('single')}
+                className="px-2.5 py-1 h-9 rounded-xl text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors cursor-pointer flex items-center gap-1"
+                title="Switch back to Single Day view"
+              >
+                <X size={12} className="text-slate-400" />
+                <span>Single Day</span>
+              </button>
+            </div>
+          )}
+
           {/* All Dates Button */}
           <button
             type="button"
-            onClick={() => setSelectedDate('All')}
-            className={`px-4 py-1.5 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              selectedDate === 'All'
+            onClick={() => {
+              setDateFilterMode('all');
+              setSelectedDate('All');
+            }}
+            className={`px-3.5 py-1.5 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              dateFilterMode === 'all' || selectedDate === 'All'
                 ? 'bg-[#d9eff1] text-[#02626D] border border-[#b2e0e4] shadow-2xs'
                 : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
             }`}
@@ -2143,11 +2301,14 @@ export default function OrdersClient() {
             </div>
 
             {/* Reset Filters Button */}
-            {(selectedDate !== getTodayDateStr() || orderTypeFilter !== 'All' || orderStatusFilter !== 'All' || paymentStatusFilter !== 'All' || selectedItemFilter !== 'All' || searchTerm !== '') && (
+            {(dateFilterMode === 'range' || (dateFilterMode === 'single' && selectedDate !== getTodayDateStr()) || dateFilterMode === 'all' || orderTypeFilter !== 'All' || orderStatusFilter !== 'All' || paymentStatusFilter !== 'All' || selectedItemFilter !== 'All' || searchTerm !== '') && (
               <button
                 type="button"
                 onClick={() => {
+                  setDateFilterMode('single');
                   setSelectedDate(getTodayDateStr());
+                  setFromDate(getTodayDateStr());
+                  setToDate(getTodayDateStr());
                   setOrderTypeFilter('All');
                   setOrderStatusFilter('All');
                   setPaymentStatusFilter('All');
@@ -2175,6 +2336,33 @@ export default function OrdersClient() {
             <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
         </div>
+
+        {/* Active Custom Range Banner */}
+        {dateFilterMode === 'range' && (
+          <div className="bg-[#02626D]/5 border border-[#02626D]/20 rounded-xl px-3.5 py-2 flex items-center justify-between gap-2 shadow-2xs animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Calendar size={13} className="text-[#02626D]" />
+              <span className="text-xs text-slate-600">
+                Filtered from <strong className="text-[#02626D] font-bold">{formatDisplayDate(fromDate)}</strong> to <strong className="text-[#02626D] font-bold">{formatDisplayDate(toDate)}</strong>
+              </span>
+              <span className="text-[11px] font-semibold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDateFilterMode('single');
+                setSelectedDate(getTodayDateStr());
+              }}
+              className="text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+              title="Reset back to Today"
+            >
+              <X size={12} />
+              <span>Back to Today</span>
+            </button>
+          </div>
+        )}
 
         {/* Active Item Filter Banner */}
         {selectedItemFilter !== 'All' && (
@@ -2405,7 +2593,7 @@ export default function OrdersClient() {
                     </button>
                     {/* Plus Button */}
                     <Link
-                      href={`/orders/create?slot=${encodeURIComponent(slotTime)}&date=${encodeURIComponent(selectedDate !== 'All' ? selectedDate : '')}`}
+                      href={`/orders/create?slot=${encodeURIComponent(slotTime)}&date=${encodeURIComponent(dateFilterMode === 'range' ? fromDate : (selectedDate !== 'All' ? selectedDate : ''))}`}
                       className="flex items-center justify-center h-7 w-7 rounded-lg bg-[#02626D] hover:bg-[#014d56] text-white shadow-2xs transition-colors cursor-pointer"
                       title={`Add Order for ${slotTime}`}
                     >
@@ -2562,8 +2750,8 @@ export default function OrdersClient() {
                                   <Package size={13} className="text-slate-400" />
                                   <span>{order.totalItems || order.items?.length || 0} Items</span>
                                 </div>
-                                <div className="flex items-center gap-1.5 font-medium text-slate-500">
-                                  {(order.expectedDeliveryDate || (selectedDate === 'All' && order.orderDate)) && (
+                                  <div className="flex items-center gap-1.5 font-medium text-slate-500">
+                                  {(order.expectedDeliveryDate || ((selectedDate === 'All' || dateFilterMode === 'range') && order.orderDate)) && (
                                     <span className="text-[11px] text-slate-400 font-normal">
                                       {(() => {
                                         const dStr = order.expectedDeliveryDate || order.orderDate;

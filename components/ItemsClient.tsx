@@ -33,6 +33,7 @@ import Pagination from '@/components/Pagination';
 import { db } from '@/lib/firebase';
 import { compressImageTo60KB, uploadToImageKit } from '@/lib/imageCompressor';
 import { toast } from '@/context/ToastContext';
+import { exportMetaCommerceExcel } from '@/lib/metaCommerceExport';
 import {
   collection,
   onSnapshot,
@@ -461,6 +462,63 @@ export default function ItemsClient() {
     XLSX.writeFile(workbook, 'sample_items_template.xlsx');
   };
 
+  // Standard Excel Catalog Export
+  const handleExportStandard = () => {
+    if (!items || items.length === 0) {
+      toast.error('Export Failed', 'No products available to export.');
+      return;
+    }
+    try {
+      const exportList = filteredItems.length > 0 ? filteredItems : items;
+      const data = exportList.map((item) => ({
+        'Code': item.code || '',
+        'Name': item.name || '',
+        'Category': item.category || '',
+        'Price (₹)': item.price ?? 0,
+        'Piece Price (₹)': item.piecePrice ?? '',
+        'Pieces Per Kg': item.piecesPerKg ?? '',
+        'Unit': item.unit || '',
+        'Status': item.status || 'Active',
+        'Manufacturing Unit': item.manufacturingUnitName || '',
+        'Packing Unit': item.packingUnitName || '',
+        'POS Price (₹)': item.posPrice ?? '',
+        'POS Available': item.posAvailable ? 'Yes' : 'No',
+        'POS Tax (%)': item.posTaxPercent ?? '',
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Products Catalog');
+      const today = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(workbook, `products_catalog_${today}.xlsx`);
+      toast.success('Export Successful', `Exported ${exportList.length} products to Excel.`);
+    } catch (err: unknown) {
+      console.error('Export error:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to export products catalog.';
+      toast.error('Export Failed', msg);
+    }
+  };
+
+  // Meta Commerce Excel Export (Facebook & Instagram Catalog format)
+  const handleExportMetaCommerce = () => {
+    if (!items || items.length === 0) {
+      toast.error('Export Failed', 'No products available to export.');
+      return;
+    }
+    try {
+      const exportList = filteredItems.length > 0 ? filteredItems : items;
+      const count = exportMetaCommerceExcel(exportList);
+      toast.success(
+        'Meta Commerce Export Complete',
+        `Successfully exported ${count} products in Meta Commerce Excel format.`
+      );
+    } catch (err: unknown) {
+      console.error('Meta Commerce export error:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to export Meta Commerce catalog.';
+      toast.error('Meta Export Failed', msg);
+    }
+  };
+
   // Handle Excel File Upload & Parse
   const handleExcelFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -720,10 +778,20 @@ export default function ItemsClient() {
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => toast.info('Exporting Products', 'Preparing products catalog export...')}
-            className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+            onClick={handleExportStandard}
+            className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
+            title="Export products catalog to Excel"
           >
-            Export
+            <Download size={13} />
+            <span>Export</span>
+          </button>
+          <button
+            onClick={handleExportMetaCommerce}
+            className="bg-white hover:bg-slate-50 text-[#02626D] text-xs font-semibold px-3 py-1.5 rounded-lg border border-[#02626D]/30 shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5 hover:border-[#02626D]"
+            title="Export catalog in Meta Commerce (Facebook & Instagram Shop) Excel format"
+          >
+            <FileSpreadsheet size={13} className="text-[#02626D]" />
+            <span>Meta Commerce Export</span>
           </button>
           <button
             onClick={() => setIsBulkUploadModalOpen(true)}
